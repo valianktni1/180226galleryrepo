@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, Form, Query, Header
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,10 +8,9 @@ import io
 import logging
 import shutil
 import zipfile
-import hashlib
 import secrets
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -19,29 +18,32 @@ import jwt
 import bcrypt
 from PIL import Image
 import aiofiles
+import qrcode
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# File storage config
 UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR', '/app/uploads'))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_DIR = UPLOAD_DIR / ".cache" / "thumbs"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# JWT config
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 24
-
-# Max upload size (100MB)
-MAX_UPLOAD_SIZE = 100 * 1024 * 1024
+JWT_EXPIRY_HOURS = 48
+MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+DEFAULT_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourites", "Guest Uploads"]
 
 # ─── Models ───
 class AdminLogin(BaseModel):
@@ -53,30 +55,35 @@ class AdminSetup(BaseModel):
     password: str
     display_name: str = "Weddings By Mark"
 
+class TemplateCreate(BaseModel):
+    name: str
+    subfolders: List[str] = Field(default_factory=lambda: list(DEFAULT_SUBFOLDERS))
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    subfolders: Optional[List[str]] = None
+
 class GalleryCreate(BaseModel):
-    title: str
-    couple_names: str
-    wedding_date: str
-    password: str
-    description: Optional[str] = ""
-    is_active: bool = True
+    folder_name: str  # e.g. "Gina & Mark 30.11.22"
+    template_id: Optional[str] = None
 
 class GalleryUpdate(BaseModel):
-    title: Optional[str] = None
-    couple_names: Optional[str] = None
-    wedding_date: Optional[str] = None
-    password: Optional[str] = None
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
-    cover_photo_id: Optional[str] = None
+    folder_name: Optional[str] = None
 
-class ClientAccess(BaseModel):
-    password: str
+class ShareCreate(BaseModel):
+    gallery_id: str
+    subfolder: Optional[str] = None  # None = whole gallery, or specific subfolder
+    password: Optional[str] = None  # None = no password
+    allow_uploads: bool = False
+    label: Optional[str] = None
 
 class FavouriteToggle(BaseModel):
-    photo_id: str
+    file_id: str
 
-# ─── Helpers ───
+class ShareAccessBody(BaseModel):
+    password: str
+
+# ─── Auth Helpers ───
 def create_jwt(data: dict, expires_hours: int = JWT_EXPIRY_HOURS) -> str:
     payload = {**data, "exp": datetime.now(timezone.utc) + timedelta(hours=expires_hours)}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -98,23 +105,28 @@ async def get_admin(authorization: str = Header(None)):
         raise HTTPException(status_code=403, detail="Not admin")
     return payload
 
-async def get_client_session(authorization: str = Header(None)):
+async def get_share_session(authorization: str = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization.replace("Bearer ", "")
     payload = verify_jwt(token)
-    if payload.get("role") != "client":
-        raise HTTPException(status_code=403, detail="Not a client session")
+    if payload.get("role") != "share":
+        raise HTTPException(status_code=403, detail="Invalid session")
     return payload
 
-def generate_slug(title: str) -> str:
-    slug = title.lower().strip()
-    slug = ''.join(c if c.isalnum() or c == ' ' else '' for c in slug)
-    slug = '-'.join(slug.split())
-    return slug
+# ─── File Helpers ───
+def is_image(filename: str) -> bool:
+    return filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'))
+
+def is_video(filename: str) -> bool:
+    return filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm', '.mts'))
+
+def slugify(text: str) -> str:
+    return text.lower().strip().replace(' ', '-').replace('&', 'and')
 
 def make_thumbnail(input_path: Path, output_path: Path, size=(400, 400)):
     try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with Image.open(input_path) as img:
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
@@ -122,11 +134,12 @@ def make_thumbnail(input_path: Path, output_path: Path, size=(400, 400)):
             img.save(output_path, "JPEG", quality=85)
         return True
     except Exception as e:
-        logger.error(f"Thumbnail error: {e}")
+        logger.error(f"Thumbnail error for {input_path}: {e}")
         return False
 
-def make_preview(input_path: Path, output_path: Path, size=(1200, 1200)):
+def make_preview(input_path: Path, output_path: Path, size=(1600, 1600)):
     try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with Image.open(input_path) as img:
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
@@ -134,16 +147,31 @@ def make_preview(input_path: Path, output_path: Path, size=(1200, 1200)):
             img.save(output_path, "JPEG", quality=90)
         return True
     except Exception as e:
-        logger.error(f"Preview error: {e}")
+        logger.error(f"Preview error for {input_path}: {e}")
         return False
 
-def is_image(filename: str) -> bool:
-    return filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'))
+def get_gallery_path(folder_name: str) -> Path:
+    return UPLOAD_DIR / folder_name
 
-def is_video(filename: str) -> bool:
-    return filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm'))
+def get_thumb_path(gallery_id: str, subfolder: str, filename: str) -> Path:
+    return CACHE_DIR / gallery_id / slugify(subfolder) / f"{Path(filename).stem}.thumb.jpg"
 
-# ─── Admin Auth Routes ───
+def get_preview_path(gallery_id: str, subfolder: str, filename: str) -> Path:
+    return CACHE_DIR / gallery_id / slugify(subfolder) / f"{Path(filename).stem}.preview.jpg"
+
+def safe_filename(filename: str, existing_dir: Path) -> str:
+    """Keep original filename, append (1), (2) etc if duplicate."""
+    target = existing_dir / filename
+    if not target.exists():
+        return filename
+    stem = Path(filename).stem
+    ext = Path(filename).suffix
+    counter = 1
+    while (existing_dir / f"{stem} ({counter}){ext}").exists():
+        counter += 1
+    return f"{stem} ({counter}){ext}"
+
+# ─── Admin Auth ───
 @api_router.get("/admin/check-setup")
 async def check_admin_setup():
     admin = await db.admins.find_one({}, {"_id": 0})
@@ -163,6 +191,15 @@ async def setup_admin(data: AdminSetup):
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.admins.insert_one(admin_doc)
+    # Create default template
+    default_template = {
+        "id": str(uuid.uuid4()),
+        "name": "Default Wedding",
+        "subfolders": list(DEFAULT_SUBFOLDERS),
+        "is_default": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.templates.insert_one(default_template)
     token = create_jwt({"sub": admin_doc["id"], "role": "admin", "username": data.username})
     return {"token": token, "username": data.username, "display_name": data.display_name}
 
@@ -176,312 +213,563 @@ async def admin_login(data: AdminLogin):
     token = create_jwt({"sub": admin["id"], "role": "admin", "username": data.username})
     return {"token": token, "username": admin["username"], "display_name": admin.get("display_name", "")}
 
-@api_router.get("/admin/me")
-async def admin_me(admin=Depends(get_admin)):
-    admin_doc = await db.admins.find_one({"id": admin["sub"]}, {"_id": 0, "password": 0})
-    return admin_doc
+# ─── Templates ───
+@api_router.get("/admin/templates")
+async def list_templates(admin=Depends(get_admin)):
+    templates = await db.templates.find({}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    return templates
 
-# ─── Gallery CRUD ───
+@api_router.post("/admin/templates")
+async def create_template(data: TemplateCreate, admin=Depends(get_admin)):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": data.name,
+        "subfolders": data.subfolders,
+        "is_default": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.templates.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.put("/admin/templates/{template_id}")
+async def update_template(template_id: str, data: TemplateUpdate, admin=Depends(get_admin)):
+    update = {}
+    if data.name is not None:
+        update["name"] = data.name
+    if data.subfolders is not None:
+        update["subfolders"] = data.subfolders
+    if not update:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    await db.templates.update_one({"id": template_id}, {"$set": update})
+    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/admin/templates/{template_id}")
+async def delete_template(template_id: str, admin=Depends(get_admin)):
+    tmpl = await db.templates.find_one({"id": template_id})
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if tmpl.get("is_default"):
+        raise HTTPException(status_code=400, detail="Cannot delete default template")
+    await db.templates.delete_one({"id": template_id})
+    return {"success": True}
+
+# ─── Gallery (Couple Folder) CRUD ───
 @api_router.post("/admin/galleries")
 async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
-    slug = generate_slug(data.title)
-    existing = await db.galleries.find_one({"slug": slug})
-    if existing:
-        slug = f"{slug}-{secrets.token_hex(3)}"
-    hashed_pw = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
-    gallery_doc = {
-        "id": str(uuid.uuid4()),
-        "title": data.title,
-        "slug": slug,
-        "couple_names": data.couple_names,
-        "wedding_date": data.wedding_date,
-        "description": data.description or "",
-        "password": hashed_pw,
-        "is_active": data.is_active,
-        "cover_photo_id": None,
-        "photo_count": 0,
-        "video_count": 0,
+    # Get template subfolders
+    subfolders = list(DEFAULT_SUBFOLDERS)
+    if data.template_id:
+        tmpl = await db.templates.find_one({"id": data.template_id}, {"_id": 0})
+        if tmpl:
+            subfolders = tmpl["subfolders"]
+
+    gallery_id = str(uuid.uuid4())
+    folder_path = get_gallery_path(data.folder_name)
+
+    # Create physical folders
+    for sf in subfolders:
+        (folder_path / sf).mkdir(parents=True, exist_ok=True)
+
+    doc = {
+        "id": gallery_id,
+        "folder_name": data.folder_name,
+        "subfolders": subfolders,
+        "template_id": data.template_id,
+        "file_counts": {sf: 0 for sf in subfolders},
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
-    gallery_dir = UPLOAD_DIR / "galleries" / gallery_doc["id"]
-    (gallery_dir / "originals").mkdir(parents=True, exist_ok=True)
-    (gallery_dir / "thumbnails").mkdir(parents=True, exist_ok=True)
-    (gallery_dir / "previews").mkdir(parents=True, exist_ok=True)
-    await db.galleries.insert_one(gallery_doc)
-    result = {k: v for k, v in gallery_doc.items() if k not in ("_id", "password")}
-    return result
+    await db.galleries.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.get("/admin/galleries")
 async def list_galleries(admin=Depends(get_admin)):
-    galleries = await db.galleries.find({}, {"_id": 0, "password": 0}).sort("created_at", -1).to_list(1000)
+    galleries = await db.galleries.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    # Enrich with share count + first image for cover
+    for g in galleries:
+        share_count = await db.shares.count_documents({"gallery_id": g["id"]})
+        g["share_count"] = share_count
+        first_file = await db.files.find_one(
+            {"gallery_id": g["id"], "file_type": "photo"},
+            {"_id": 0}
+        )
+        g["cover_thumb"] = None
+        if first_file:
+            tp = get_thumb_path(g["id"], first_file["subfolder"], first_file["filename"])
+            if tp.exists():
+                g["cover_thumb"] = f"/api/media/thumb/{g['id']}/{slugify(first_file['subfolder'])}/{Path(first_file['filename']).stem}.thumb.jpg"
     return galleries
 
 @api_router.get("/admin/galleries/{gallery_id}")
-async def get_gallery(gallery_id: str, admin=Depends(get_admin)):
+async def get_gallery_detail(gallery_id: str, admin=Depends(get_admin)):
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    result = {k: v for k, v in gallery.items() if k != "password"}
-    photos = await db.photos.find({"gallery_id": gallery_id}, {"_id": 0}).sort("uploaded_at", 1).to_list(10000)
-    result["photos"] = photos
-    return result
+    files = await db.files.find({"gallery_id": gallery_id}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
+    shares = await db.shares.find({"gallery_id": gallery_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    gallery["files"] = files
+    gallery["shares"] = shares
+    return gallery
 
 @api_router.put("/admin/galleries/{gallery_id}")
 async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get_admin)):
-    gallery = await db.galleries.find_one({"id": gallery_id})
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
     update = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    for field, value in data.model_dump(exclude_unset=True).items():
-        if value is not None:
-            if field == "password":
-                update["password"] = bcrypt.hashpw(value.encode(), bcrypt.gensalt()).decode()
-            elif field == "title":
-                update["title"] = value
-                update["slug"] = generate_slug(value)
-            else:
-                update[field] = value
+    if data.folder_name and data.folder_name != gallery["folder_name"]:
+        old_path = get_gallery_path(gallery["folder_name"])
+        new_path = get_gallery_path(data.folder_name)
+        if old_path.exists():
+            old_path.rename(new_path)
+        update["folder_name"] = data.folder_name
     await db.galleries.update_one({"id": gallery_id}, {"$set": update})
-    updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0, "password": 0})
+    updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     return updated
 
 @api_router.delete("/admin/galleries/{gallery_id}")
 async def delete_gallery(gallery_id: str, admin=Depends(get_admin)):
-    gallery = await db.galleries.find_one({"id": gallery_id})
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    gallery_dir = UPLOAD_DIR / "galleries" / gallery_id
-    if gallery_dir.exists():
-        shutil.rmtree(gallery_dir)
-    await db.photos.delete_many({"gallery_id": gallery_id})
+    folder_path = get_gallery_path(gallery["folder_name"])
+    if folder_path.exists():
+        shutil.rmtree(folder_path)
+    cache_path = CACHE_DIR / gallery_id
+    if cache_path.exists():
+        shutil.rmtree(cache_path)
+    await db.files.delete_many({"gallery_id": gallery_id})
+    await db.shares.delete_many({"gallery_id": gallery_id})
     await db.favourites.delete_many({"gallery_id": gallery_id})
     await db.galleries.delete_one({"id": gallery_id})
     return {"success": True}
 
-# ─── Photo Upload & Management ───
+# ─── File Upload & Management ───
 @api_router.post("/admin/galleries/{gallery_id}/upload")
-async def upload_photos(gallery_id: str, files: List[UploadFile] = File(...), admin=Depends(get_admin)):
-    gallery = await db.galleries.find_one({"id": gallery_id})
+async def upload_files(
+    gallery_id: str,
+    subfolder: str = Form(...),
+    files: List[UploadFile] = File(...),
+    admin=Depends(get_admin)
+):
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
+    if subfolder not in gallery["subfolders"]:
+        raise HTTPException(status_code=400, detail=f"Invalid subfolder: {subfolder}")
 
-    gallery_dir = UPLOAD_DIR / "galleries" / gallery_id
-    (gallery_dir / "originals").mkdir(parents=True, exist_ok=True)
-    (gallery_dir / "thumbnails").mkdir(parents=True, exist_ok=True)
-    (gallery_dir / "previews").mkdir(parents=True, exist_ok=True)
+    target_dir = get_gallery_path(gallery["folder_name"]) / subfolder
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     uploaded = []
-    photo_inc = 0
-    video_inc = 0
     for file in files:
-        file_id = str(uuid.uuid4())
-        ext = Path(file.filename).suffix.lower()
-        safe_name = f"{file_id}{ext}"
-        original_path = gallery_dir / "originals" / safe_name
-
         content = await file.read()
         if len(content) > MAX_UPLOAD_SIZE:
             continue
 
-        async with aiofiles.open(original_path, 'wb') as f:
+        # Keep original filename, handle duplicates
+        final_name = safe_filename(file.filename, target_dir)
+        file_path = target_dir / final_name
+
+        async with aiofiles.open(file_path, 'wb') as f:
             await f.write(content)
 
         file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
-        thumb_path = None
-        preview_path = None
 
+        # Generate thumbnails for images
+        has_thumb = False
+        has_preview = False
         if file_type == "photo":
-            thumb_name = f"{file_id}.jpg"
-            preview_name = f"{file_id}.jpg"
-            t_path = gallery_dir / "thumbnails" / thumb_name
-            p_path = gallery_dir / "previews" / preview_name
-            if make_thumbnail(original_path, t_path):
-                thumb_path = f"thumbnails/{thumb_name}"
-            if make_preview(original_path, p_path):
-                preview_path = f"previews/{preview_name}"
-            photo_inc += 1
-        elif file_type == "video":
-            video_inc += 1
+            thumb_p = get_thumb_path(gallery_id, subfolder, final_name)
+            preview_p = get_preview_path(gallery_id, subfolder, final_name)
+            has_thumb = make_thumbnail(file_path, thumb_p)
+            has_preview = make_preview(file_path, preview_p)
 
-        photo_doc = {
-            "id": file_id,
+        file_doc = {
+            "id": str(uuid.uuid4()),
             "gallery_id": gallery_id,
-            "filename": file.filename,
-            "safe_name": safe_name,
+            "subfolder": subfolder,
+            "filename": final_name,
+            "original_filename": file.filename,
             "file_type": file_type,
             "file_size": len(content),
-            "original_path": f"originals/{safe_name}",
-            "thumbnail_path": thumb_path,
-            "preview_path": preview_path,
-            "uploaded_at": datetime.now(timezone.utc).isoformat(),
-            "sort_order": 0
+            "has_thumb": has_thumb,
+            "has_preview": has_preview,
+            "uploaded_by": "admin",
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
         }
-        await db.photos.insert_one(photo_doc)
-        result = {k: v for k, v in photo_doc.items() if k != "_id"}
-        uploaded.append(result)
+        await db.files.insert_one(file_doc)
+        uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
 
-    await db.galleries.update_one({"id": gallery_id}, {
-        "$inc": {"photo_count": photo_inc, "video_count": video_inc}
-    })
-
-    if not gallery.get("cover_photo_id") and uploaded:
-        first_photo = next((p for p in uploaded if p["file_type"] == "photo"), None)
-        if first_photo:
-            await db.galleries.update_one({"id": gallery_id}, {"$set": {"cover_photo_id": first_photo["id"]}})
-
+    # Update file counts
+    count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": subfolder})
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {f"file_counts.{subfolder}": count, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
     return {"uploaded": uploaded, "count": len(uploaded)}
 
-@api_router.delete("/admin/galleries/{gallery_id}/photos/{photo_id}")
-async def delete_photo(gallery_id: str, photo_id: str, admin=Depends(get_admin)):
-    photo = await db.photos.find_one({"id": photo_id, "gallery_id": gallery_id}, {"_id": 0})
-    if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
-
-    gallery_dir = UPLOAD_DIR / "galleries" / gallery_id
-    for path_key in ["original_path", "thumbnail_path", "preview_path"]:
-        if photo.get(path_key):
-            fp = gallery_dir / photo[path_key]
-            if fp.exists():
-                fp.unlink()
-
-    await db.photos.delete_one({"id": photo_id})
-    await db.favourites.delete_many({"photo_id": photo_id})
-
-    dec_field = "photo_count" if photo["file_type"] == "photo" else "video_count"
-    await db.galleries.update_one({"id": gallery_id}, {"$inc": {dec_field: -1}})
-
+@api_router.delete("/admin/galleries/{gallery_id}/files/{file_id}")
+async def delete_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
+    f = await db.files.find_one({"id": file_id, "gallery_id": gallery_id}, {"_id": 0})
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
-    if gallery and gallery.get("cover_photo_id") == photo_id:
-        next_photo = await db.photos.find_one({"gallery_id": gallery_id, "file_type": "photo"}, {"_id": 0})
-        new_cover = next_photo["id"] if next_photo else None
-        await db.galleries.update_one({"id": gallery_id}, {"$set": {"cover_photo_id": new_cover}})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
 
+    # Delete physical file
+    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    if file_path.exists():
+        file_path.unlink()
+    # Delete thumbnails
+    for tp in [get_thumb_path(gallery_id, f["subfolder"], f["filename"]),
+               get_preview_path(gallery_id, f["subfolder"], f["filename"])]:
+        if tp.exists():
+            tp.unlink()
+
+    await db.files.delete_one({"id": file_id})
+    await db.favourites.delete_many({"file_id": file_id})
+
+    count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": f["subfolder"]})
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {f"file_counts.{f['subfolder']}": count}}
+    )
     return {"success": True}
 
+# ─── Shares ───
+@api_router.post("/admin/galleries/{gallery_id}/shares")
+async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_admin)):
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    if data.subfolder and data.subfolder not in gallery["subfolders"]:
+        raise HTTPException(status_code=400, detail="Invalid subfolder")
+
+    hashed_pw = None
+    if data.password:
+        hashed_pw = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
+
+    share_token = secrets.token_urlsafe(16)
+    share_doc = {
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "token": share_token,
+        "subfolder": data.subfolder,
+        "password_hash": hashed_pw,
+        "has_password": hashed_pw is not None,
+        "allow_uploads": data.allow_uploads,
+        "label": data.label or (data.subfolder or gallery["folder_name"]),
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.shares.insert_one(share_doc)
+    result = {k: v for k, v in share_doc.items() if k not in ("_id", "password_hash")}
+    return result
+
+@api_router.get("/admin/galleries/{gallery_id}/shares")
+async def list_shares(gallery_id: str, admin=Depends(get_admin)):
+    shares = await db.shares.find({"gallery_id": gallery_id}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(100)
+    return shares
+
+@api_router.delete("/admin/shares/{share_id}")
+async def delete_share(share_id: str, admin=Depends(get_admin)):
+    result = await db.shares.delete_one({"id": share_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Share not found")
+    return {"success": True}
+
+@api_router.put("/admin/shares/{share_id}/toggle")
+async def toggle_share(share_id: str, admin=Depends(get_admin)):
+    share = await db.shares.find_one({"id": share_id}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    new_active = not share.get("is_active", True)
+    await db.shares.update_one({"id": share_id}, {"$set": {"is_active": new_active}})
+    return {"is_active": new_active}
+
+@api_router.get("/admin/shares/{share_id}/qr")
+async def get_share_qr(share_id: str, base_url: str = Query(...), admin=Depends(get_admin)):
+    share = await db.shares.find_one({"id": share_id}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    share_url = f"{base_url}/s/{share['token']}"
+    qr = qrcode.QRCode(version=1, box_size=10, border=2)
+    qr.add_data(share_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#1C1917", back_color="#FDFCF8")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
+
 # ─── Media Serving ───
-@api_router.get("/media/{gallery_id}/{path_type}/{filename}")
-async def serve_media(gallery_id: str, path_type: str, filename: str):
-    if path_type not in ("originals", "thumbnails", "previews"):
-        raise HTTPException(status_code=400, detail="Invalid path type")
-    file_path = UPLOAD_DIR / "galleries" / gallery_id / path_type / filename
+@api_router.get("/media/thumb/{gallery_id}/{subfolder_slug}/{filename}")
+async def serve_thumb(gallery_id: str, subfolder_slug: str, filename: str):
+    file_path = CACHE_DIR / gallery_id / subfolder_slug / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    return FileResponse(file_path, media_type="image/jpeg")
+
+@api_router.get("/media/preview/{gallery_id}/{subfolder_slug}/{filename}")
+async def serve_preview(gallery_id: str, subfolder_slug: str, filename: str):
+    file_path = CACHE_DIR / gallery_id / subfolder_slug / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Preview not found")
+    return FileResponse(file_path, media_type="image/jpeg")
+
+@api_router.get("/media/original/{gallery_id}/{subfolder}/{filename}")
+async def serve_original(gallery_id: str, subfolder: str, filename: str):
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    file_path = get_gallery_path(gallery["folder_name"]) / subfolder / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path)
 
-# ─── Client Gallery Access ───
-@api_router.get("/galleries/{slug}")
-async def get_gallery_info(slug: str):
-    gallery = await db.galleries.find_one({"slug": slug, "is_active": True}, {"_id": 0})
+# ─── Public Share Access ───
+@api_router.get("/share/{token}")
+async def get_share_info(token: str):
+    share = await db.shares.find_one({"token": token, "is_active": True}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found or expired")
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
+
+    # Get a cover image
+    query = {"gallery_id": share["gallery_id"], "file_type": "photo"}
+    if share.get("subfolder"):
+        query["subfolder"] = share["subfolder"]
+    first_file = await db.files.find_one(query, {"_id": 0})
     cover_url = None
-    if gallery.get("cover_photo_id"):
-        cover = await db.photos.find_one({"id": gallery["cover_photo_id"]}, {"_id": 0})
-        if cover and cover.get("preview_path"):
-            cover_url = f"/api/media/{gallery['id']}/{cover['preview_path']}"
+    if first_file and first_file.get("has_preview"):
+        cover_url = f"/api/media/preview/{gallery['id']}/{slugify(first_file['subfolder'])}/{Path(first_file['filename']).stem}.preview.jpg"
+
+    file_count = await db.files.count_documents(query)
+
     return {
-        "title": gallery["title"],
-        "couple_names": gallery["couple_names"],
-        "wedding_date": gallery["wedding_date"],
-        "description": gallery.get("description", ""),
+        "gallery_name": gallery["folder_name"],
+        "label": share.get("label", gallery["folder_name"]),
+        "subfolder": share.get("subfolder"),
+        "has_password": share.get("has_password", False),
+        "allow_uploads": share.get("allow_uploads", False),
         "cover_url": cover_url,
-        "photo_count": gallery.get("photo_count", 0),
-        "video_count": gallery.get("video_count", 0)
+        "file_count": file_count
     }
 
-@api_router.post("/galleries/{slug}/access")
-async def access_gallery(slug: str, data: ClientAccess):
-    gallery = await db.galleries.find_one({"slug": slug, "is_active": True}, {"_id": 0})
-    if not gallery:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-    if not bcrypt.checkpw(data.password.encode(), gallery["password"].encode()):
-        raise HTTPException(status_code=401, detail="Invalid password")
-    session_id = str(uuid.uuid4())
-    token = create_jwt({
-        "sub": session_id,
-        "role": "client",
-        "gallery_id": gallery["id"],
-        "gallery_slug": slug
-    }, expires_hours=72)
-    return {"token": token, "gallery_id": gallery["id"], "title": gallery["title"]}
+@api_router.post("/share/{token}/access")
+async def access_share(token: str, body: ShareAccessBody = None):
+    share = await db.shares.find_one({"token": token, "is_active": True}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
 
-@api_router.get("/galleries/{slug}/photos")
-async def get_gallery_photos(slug: str, session=Depends(get_client_session)):
-    if session.get("gallery_slug") != slug:
+    if share.get("has_password") and share.get("password_hash"):
+        if not body or not body.password:
+            raise HTTPException(status_code=401, detail="Password required")
+        if not bcrypt.checkpw(body.password.encode(), share["password_hash"].encode()):
+            raise HTTPException(status_code=401, detail="Invalid password")
+
+    session_id = str(uuid.uuid4())
+    jwt_token = create_jwt({
+        "sub": session_id,
+        "role": "share",
+        "share_id": share["id"],
+        "gallery_id": share["gallery_id"],
+        "subfolder": share.get("subfolder"),
+        "allow_uploads": share.get("allow_uploads", False),
+        "token": token
+    }, expires_hours=72)
+    return {"jwt": jwt_token, "gallery_name": (await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0}))["folder_name"]}
+
+@api_router.get("/share/{token}/open-access")
+async def open_access_share(token: str):
+    """For shares without password - get JWT directly."""
+    share = await db.shares.find_one({"token": token, "is_active": True}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    if share.get("has_password"):
+        raise HTTPException(status_code=401, detail="Password required")
+    session_id = str(uuid.uuid4())
+    jwt_token = create_jwt({
+        "sub": session_id,
+        "role": "share",
+        "share_id": share["id"],
+        "gallery_id": share["gallery_id"],
+        "subfolder": share.get("subfolder"),
+        "allow_uploads": share.get("allow_uploads", False),
+        "token": token
+    }, expires_hours=72)
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+    return {"jwt": jwt_token, "gallery_name": gallery["folder_name"] if gallery else ""}
+
+@api_router.get("/share/{token}/files")
+async def get_share_files(token: str, session=Depends(get_share_session)):
+    if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
     gallery_id = session["gallery_id"]
-    photos = await db.photos.find({"gallery_id": gallery_id}, {"_id": 0}).sort("uploaded_at", 1).to_list(10000)
-    favourites = await db.favourites.find({"session_id": session["sub"], "gallery_id": gallery_id}, {"_id": 0}).to_list(10000)
-    fav_ids = {f["photo_id"] for f in favourites}
-    for photo in photos:
-        photo["is_favourite"] = photo["id"] in fav_ids
-    return {"photos": photos, "gallery_id": gallery_id}
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
 
-@api_router.post("/galleries/{slug}/favourite")
-async def toggle_favourite(slug: str, data: FavouriteToggle, session=Depends(get_client_session)):
-    if session.get("gallery_slug") != slug:
+    subfolder = session.get("subfolder")
+    if subfolder:
+        files = await db.files.find({"gallery_id": gallery_id, "subfolder": subfolder}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
+        subfolders_data = [{
+            "name": subfolder,
+            "files": files
+        }]
+    else:
+        # All subfolders except Guest Uploads for gallery shares
+        subfolders_data = []
+        for sf in gallery["subfolders"]:
+            sf_files = await db.files.find({"gallery_id": gallery_id, "subfolder": sf}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
+            subfolders_data.append({"name": sf, "files": sf_files})
+
+    # Get favourites
+    favs = await db.favourites.find({"session_id": session["sub"], "gallery_id": gallery_id}, {"_id": 0}).to_list(50000)
+    fav_ids = {f["file_id"] for f in favs}
+
+    for sf_data in subfolders_data:
+        for f in sf_data["files"]:
+            f["is_favourite"] = f["id"] in fav_ids
+
+    return {
+        "gallery_id": gallery_id,
+        "gallery_name": gallery["folder_name"],
+        "subfolders": subfolders_data,
+        "allow_uploads": session.get("allow_uploads", False)
+    }
+
+@api_router.post("/share/{token}/favourite")
+async def toggle_share_favourite(token: str, data: FavouriteToggle, session=Depends(get_share_session)):
+    if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
     existing = await db.favourites.find_one({
         "session_id": session["sub"],
-        "photo_id": data.photo_id,
+        "file_id": data.file_id,
         "gallery_id": session["gallery_id"]
     })
     if existing:
         await db.favourites.delete_one({"_id": existing["_id"]})
         return {"favourited": False}
-    else:
-        await db.favourites.insert_one({
-            "id": str(uuid.uuid4()),
-            "session_id": session["sub"],
-            "photo_id": data.photo_id,
-            "gallery_id": session["gallery_id"],
-            "created_at": datetime.now(timezone.utc).isoformat()
-        })
-        return {"favourited": True}
+    await db.favourites.insert_one({
+        "id": str(uuid.uuid4()),
+        "session_id": session["sub"],
+        "file_id": data.file_id,
+        "gallery_id": session["gallery_id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    return {"favourited": True}
 
-@api_router.get("/galleries/{slug}/download/{photo_id}")
-async def download_photo(slug: str, photo_id: str, session=Depends(get_client_session)):
-    if session.get("gallery_slug") != slug:
+@api_router.get("/share/{token}/download/{file_id}")
+async def download_share_file(token: str, file_id: str, session=Depends(get_share_session)):
+    if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
-    photo = await db.photos.find_one({"id": photo_id, "gallery_id": session["gallery_id"]}, {"_id": 0})
-    if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
-    file_path = UPLOAD_DIR / "galleries" / session["gallery_id"] / photo["original_path"]
-    if not file_path.exists():
+    f = await db.files.find_one({"id": file_id, "gallery_id": session["gallery_id"]}, {"_id": 0})
+    if not f:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, filename=photo["filename"], media_type="application/octet-stream")
+    gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
+    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
 
-@api_router.post("/galleries/{slug}/download-zip")
-async def download_zip(slug: str, photo_ids: List[str] = [], session=Depends(get_client_session)):
-    if session.get("gallery_slug") != slug:
+@api_router.post("/share/{token}/download-zip")
+async def download_share_zip(token: str, file_ids: List[str] = [], session=Depends(get_share_session)):
+    if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
     gallery_id = session["gallery_id"]
-    if photo_ids:
-        query = {"gallery_id": gallery_id, "id": {"$in": photo_ids}}
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    if file_ids:
+        query = {"gallery_id": gallery_id, "id": {"$in": file_ids}}
     else:
+        subfolder = session.get("subfolder")
         query = {"gallery_id": gallery_id}
-    photos = await db.photos.find(query, {"_id": 0}).to_list(10000)
-    if not photos:
-        raise HTTPException(status_code=404, detail="No photos found")
+        if subfolder:
+            query["subfolder"] = subfolder
+    files = await db.files.find(query, {"_id": 0}).to_list(50000)
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for photo in photos:
-            file_path = UPLOAD_DIR / "galleries" / gallery_id / photo["original_path"]
-            if file_path.exists():
-                zf.write(file_path, photo["filename"])
+        for f in files:
+            fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+            if fp.exists():
+                arcname = f"{f['subfolder']}/{f['filename']}"
+                zf.write(fp, arcname)
     zip_buffer.seek(0)
+    zip_name = f"{gallery['folder_name'].replace(' ', '_')}.zip"
+    return StreamingResponse(zip_buffer, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'})
 
+# ─── Guest Upload (via share) ───
+@api_router.post("/share/{token}/upload")
+async def guest_upload(
+    token: str,
+    files: List[UploadFile] = File(...),
+    session=Depends(get_share_session)
+):
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not session.get("allow_uploads"):
+        raise HTTPException(status_code=403, detail="Uploads not allowed on this share")
+
+    gallery_id = session["gallery_id"]
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
-    zip_name = f"{gallery['title'].replace(' ', '_')}_photos.zip" if gallery else "photos.zip"
-    return StreamingResponse(
-        zip_buffer,
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'}
-    )
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
 
-# Include the router
+    subfolder = session.get("subfolder") or "Guest Uploads"
+    target_dir = get_gallery_path(gallery["folder_name"]) / subfolder
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    uploaded = []
+    for file in files:
+        content = await file.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            continue
+
+        final_name = safe_filename(file.filename, target_dir)
+        file_path = target_dir / final_name
+        async with aiofiles.open(file_path, 'wb') as f_out:
+            await f_out.write(content)
+
+        file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
+        has_thumb = False
+        has_preview = False
+        if file_type == "photo":
+            has_thumb = make_thumbnail(file_path, get_thumb_path(gallery_id, subfolder, final_name))
+            has_preview = make_preview(file_path, get_preview_path(gallery_id, subfolder, final_name))
+
+        file_doc = {
+            "id": str(uuid.uuid4()),
+            "gallery_id": gallery_id,
+            "subfolder": subfolder,
+            "filename": final_name,
+            "original_filename": file.filename,
+            "file_type": file_type,
+            "file_size": len(content),
+            "has_thumb": has_thumb,
+            "has_preview": has_preview,
+            "uploaded_by": "guest",
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.files.insert_one(file_doc)
+        uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
+
+    count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": subfolder})
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {f"file_counts.{subfolder}": count}}
+    )
+    return {"uploaded": uploaded, "count": len(uploaded)}
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -491,9 +779,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
