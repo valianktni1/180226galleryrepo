@@ -60,6 +60,27 @@ export const deleteFile = (galleryId, fileId) =>
 export const deleteSubfolder = (galleryId, subfolderName) =>
   apiClient.delete(`/admin/galleries/${galleryId}/subfolders/${encodeURIComponent(subfolderName)}`);
 
+// Copy files to another subfolder (e.g. Album Favourites)
+export const copyToSubfolder = (galleryId, fileIds, targetSubfolder) =>
+  apiClient.post(`/admin/galleries/${galleryId}/copy-to-subfolder`, {
+    file_ids: fileIds,
+    target_subfolder: targetSubfolder
+  });
+
+// Download subfolder as zip (streaming, handles 1000+ files)
+export const downloadSubfolderZip = (galleryId, subfolder) => {
+  const token = localStorage.getItem('admin_token');
+  return `${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${galleryId}/download-subfolder?subfolder=${encodeURIComponent(subfolder)}&token=${encodeURIComponent(token)}`;
+};
+
+// Admin download single file
+export const adminDownloadFile = (galleryId, fileId) => {
+  const token = localStorage.getItem('admin_token');
+  return fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${galleryId}/download-file/${fileId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
 // Shares
 export const createShare = (galleryId, data) =>
   apiClient.post(`/admin/galleries/${galleryId}/shares`, data);
