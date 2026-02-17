@@ -1,34 +1,89 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* Editorial animations */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+.animate-scale-in {
+  animation: scaleIn 0.4s ease-out forwards;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+/* Stagger children */
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 320ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 400ms; }
+
+/* Upload dropzone */
+.upload-zone {
+  border: 2px dashed #D4D4D8;
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+.upload-zone:hover,
+.upload-zone.drag-over {
+  border-color: #D4AF37;
+  background-color: rgba(212, 175, 55, 0.05);
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+/* Image hover effect */
+.photo-card {
+  overflow: hidden;
+  position: relative;
+}
+.photo-card img {
+  transition: transform 0.7s cubic-bezier(0.33, 1, 0.68, 1);
+}
+.photo-card:hover img {
+  transform: scale(1.03);
+}
+.photo-card .photo-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.photo-card:hover .photo-overlay {
+  opacity: 1;
+}
+.photo-card .photo-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem;
+  transform: translateY(10px);
+  opacity: 0;
+  transition: transform 0.4s ease, opacity 0.4s ease;
+}
+.photo-card:hover .photo-actions {
+  transform: translateY(0);
+  opacity: 1;
 }
 
-.App-link {
-    color: #61dafb;
+/* Admin sidebar */
+.admin-nav-item {
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
-
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.admin-nav-item:hover {
+  background-color: rgba(212, 175, 55, 0.08);
+}
+.admin-nav-item.active {
+  background-color: rgba(212, 175, 55, 0.12);
+  color: #1C1917;
 }

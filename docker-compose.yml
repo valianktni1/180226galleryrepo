@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: wbm-mongodb
+    restart: unless-stopped
+    volumes:
+      - /mnt/apps/newweddingsbymarkgallery/mongodb:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - wbm-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wbm-backend
+    restart: unless-stopped
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=weddings_by_mark
+      - CORS_ORIGINS=*
+      - JWT_SECRET=change-this-to-a-strong-secret-key
+      - UPLOAD_DIR=/data/userfiles
+    volumes:
+      - /mnt/nextcloud/newwedidngsbymarkuserfiles:/data/userfiles
+    ports:
+      - "8001:8001"
+    depends_on:
+      - mongodb
+    networks:
+      - wbm-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_BACKEND_URL=http://localhost:3037
+    container_name: wbm-frontend
+    restart: unless-stopped
+    ports:
+      - "3037:80"
+    depends_on:
+      - backend
+    networks:
+      - wbm-network
+
+networks:
+  wbm-network:
+    driver: bridge
