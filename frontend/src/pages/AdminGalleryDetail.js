@@ -7,67 +7,79 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
 import {
-  Camera, ArrowLeft, Upload, Trash2, Copy, ExternalLink, Image, Video,
-  Calendar, Users, Settings, Star, Download, Check, X
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import {
+  ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
+  MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
+  Download, Plus, X
 } from "lucide-react";
-import { getGallery, updateGallery, uploadPhotos, deletePhoto, mediaUrl } from "@/lib/api";
+import {
+  getGallery, uploadFiles, deleteFile, createShare, deleteShare, toggleShare, getShareQR, thumbUrl
+} from "@/lib/api";
 
 export default function AdminGalleryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+
   const [gallery, setGallery] = useState(null);
-  const [photos, setPhotos] = useState([]);
+  const [files, setFiles] = useState([]);
+  const [shares, setShares] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [showSettings, setShowSettings] = useState(false);
-  const [editForm, setEditForm] = useState({});
-  const [saving, setSaving] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [selectedPhotos, setSelectedPhotos] = useState(new Set());
+  const [selectedFiles, setSelectedFiles] = useState(new Set());
+
+  // Share creation
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareForm, setShareForm] = useState({
+    subfolder: null, password: "", allow_uploads: false, label: ""
+  });
+  const [creatingShare, setCreatingShare] = useState(false);
+
+  // QR display
+  const [showQR, setShowQR] = useState(null);
 
   const loadGallery = useCallback(async () => {
     try {
       const res = await getGallery(id);
       setGallery(res.data);
-      setPhotos(res.data.photos || []);
-      setEditForm({
-        title: res.data.title,
-        couple_names: res.data.couple_names,
-        wedding_date: res.data.wedding_date,
-        description: res.data.description || "",
-        is_active: res.data.is_active,
-        password: ""
-      });
+      setFiles(res.data.files || []);
+      setShares(res.data.shares || []);
+      if (!activeTab && res.data.subfolders?.length) {
+        setActiveTab(res.data.subfolders[0]);
+      }
     } catch {
       toast.error("Gallery not found");
       navigate("/admin/dashboard");
     } finally {
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, activeTab]);
 
   useEffect(() => {
-    const token = localStorage.getItem("admin_token");
-    if (!token) { navigate("/admin"); return; }
+    if (!localStorage.getItem("admin_token")) { navigate("/admin"); return; }
     loadGallery();
   }, [navigate, loadGallery]);
 
   const handleUpload = async (fileList) => {
-    if (!fileList?.length) return;
-    const files = Array.from(fileList);
+    if (!fileList?.length || !activeTab) return;
     setUploading(true);
     setUploadProgress(0);
     try {
-      await uploadPhotos(id, files, (e) => {
+      const arr = Array.from(fileList);
+      await uploadFiles(id, activeTab, arr, (e) => {
         setUploadProgress(Math.round((e.loaded * 100) / e.total));
       });
-      toast.success(`${files.length} file(s) uploaded`);
+      toast.success(`${arr.length} file(s) uploaded to ${activeTab}`);
       loadGallery();
     } catch (err) {
       toast.error("Upload failed");
@@ -83,64 +95,70 @@ export default function AdminGalleryDetail() {
     handleUpload(e.dataTransfer.files);
   };
 
-  const handleDeletePhoto = async (photoId) => {
+  const handleDeleteFile = async (fileId) => {
     try {
-      await deletePhoto(id, photoId);
-      toast.success("Photo deleted");
+      await deleteFile(id, fileId);
+      toast.success("File deleted");
       loadGallery();
-    } catch {
-      toast.error("Failed to delete");
-    }
+    } catch { toast.error("Failed to delete"); }
   };
 
   const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selectedPhotos.size} selected photos?`)) return;
-    for (const photoId of selectedPhotos) {
-      try { await deletePhoto(id, photoId); } catch {}
+    if (!window.confirm(`Delete ${selectedFiles.size} selected files?`)) return;
+    for (const fid of selectedFiles) {
+      try { await deleteFile(id, fid); } catch {}
     }
-    toast.success(`${selectedPhotos.size} photos deleted`);
-    setSelectedPhotos(new Set());
+    toast.success(`${selectedFiles.size} files deleted`);
+    setSelectedFiles(new Set());
     loadGallery();
   };
 
-  const setCoverPhoto = async (photoId) => {
+  const handleCreateShare = async () => {
+    setCreatingShare(true);
     try {
-      await updateGallery(id, { cover_photo_id: photoId });
-      toast.success("Cover photo updated");
-      loadGallery();
-    } catch {
-      toast.error("Failed to update cover");
-    }
-  };
-
-  const handleSaveSettings = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const updates = { ...editForm };
-      if (!updates.password) delete updates.password;
-      await updateGallery(id, updates);
-      toast.success("Gallery updated");
-      setShowSettings(false);
+      const data = {
+        gallery_id: id,
+        subfolder: shareForm.subfolder || null,
+        password: shareForm.password || null,
+        allow_uploads: shareForm.allow_uploads,
+        label: shareForm.label || null
+      };
+      await createShare(id, data);
+      toast.success("Share link created");
+      setShowShareDialog(false);
+      setShareForm({ subfolder: null, password: "", allow_uploads: false, label: "" });
       loadGallery();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to update");
+      toast.error(err.response?.data?.detail || "Failed");
     } finally {
-      setSaving(false);
+      setCreatingShare(false);
     }
   };
 
-  const copyLink = () => {
-    const url = `${window.location.origin}/gallery/${gallery.slug}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Gallery link copied");
+  const handleDeleteShare = async (shareId) => {
+    try {
+      await deleteShare(shareId);
+      toast.success("Share deleted");
+      loadGallery();
+    } catch { toast.error("Failed"); }
   };
 
-  const toggleSelect = (photoId) => {
-    setSelectedPhotos(prev => {
+  const handleToggleShare = async (shareId) => {
+    try {
+      await toggleShare(shareId);
+      loadGallery();
+    } catch { toast.error("Failed"); }
+  };
+
+  const copyShareLink = (token) => {
+    navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
+    toast.success("Share link copied");
+  };
+
+  const toggleSelect = (fileId) => {
+    setSelectedFiles(prev => {
       const next = new Set(prev);
-      if (next.has(photoId)) next.delete(photoId);
-      else next.add(photoId);
+      if (next.has(fileId)) next.delete(fileId); else next.add(fileId);
       return next;
     });
   };
@@ -150,11 +168,11 @@ export default function AdminGalleryDetail() {
       <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
     </div>
   );
-
   if (!gallery) return null;
 
-  const photoItems = photos.filter(p => p.file_type === 'photo');
-  const videoItems = photos.filter(p => p.file_type === 'video');
+  const currentFiles = files.filter(f => f.subfolder === activeTab);
+  const photoFiles = currentFiles.filter(f => f.file_type === 'photo');
+  const videoFiles = currentFiles.filter(f => f.file_type === 'video');
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
@@ -162,255 +180,221 @@ export default function AdminGalleryDetail() {
       <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'rgba(253,252,248,0.85)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button
-              data-testid="back-to-dashboard"
-              onClick={() => navigate("/admin/dashboard")}
-              className="text-[#57534E] hover:text-[#1C1917]"
-              style={{ transition: 'color 0.2s ease' }}
-            >
+            <button data-testid="back-to-dashboard" onClick={() => navigate("/admin/dashboard")} className="text-[#57534E] hover:text-[#1C1917]" style={{ transition: 'color 0.2s ease' }}>
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
-                {gallery.title}
-              </h1>
-              <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-                {gallery.couple_names} &middot; {gallery.wedding_date}
-              </p>
+              <h1 className="text-xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>{gallery.folder_name}</h1>
+              <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{gallery.subfolders.length} subfolders &middot; {files.length} files</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              data-testid="copy-gallery-link"
-              variant="ghost"
-              onClick={copyLink}
-              className="text-[#57534E] rounded-sm gap-2 text-xs"
-            >
-              <Copy className="w-3.5 h-3.5" /> Copy Link
-            </Button>
-            <Button
-              data-testid="gallery-settings-btn"
-              variant="ghost"
-              onClick={() => setShowSettings(true)}
-              className="text-[#57534E] rounded-sm"
-            >
-              <Settings className="w-4 h-4" />
+            <Button data-testid="create-share-btn" onClick={() => setShowShareDialog(true)}
+              className="bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-5 py-2 text-xs tracking-wider uppercase font-bold gap-2">
+              <Share2 className="w-3.5 h-3.5" /> Create Share
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-6 py-8">
-        {/* Stats bar */}
-        <div className="flex items-center gap-6 mb-8 text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-          <span className="flex items-center gap-1.5"><Image className="w-4 h-4 text-[#D4AF37]" /> {photoItems.length} Photos</span>
-          <span className="flex items-center gap-1.5"><Video className="w-4 h-4 text-[#D4AF37]" /> {videoItems.length} Videos</span>
-          <span className={`px-2 py-0.5 text-xs tracking-wider uppercase font-bold ${gallery.is_active ? 'text-[#3F6212] bg-[#3F6212]/10' : 'text-[#9F1239] bg-[#9F1239]/10'}`}>
-            {gallery.is_active ? 'Active' : 'Inactive'}
-          </span>
-          {selectedPhotos.size > 0 && (
-            <Button
-              data-testid="bulk-delete-btn"
-              onClick={handleBulkDelete}
-              variant="ghost"
-              className="ml-auto text-[#9F1239] gap-1 text-xs"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Delete {selectedPhotos.size} selected
-            </Button>
-          )}
-        </div>
-
-        {/* Upload Zone */}
-        <div
-          className={`upload-zone mb-8 p-8 flex flex-col items-center justify-center text-center cursor-pointer ${dragOver ? 'drag-over' : ''}`}
-          style={{ minHeight: '140px' }}
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          data-testid="upload-zone"
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={e => handleUpload(e.target.files)}
-            data-testid="file-input"
-          />
-          {uploading ? (
-            <div className="w-full max-w-xs">
-              <p className="text-sm mb-3" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>Uploading... {uploadProgress}%</p>
-              <Progress value={uploadProgress} className="h-1.5" />
+      <main className="max-w-screen-xl mx-auto px-6 py-6">
+        {/* Shares Bar */}
+        {shares.length > 0 && (
+          <div className="mb-6 p-4 border" style={{ borderColor: '#F5F2EB' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Share2 className="w-4 h-4 text-[#D4AF37]" />
+              <span className="text-xs tracking-wider uppercase font-bold" style={{ fontFamily: 'Manrope, sans-serif' }}>Active Shares ({shares.length})</span>
             </div>
-          ) : (
-            <>
-              <Upload className="w-8 h-8 mb-3 text-[#A8A29E]" strokeWidth={1.5} />
-              <p className="text-sm font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                Drop photos & videos here or click to browse
-              </p>
-              <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-                JPG, PNG, GIF, WebP, MP4, MOV up to 100MB each
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* Photos Grid */}
-        {photos.length === 0 ? (
-          <div className="text-center py-20">
-            <Camera className="w-16 h-16 mx-auto mb-4 text-[#D4D4D8]" strokeWidth={1} />
-            <p className="text-2xl mb-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>No photos yet</p>
-            <p className="text-sm" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Upload photos to start building this gallery</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            <AnimatePresence>
-              {photos.map((photo, i) => (
-                <motion.div
-                  key={photo.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.02 }}
-                  className="photo-card relative group aspect-square"
-                  data-testid={`photo-${photo.id}`}
-                >
-                  {photo.file_type === 'photo' && photo.thumbnail_path ? (
-                    <img
-                      src={mediaUrl(gallery.id, photo.thumbnail_path)}
-                      alt={photo.filename}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
-                      <Video className="w-8 h-8 text-[#A8A29E]" />
-                    </div>
-                  )}
-
-                  {/* Selection checkbox */}
-                  <button
-                    className="absolute top-2 left-2 w-6 h-6 rounded-sm border flex items-center justify-center opacity-0 group-hover:opacity-100"
-                    style={{
-                      transition: 'opacity 0.2s ease',
-                      backgroundColor: selectedPhotos.has(photo.id) ? '#1C1917' : 'rgba(255,255,255,0.9)',
-                      borderColor: selectedPhotos.has(photo.id) ? '#1C1917' : '#D4D4D8'
-                    }}
-                    onClick={() => toggleSelect(photo.id)}
-                  >
-                    {selectedPhotos.has(photo.id) && <Check className="w-3.5 h-3.5 text-white" />}
-                  </button>
-
-                  {/* Hover overlay */}
-                  <div className="photo-overlay" />
-                  <div className="photo-actions flex items-center justify-between">
-                    <button
-                      data-testid={`set-cover-${photo.id}`}
-                      onClick={() => setCoverPhoto(photo.id)}
-                      className="w-7 h-7 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: gallery.cover_photo_id === photo.id ? '#D4AF37' : 'rgba(255,255,255,0.9)' }}
-                      title="Set as cover"
-                    >
-                      <Star className="w-3.5 h-3.5" style={{ color: gallery.cover_photo_id === photo.id ? '#fff' : '#1C1917' }} />
-                    </button>
-                    <button
-                      data-testid={`delete-photo-${photo.id}`}
-                      onClick={() => handleDeletePhoto(photo.id)}
-                      className="w-7 h-7 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-[#9F1239]" />
-                    </button>
+            <div className="space-y-2">
+              {shares.map(s => (
+                <div key={s.id} className="flex items-center gap-3 p-2 text-sm" style={{ backgroundColor: s.is_active ? '#F5F2EB' : '#fafafa' }}>
+                  <div className="flex-1 flex items-center gap-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    {s.has_password ? <Lock className="w-3.5 h-3.5 text-[#57534E]" /> : <Globe className="w-3.5 h-3.5 text-[#3F6212]" />}
+                    <span className="text-xs font-medium">{s.label}</span>
+                    {s.allow_uploads && <span className="text-xs px-1.5 py-0.5 bg-[#D4AF37]/10 text-[#D4AF37] font-bold">UPLOADS</span>}
+                    {s.subfolder && <span className="text-xs px-1.5 py-0.5 bg-[#78716C]/10 text-[#78716C]">{s.subfolder}</span>}
+                    {!s.is_active && <span className="text-xs text-[#9F1239]">Disabled</span>}
                   </div>
-                </motion.div>
+                  <button data-testid={`copy-share-${s.id}`} onClick={() => copyShareLink(s.token)} className="p-1 text-[#57534E] hover:text-[#1C1917]"><Copy className="w-3.5 h-3.5" /></button>
+                  <button data-testid={`qr-share-${s.id}`} onClick={() => setShowQR(s)} className="p-1 text-[#57534E] hover:text-[#1C1917]"><QrCode className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => handleToggleShare(s.id)} className="p-1 text-[#57534E] hover:text-[#1C1917]">
+                    {s.is_active ? <Globe className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                  </button>
+                  <button onClick={() => handleDeleteShare(s.id)} className="p-1 text-[#9F1239]"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
               ))}
-            </AnimatePresence>
+            </div>
           </div>
         )}
+
+        {/* Subfolder Tabs */}
+        <Tabs value={activeTab} onValueChange={v => { setActiveTab(v); setSelectedFiles(new Set()); }}>
+          <TabsList className="bg-transparent border-b w-full justify-start rounded-none h-auto p-0 mb-6" style={{ borderColor: '#F5F2EB' }}>
+            {gallery.subfolders.map(sf => {
+              const count = (gallery.file_counts || {})[sf] || 0;
+              return (
+                <TabsTrigger key={sf} value={sf} data-testid={`tab-${sf.replace(/\s/g, '-')}`}
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#D4AF37] data-[state=active]:text-[#1C1917] data-[state=active]:shadow-none px-4 py-3 text-xs tracking-wider uppercase font-semibold text-[#A8A29E]"
+                  style={{ fontFamily: 'Manrope, sans-serif' }}>
+                  {sf} <span className="ml-1.5 text-[10px] opacity-60">({count})</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
+          {gallery.subfolders.map(sf => (
+            <TabsContent key={sf} value={sf} className="mt-0">
+              {/* Upload Zone */}
+              <div
+                className={`upload-zone mb-6 p-6 flex flex-col items-center justify-center text-center cursor-pointer ${dragOver ? 'drag-over' : ''}`}
+                style={{ minHeight: '120px' }}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                data-testid={`upload-zone-${sf.replace(/\s/g, '-')}`}
+              >
+                <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" className="hidden"
+                  onChange={e => handleUpload(e.target.files)} data-testid="file-input" />
+                {uploading ? (
+                  <div className="w-full max-w-xs">
+                    <p className="text-sm mb-2" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>Uploading to {sf}... {uploadProgress}%</p>
+                    <Progress value={uploadProgress} className="h-1.5" />
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-6 h-6 mb-2 text-[#A8A29E]" strokeWidth={1.5} />
+                    <p className="text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>Drop files here or click to upload to <strong>{sf}</strong></p>
+                    <p className="text-xs mt-1" style={{ color: '#A8A29E' }}>Original filenames preserved. Up to 500MB per file.</p>
+                  </>
+                )}
+              </div>
+
+              {/* Bulk actions */}
+              {selectedFiles.size > 0 && (
+                <div className="flex items-center gap-3 mb-4 p-3 border" style={{ borderColor: '#D4AF37', backgroundColor: 'rgba(212,175,55,0.05)' }}>
+                  <span className="text-xs font-bold" style={{ fontFamily: 'Manrope, sans-serif' }}>{selectedFiles.size} selected</span>
+                  <Button data-testid="bulk-delete-btn" onClick={handleBulkDelete} variant="ghost" className="text-[#9F1239] text-xs gap-1">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Selected
+                  </Button>
+                  <Button variant="ghost" onClick={() => setSelectedFiles(new Set())} className="text-xs ml-auto">Clear</Button>
+                </div>
+              )}
+
+              {/* Files Grid */}
+              {currentFiles.length === 0 ? (
+                <div className="text-center py-16">
+                  <FolderOpen className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" strokeWidth={1} />
+                  <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>No files in {sf}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {currentFiles.map((file, i) => (
+                    <motion.div key={file.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.02 }}
+                      className="photo-card relative group aspect-square" data-testid={`file-${file.id}`}>
+                      {file.file_type === 'photo' && file.has_thumb ? (
+                        <img src={thumbUrl(gallery.id, file.subfolder, file.filename)} alt={file.filename}
+                          className="w-full h-full object-cover" loading="lazy" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+                          <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
+                          <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+                        </div>
+                      )}
+                      {/* Selection */}
+                      <button className="absolute top-2 left-2 w-6 h-6 rounded-sm border flex items-center justify-center opacity-0 group-hover:opacity-100"
+                        style={{ transition: 'opacity 0.2s ease', backgroundColor: selectedFiles.has(file.id) ? '#1C1917' : 'rgba(255,255,255,0.9)', borderColor: selectedFiles.has(file.id) ? '#1C1917' : '#D4D4D8' }}
+                        onClick={() => toggleSelect(file.id)}>
+                        {selectedFiles.has(file.id) && <Check className="w-3.5 h-3.5 text-white" />}
+                      </button>
+                      {/* Overlay */}
+                      <div className="photo-overlay" />
+                      <div className="photo-actions flex items-center justify-between">
+                        <span className="text-xs text-white truncate max-w-[70%]" style={{ fontFamily: 'Manrope, sans-serif' }}>{file.filename}</span>
+                        <button data-testid={`delete-file-${file.id}`} onClick={() => handleDeleteFile(file.id)}
+                          className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                          <Trash2 className="w-3.5 h-3.5 text-[#9F1239]" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
       </main>
 
-      {/* Settings Dialog */}
-      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+      {/* Create Share Dialog */}
+      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
         <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>
           <DialogHeader>
-            <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
-              Gallery Settings
-            </DialogTitle>
+            <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Create Share Link</DialogTitle>
             <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-              Update gallery details and access settings
+              Share this gallery or a specific subfolder with a couple or their guests
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSaveSettings} className="space-y-5 mt-2">
+          <div className="space-y-5 mt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Gallery Title</Label>
-              <Input
-                data-testid="edit-gallery-title"
-                value={editForm.title || ""}
-                onChange={e => setEditForm(f => ({...f, title: e.target.value}))}
-                className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Couple Names</Label>
-              <Input
-                data-testid="edit-couple-names"
-                value={editForm.couple_names || ""}
-                onChange={e => setEditForm(f => ({...f, couple_names: e.target.value}))}
-                className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Wedding Date</Label>
-                <Input
-                  data-testid="edit-wedding-date"
-                  type="date"
-                  value={editForm.wedding_date || ""}
-                  onChange={e => setEditForm(f => ({...f, wedding_date: e.target.value}))}
-                  className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>New Password</Label>
-                <Input
-                  data-testid="edit-gallery-password"
-                  type="text"
-                  value={editForm.password || ""}
-                  onChange={e => setEditForm(f => ({...f, password: e.target.value}))}
-                  placeholder="Leave empty to keep"
-                  className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
-                />
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>What to share</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button data-testid="share-whole-gallery" onClick={() => setShareForm(f => ({...f, subfolder: null}))}
+                  className={`p-3 border text-left text-xs ${!shareForm.subfolder ? 'border-[#D4AF37] bg-[#D4AF37]/5' : 'border-[#F5F2EB]'}`}
+                  style={{ fontFamily: 'Manrope, sans-serif' }}>
+                  <FolderOpen className="w-4 h-4 mb-1 text-[#D4AF37]" />
+                  <span className="block font-bold">Entire Gallery</span>
+                  <span className="text-[#A8A29E]">All subfolders</span>
+                </button>
+                {gallery.subfolders.map(sf => (
+                  <button key={sf} data-testid={`share-subfolder-${sf.replace(/\s/g, '-')}`}
+                    onClick={() => setShareForm(f => ({...f, subfolder: sf}))}
+                    className={`p-3 border text-left text-xs ${shareForm.subfolder === sf ? 'border-[#D4AF37] bg-[#D4AF37]/5' : 'border-[#F5F2EB]'}`}
+                    style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    <FolderOpen className="w-4 h-4 mb-1 text-[#78716C]" />
+                    <span className="block font-bold">{sf}</span>
+                  </button>
+                ))}
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Description</Label>
-              <Input
-                data-testid="edit-gallery-desc"
-                value={editForm.description || ""}
-                onChange={e => setEditForm(f => ({...f, description: e.target.value}))}
-                className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]"
-              />
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Label (optional)</Label>
+              <Input data-testid="share-label-input" value={shareForm.label} onChange={e => setShareForm(f => ({...f, label: e.target.value}))}
+                placeholder="e.g. Gina & Mark's Gallery" className="border-[#D4D4D8] rounded-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password (leave empty for no password)</Label>
+              <Input data-testid="share-password-input" value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
+                placeholder="Optional - leave blank for open access" className="border-[#D4D4D8] rounded-sm" />
             </div>
             <div className="flex items-center gap-3 py-2">
-              <Switch
-                data-testid="edit-gallery-active"
-                checked={editForm.is_active}
-                onCheckedChange={v => setEditForm(f => ({...f, is_active: v}))}
-              />
-              <Label className="text-sm" style={{ color: '#57534E' }}>Gallery active</Label>
+              <Switch data-testid="share-uploads-switch" checked={shareForm.allow_uploads} onCheckedChange={v => setShareForm(f => ({...f, allow_uploads: v}))} />
+              <Label className="text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>Allow guests to upload files</Label>
             </div>
-            <DialogFooter>
-              <Button
-                data-testid="save-settings-btn"
-                type="submit"
-                disabled={saving}
-                className="w-full bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-8 py-5 text-xs tracking-[0.15em] uppercase font-bold"
-              >
-                {saving ? "Saving..." : "Save Changes"}
+            <Button data-testid="create-share-submit" onClick={handleCreateShare} disabled={creatingShare}
+              className="w-full bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-8 py-5 text-xs tracking-[0.15em] uppercase font-bold">
+              {creatingShare ? "Creating..." : "Create Share Link"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* QR Code Dialog */}
+      <Dialog open={!!showQR} onOpenChange={() => setShowQR(null)}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-sm text-center" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>QR Code</DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>{showQR?.label}</DialogDescription>
+          </DialogHeader>
+          {showQR && (
+            <div className="flex flex-col items-center gap-4 py-4">
+              <img src={`${getShareQR(showQR.id)}&token=${localStorage.getItem('admin_token')}`}
+                alt="QR Code" className="w-64 h-64" data-testid="qr-code-image" />
+              <p className="text-xs break-all" style={{ color: '#A8A29E' }}>{window.location.origin}/s/{showQR.token}</p>
+              <Button onClick={() => copyShareLink(showQR.token)} className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2">
+                <Copy className="w-3.5 h-3.5" /> Copy Link
               </Button>
-            </DialogFooter>
-          </form>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
