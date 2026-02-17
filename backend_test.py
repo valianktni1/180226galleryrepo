@@ -133,6 +133,7 @@ class WeddingGalleryTester:
         if response and response.status_code == 200:
             result = response.json()
             self.admin_token = result.get('token')
+            print(f"   Token received: {self.admin_token[:20]}..." if self.admin_token else "   No token in response")
             self.log_result("Admin Login", True, f"Login successful")
         else:
             error_msg = response.json().get('detail') if response else "Login failed"
