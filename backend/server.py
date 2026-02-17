@@ -89,7 +89,7 @@ def verify_jwt(token: str) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-async def get_admin(authorization: str = None):
+async def get_admin(authorization: str = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization.replace("Bearer ", "")
@@ -98,7 +98,7 @@ async def get_admin(authorization: str = None):
         raise HTTPException(status_code=403, detail="Not admin")
     return payload
 
-async def get_client_session(authorization: str = None):
+async def get_client_session(authorization: str = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization.replace("Bearer ", "")
