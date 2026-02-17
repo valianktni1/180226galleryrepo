@@ -392,16 +392,18 @@ async def upload_files(
 
     uploaded = []
     for file in files:
-        content = await file.read()
-        if len(content) > MAX_UPLOAD_SIZE:
-            continue
-
-        # Keep original filename, handle duplicates
+        # Stream file to disk for large file support
         final_name = safe_filename(file.filename, target_dir)
         file_path = target_dir / final_name
+        file_size = 0
 
         async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(content)
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB chunks
+                if not chunk:
+                    break
+                await f.write(chunk)
+                file_size += len(chunk)
 
         file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
 
