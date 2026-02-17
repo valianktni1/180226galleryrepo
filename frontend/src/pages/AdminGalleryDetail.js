@@ -42,6 +42,8 @@ export default function AdminGalleryDetail() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState(new Set());
+  const [copying, setCopying] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
