@@ -467,6 +467,115 @@ async def delete_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
     )
     return {"success": True}
 
+# ─── Copy to Album Favourites ───
+class CopyToSubfolder(BaseModel):
+    file_ids: List[str]
+    target_subfolder: str
+
+@api_router.post("/admin/galleries/{gallery_id}/copy-to-subfolder")
+async def copy_to_subfolder(gallery_id: str, data: CopyToSubfolder, admin=Depends(get_admin)):
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    if data.target_subfolder not in gallery["subfolders"]:
+        raise HTTPException(status_code=400, detail=f"Target subfolder '{data.target_subfolder}' not found")
+
+    target_dir = get_gallery_path(gallery["folder_name"]) / data.target_subfolder
+    target_dir.mkdir(parents=True, exist_ok=True)
+    copied = 0
+
+    for file_id in data.file_ids:
+        f = await db.files.find_one({"id": file_id, "gallery_id": gallery_id}, {"_id": 0})
+        if not f:
+            continue
+        src_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+        if not src_path.exists():
+            continue
+        dest_name = safe_filename(f["filename"], target_dir)
+        dest_path = target_dir / dest_name
+        shutil.copy2(src_path, dest_path)
+
+        # Generate thumbnails for the copy
+        has_thumb = False
+        has_preview = False
+        if f["file_type"] == "photo":
+            has_thumb = make_thumbnail(dest_path, get_thumb_path(gallery_id, data.target_subfolder, dest_name))
+            has_preview = make_preview(dest_path, get_preview_path(gallery_id, data.target_subfolder, dest_name))
+
+        new_doc = {
+            "id": str(uuid.uuid4()),
+            "gallery_id": gallery_id,
+            "subfolder": data.target_subfolder,
+            "filename": dest_name,
+            "original_filename": f["original_filename"],
+            "file_type": f["file_type"],
+            "file_size": f["file_size"],
+            "has_thumb": has_thumb,
+            "has_preview": has_preview,
+            "uploaded_by": "admin",
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.files.insert_one(new_doc)
+        copied += 1
+
+    count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": data.target_subfolder})
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {f"file_counts.{data.target_subfolder}": count, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"copied": copied}
+
+# ─── Streaming Download (for large galleries) ───
+@api_router.get("/admin/galleries/{gallery_id}/download-subfolder")
+async def download_subfolder_zip(gallery_id: str, subfolder: str = Query(...), admin=Depends(get_admin)):
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    folder_path = get_gallery_path(gallery["folder_name"]) / subfolder
+    if not folder_path.exists():
+        raise HTTPException(status_code=404, detail="Subfolder not found")
+
+    files = await db.files.find({"gallery_id": gallery_id, "subfolder": subfolder}, {"_id": 0}).to_list(50000)
+    if not files:
+        raise HTTPException(status_code=404, detail="No files in this subfolder")
+
+    def iter_zip():
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+            for f in files:
+                fp = folder_path / f["filename"]
+                if fp.exists():
+                    zf.write(fp, f["filename"])
+        buf.seek(0)
+        while True:
+            chunk = buf.read(1024 * 1024)  # 1MB chunks
+            if not chunk:
+                break
+            yield chunk
+
+    zip_name = f"{gallery['folder_name']} - {subfolder}.zip".replace(' ', '_')
+    return StreamingResponse(
+        iter_zip(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_name}"',
+            "Cache-Control": "no-cache"
+        }
+    )
+
+@api_router.get("/admin/galleries/{gallery_id}/download-file/{file_id}")
+async def admin_download_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
+    f = await db.files.find_one({"id": file_id, "gallery_id": gallery_id}, {"_id": 0})
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
+
 # ─── Shares ───
 @api_router.post("/admin/galleries/{gallery_id}/shares")
 async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_admin)):
