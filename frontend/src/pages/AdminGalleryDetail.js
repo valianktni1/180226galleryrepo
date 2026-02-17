@@ -339,8 +339,8 @@ export default function AdminGalleryDetail() {
             <TabsContent key={sf} value={sf} className="mt-0">
               {/* Upload Zone */}
               <div
-                className={`upload-zone mb-6 p-6 flex flex-col items-center justify-center text-center cursor-pointer ${dragOver ? 'drag-over' : ''}`}
-                style={{ minHeight: '120px' }}
+                className={`upload-zone mb-4 p-6 flex flex-col items-center justify-center text-center cursor-pointer ${dragOver ? 'drag-over' : ''}`}
+                style={{ minHeight: '100px' }}
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
@@ -358,19 +358,44 @@ export default function AdminGalleryDetail() {
                   <>
                     <Upload className="w-6 h-6 mb-2 text-[#A8A29E]" strokeWidth={1.5} />
                     <p className="text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>Drop files here or click to upload to <strong>{sf}</strong></p>
-                    <p className="text-xs mt-1" style={{ color: '#A8A29E' }}>Original filenames preserved. Up to 500MB per file.</p>
+                    <p className="text-xs mt-1" style={{ color: '#A8A29E' }}>Original filenames preserved. No size limit.</p>
                   </>
                 )}
               </div>
 
-              {/* Bulk actions */}
-              {selectedFiles.size > 0 && (
-                <div className="flex items-center gap-3 mb-4 p-3 border" style={{ borderColor: '#D4AF37', backgroundColor: 'rgba(212,175,55,0.05)' }}>
-                  <span className="text-xs font-bold" style={{ fontFamily: 'Manrope, sans-serif' }}>{selectedFiles.size} selected</span>
-                  <Button data-testid="bulk-delete-btn" onClick={handleBulkDelete} variant="ghost" className="text-[#9F1239] text-xs gap-1">
-                    <Trash2 className="w-3.5 h-3.5" /> Delete Selected
+              {/* Action Bar */}
+              {currentFiles.length > 0 && (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <Button data-testid="select-mode-btn" variant={selectMode ? "default" : "outline"} 
+                    onClick={() => { setSelectMode(m => !m); setSelectedFiles(new Set()); }}
+                    className={`rounded-sm text-xs tracking-wider gap-1.5 ${selectMode ? 'bg-[#1C1917] text-[#FDFCF8]' : 'border-[#D4D4D8] text-[#57534E]'}`}
+                    style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    <Check className="w-3.5 h-3.5" /> {selectMode ? "Cancel Select" : "Select"}
                   </Button>
-                  <Button variant="ghost" onClick={() => setSelectedFiles(new Set())} className="text-xs ml-auto">Clear</Button>
+
+                  {selectMode && selectedFiles.size > 0 && (
+                    <>
+                      <span className="text-xs font-bold" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>{selectedFiles.size} selected</span>
+                      {gallery.subfolders.includes("Album Favourites") && activeTab !== "Album Favourites" && (
+                        <Button data-testid="copy-to-favourites-btn" onClick={handleCopyToFavourites} disabled={copying}
+                          className="bg-[#D4AF37] text-white hover:bg-[#D4AF37]/90 rounded-sm text-xs tracking-wider gap-1.5 font-bold"
+                          style={{ fontFamily: 'Manrope, sans-serif' }}>
+                          <Heart className="w-3.5 h-3.5" /> {copying ? "Copying..." : "Add to Album Favourites"}
+                        </Button>
+                      )}
+                      <Button data-testid="bulk-delete-btn" onClick={handleBulkDelete} variant="ghost" className="text-[#9F1239] text-xs gap-1">
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                      </Button>
+                    </>
+                  )}
+
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button data-testid="download-all-btn" variant="outline" onClick={handleDownloadAll}
+                      className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
+                      style={{ fontFamily: 'Manrope, sans-serif' }}>
+                      <Download className="w-3.5 h-3.5" /> Download All ({currentFiles.length})
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -383,8 +408,10 @@ export default function AdminGalleryDetail() {
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                   {currentFiles.map((file, i) => (
-                    <motion.div key={file.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.02 }}
-                      className="photo-card relative group aspect-square" data-testid={`file-${file.id}`}>
+                    <motion.div key={file.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(i * 0.01, 0.5) }}
+                      className={`photo-card relative group aspect-square ${selectMode ? 'cursor-pointer' : ''} ${selectedFiles.has(file.id) ? 'ring-2 ring-[#D4AF37]' : ''}`}
+                      data-testid={`file-${file.id}`}
+                      onClick={selectMode ? () => toggleSelect(file.id) : undefined}>
                       {file.file_type === 'photo' && file.has_thumb ? (
                         <img src={thumbUrl(gallery.id, file.subfolder, file.filename)} alt={file.filename}
                           className="w-full h-full object-cover" loading="lazy" />
@@ -394,21 +421,33 @@ export default function AdminGalleryDetail() {
                           <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
                         </div>
                       )}
-                      {/* Selection */}
-                      <button className="absolute top-2 left-2 w-6 h-6 rounded-sm border flex items-center justify-center opacity-0 group-hover:opacity-100"
-                        style={{ transition: 'opacity 0.2s ease', backgroundColor: selectedFiles.has(file.id) ? '#1C1917' : 'rgba(255,255,255,0.9)', borderColor: selectedFiles.has(file.id) ? '#1C1917' : '#D4D4D8' }}
-                        onClick={() => toggleSelect(file.id)}>
-                        {selectedFiles.has(file.id) && <Check className="w-3.5 h-3.5 text-white" />}
-                      </button>
-                      {/* Overlay */}
-                      <div className="photo-overlay" />
-                      <div className="photo-actions flex items-center justify-between">
-                        <span className="text-xs text-white truncate max-w-[70%]" style={{ fontFamily: 'Manrope, sans-serif' }}>{file.filename}</span>
-                        <button data-testid={`delete-file-${file.id}`} onClick={() => handleDeleteFile(file.id)}
-                          className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
-                          <Trash2 className="w-3.5 h-3.5 text-[#9F1239]" />
-                        </button>
-                      </div>
+                      {/* Selection checkbox - always visible in select mode */}
+                      {selectMode && (
+                        <div className="absolute top-2 left-2 w-6 h-6 rounded-sm border flex items-center justify-center"
+                          style={{ backgroundColor: selectedFiles.has(file.id) ? '#D4AF37' : 'rgba(255,255,255,0.9)', borderColor: selectedFiles.has(file.id) ? '#D4AF37' : '#D4D4D8' }}>
+                          {selectedFiles.has(file.id) && <Check className="w-3.5 h-3.5 text-white" />}
+                        </div>
+                      )}
+                      {/* Hover overlay (non-select mode) */}
+                      {!selectMode && (
+                        <>
+                          <div className="photo-overlay" />
+                          <div className="photo-actions flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                              {file.file_type === 'video' && (
+                                <button data-testid={`download-video-${file.id}`} onClick={() => handleDownloadSingleFile(file)}
+                                  className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                                  <Download className="w-3.5 h-3.5 text-[#1C1917]" />
+                                </button>
+                              )}
+                            </div>
+                            <button data-testid={`delete-file-${file.id}`} onClick={() => handleDeleteFile(file.id)}
+                              className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                              <Trash2 className="w-3.5 h-3.5 text-[#9F1239]" />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </motion.div>
                   ))}
                 </div>
