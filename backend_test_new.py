@@ -370,11 +370,21 @@ class WeddingPhotographyGalleryTester:
             self.log_result("Share Toggle", False, error="No admin token or share ID")
             return False
 
+        # Toggle to inactive first
         response = self.make_request('PUT', f'/admin/shares/{self.test_share_id}/toggle')
         if response and response.status_code == 200:
             result = response.json()
             is_active = result.get('is_active')
-            self.log_result("Share Toggle", True, f"Share toggled, active: {is_active}")
+            self.log_result("Share Toggle (Deactivate)", True, f"Share deactivated, active: {is_active}")
+            
+            # Toggle back to active for subsequent tests
+            response2 = self.make_request('PUT', f'/admin/shares/{self.test_share_id}/toggle')
+            if response2 and response2.status_code == 200:
+                result2 = response2.json()
+                is_active2 = result2.get('is_active')
+                self.log_result("Share Toggle (Reactivate)", True, f"Share reactivated, active: {is_active2}")
+            else:
+                self.log_result("Share Toggle (Reactivate)", False, error="Could not reactivate share")
         else:
             error_msg = response.json().get('detail') if response else "Share toggle failed"
             self.log_result("Share Toggle", False, error=error_msg)
