@@ -95,6 +95,24 @@ export default function AdminGalleryDetail() {
     handleUpload(e.dataTransfer.files);
   };
 
+  const handleDeleteSubfolder = async (sfName) => {
+    const fileCount = (gallery.file_counts || {})[sfName] || 0;
+    const msg = fileCount > 0
+      ? `Delete "${sfName}" and its ${fileCount} files? This cannot be undone.`
+      : `Remove "${sfName}" subfolder?`;
+    if (!window.confirm(msg)) return;
+    try {
+      const res = await deleteSubfolder(id, sfName);
+      toast.success(`"${sfName}" removed`);
+      if (activeTab === sfName) {
+        setActiveTab(res.data.subfolders?.[0] || "");
+      }
+      loadGallery();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to delete subfolder");
+    }
+  };
+
   const handleDeleteFile = async (fileId) => {
     try {
       await deleteFile(id, fileId);
