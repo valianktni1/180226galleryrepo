@@ -471,18 +471,29 @@ class WeddingPhotographyGalleryTester:
         """Test guest upload functionality"""
         print("📤 Testing Guest Upload...")
         
-        # First create a guest upload share
+        # First create a guest upload share with an available subfolder
         if not self.admin_token or not self.test_gallery_id:
             self.log_result("Guest Upload Setup", False, error="No admin token or gallery")
             return False
 
-        # The guest upload share should have been created in test_share_creation
-        # For this test, we'll use the existing share token but we need an upload-enabled share
-        # Let's create a temporary one for testing
+        # Get available subfolders
+        response = self.make_request('GET', f'/admin/galleries/{self.test_gallery_id}')
+        if not response or response.status_code != 200:
+            self.log_result("Guest Upload Setup", False, error="Could not get gallery details")
+            return False
+            
+        gallery = response.json()
+        subfolders = gallery.get('subfolders', [])
+        if not subfolders:
+            self.log_result("Guest Upload Setup", False, error="No subfolders available")
+            return False
+            
+        # Use the first available subfolder for guest uploads
+        guest_subfolder = subfolders[0]
         
         guest_share_data = {
             "gallery_id": self.test_gallery_id,
-            "subfolder": "Guest Uploads",
+            "subfolder": guest_subfolder,
             "password": None,
             "allow_uploads": True,
             "label": "Test Guest Upload"
@@ -513,7 +524,7 @@ class WeddingPhotographyGalleryTester:
                 if upload_response and upload_response.status_code == 200:
                     upload_result = upload_response.json()
                     uploaded_count = len(upload_result.get('uploaded', []))
-                    self.log_result("Guest Upload", True, f"Guest uploaded {uploaded_count} file(s)")
+                    self.log_result("Guest Upload", True, f"Guest uploaded {uploaded_count} file(s) to '{guest_subfolder}'")
                 else:
                     error_msg = upload_response.json().get('detail') if upload_response else "Guest upload failed"
                     self.log_result("Guest Upload", False, error=error_msg)
@@ -523,7 +534,8 @@ class WeddingPhotographyGalleryTester:
             else:
                 self.log_result("Guest Upload Access", False, error="Could not access guest share")
         else:
-            self.log_result("Guest Upload Setup", False, error="Could not create guest upload share")
+            error_msg = response.json().get('detail') if response else "Could not create guest upload share"
+            self.log_result("Guest Upload Setup", False, error=error_msg)
 
         return True
 
