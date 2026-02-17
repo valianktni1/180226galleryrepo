@@ -241,11 +241,26 @@ class WeddingPhotographyGalleryTester:
             self.log_result("File Upload", False, error="No admin token or gallery ID")
             return False
 
+        # First get the gallery to see what subfolders are available
+        response = self.make_request('GET', f'/admin/galleries/{self.test_gallery_id}')
+        if not response or response.status_code != 200:
+            self.log_result("File Upload", False, error="Could not get gallery details for upload")
+            return False
+            
+        gallery = response.json()
+        subfolders = gallery.get('subfolders', [])
+        if not subfolders:
+            self.log_result("File Upload", False, error="No subfolders available for upload")
+            return False
+            
+        # Use the first available subfolder
+        target_subfolder = subfolders[0]
+
         # Create a small test image (1x1 pixel PNG)
         test_image_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc```\x00\x00\x00\x04\x00\x01\xdd\x8d\xb4\x1c\x00\x00\x00\x00IEND\xaeB`\x82'
         
         files = {'files': ('test-wedding-photo.png', test_image_data, 'image/png')}
-        data = {'subfolder': 'Wedding Images'}
+        data = {'subfolder': target_subfolder}
         
         response = self.make_request('POST', f'/admin/galleries/{self.test_gallery_id}/upload', 
                                    data=data, files=files)
@@ -258,7 +273,7 @@ class WeddingPhotographyGalleryTester:
                 original_filename = uploaded_files[0].get('original_filename')
                 preserved_filename = uploaded_files[0].get('filename')
                 self.log_result("File Upload", True, 
-                              f"Uploaded {len(uploaded_files)} file(s), original: {original_filename}, preserved: {preserved_filename}")
+                              f"Uploaded to '{target_subfolder}': {len(uploaded_files)} file(s), original: {original_filename}, preserved: {preserved_filename}")
             else:
                 self.log_result("File Upload", False, error="No files uploaded")
         else:
