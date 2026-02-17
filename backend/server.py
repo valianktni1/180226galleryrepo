@@ -35,7 +35,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 48
-MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB
+MAX_UPLOAD_SIZE = 40 * 1024 * 1024 * 1024  # 40GB for admin
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
