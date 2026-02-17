@@ -328,6 +328,34 @@ async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get
     updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     return updated
 
+@api_router.delete("/admin/galleries/{gallery_id}/subfolders/{subfolder_name}")
+async def delete_subfolder(gallery_id: str, subfolder_name: str, admin=Depends(get_admin)):
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    # URL-decode subfolder name
+    from urllib.parse import unquote
+    subfolder_name = unquote(subfolder_name)
+    if subfolder_name not in gallery["subfolders"]:
+        raise HTTPException(status_code=404, detail="Subfolder not found")
+    # Delete physical folder
+    folder_path = get_gallery_path(gallery["folder_name"]) / subfolder_name
+    if folder_path.exists():
+        shutil.rmtree(folder_path)
+    # Delete cached thumbs
+    cache_path = CACHE_DIR / gallery_id / slugify(subfolder_name)
+    if cache_path.exists():
+        shutil.rmtree(cache_path)
+    # Delete files from DB
+    await db.files.delete_many({"gallery_id": gallery_id, "subfolder": subfolder_name})
+    # Remove from gallery subfolders list and file_counts
+    new_subs = [s for s in gallery["subfolders"] if s != subfolder_name]
+    new_counts = {k: v for k, v in (gallery.get("file_counts") or {}).items() if k != subfolder_name}
+    await db.galleries.update_one({"id": gallery_id}, {
+        "$set": {"subfolders": new_subs, "file_counts": new_counts, "updated_at": datetime.now(timezone.utc).isoformat()}
+    })
+    return {"success": True, "subfolders": new_subs}
+
 @api_router.delete("/admin/galleries/{gallery_id}")
 async def delete_gallery(gallery_id: str, admin=Depends(get_admin)):
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
