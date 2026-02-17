@@ -141,7 +141,56 @@ export default function AdminGalleryDetail() {
     }
     toast.success(`${selectedFiles.size} files deleted`);
     setSelectedFiles(new Set());
+    setSelectMode(false);
     loadGallery();
+  };
+
+  const handleCopyToFavourites = async () => {
+    if (selectedFiles.size === 0) return;
+    if (!gallery.subfolders.includes("Album Favourites")) {
+      toast.error("Album Favourites folder doesn't exist in this gallery");
+      return;
+    }
+    setCopying(true);
+    try {
+      const res = await copyToSubfolder(id, Array.from(selectedFiles), "Album Favourites");
+      toast.success(`${res.data.copied} files copied to Album Favourites`);
+      setSelectedFiles(new Set());
+      setSelectMode(false);
+      loadGallery();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to copy");
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const handleDownloadAll = () => {
+    const token = localStorage.getItem('admin_token');
+    const url = `${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${id}/download-subfolder?subfolder=${encodeURIComponent(activeTab)}`;
+    // Open in new tab - browser handles the download with auth via fetch
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.blob())
+      .then(blob => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${gallery.folder_name} - ${activeTab}.zip`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        toast.success("Download started");
+      })
+      .catch(() => toast.error("Download failed"));
+  };
+
+  const handleDownloadSingleFile = async (file) => {
+    try {
+      const res = await adminDownloadFile(id, file.id);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = file.filename; a.click();
+      URL.revokeObjectURL(url);
+    } catch { toast.error("Download failed"); }
   };
 
   const handleCreateShare = async () => {
