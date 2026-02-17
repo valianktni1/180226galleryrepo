@@ -21,7 +21,7 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X
+  Download, Plus, X, Heart
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
