@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.2.11",
+    "@fontsource/manrope": "^5.2.8",
     "@hookform/resolvers": "^5.0.1",
     "@radix-ui/react-accordion": "^1.2.8",
     "@radix-ui/react-alert-dialog": "^1.1.11",
@@ -38,6 +40,7 @@
     "cra-template": "1.2.0",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+    "framer-motion": "^12.34.1",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.507.0",
     "next-themes": "^0.4.6",
