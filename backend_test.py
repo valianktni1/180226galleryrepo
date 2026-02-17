@@ -272,9 +272,9 @@ class WeddingGalleryTester:
         response = self.make_request('GET', f'/media/{self.test_gallery_id}/thumbnails/nonexistent.jpg')
         
         if response and response.status_code == 404:
-            self.log_result("Media Serving (404)", True, "Correctly returns 404 for non-existent files")
+            self.log_result("Media Serving (404 Test)", True, "Correctly returns 404 for non-existent files")
         else:
-            self.log_result("Media Serving (404)", False, error="Should return 404 for non-existent files")
+            self.log_result("Media Serving (404 Test)", False, error="Should return 404 for non-existent files")
 
     def test_client_access(self):
         """Test client gallery access"""
