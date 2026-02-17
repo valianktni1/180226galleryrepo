@@ -251,11 +251,22 @@ export default function AdminGalleryDetail() {
             {gallery.subfolders.map(sf => {
               const count = (gallery.file_counts || {})[sf] || 0;
               return (
-                <TabsTrigger key={sf} value={sf} data-testid={`tab-${sf.replace(/\s/g, '-')}`}
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#D4AF37] data-[state=active]:text-[#1C1917] data-[state=active]:shadow-none px-4 py-3 text-xs tracking-wider uppercase font-semibold text-[#A8A29E]"
-                  style={{ fontFamily: 'Manrope, sans-serif' }}>
-                  {sf} <span className="ml-1.5 text-[10px] opacity-60">({count})</span>
-                </TabsTrigger>
+                <div key={sf} className="relative flex items-center group">
+                  <TabsTrigger value={sf} data-testid={`tab-${sf.replace(/\s/g, '-')}`}
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#D4AF37] data-[state=active]:text-[#1C1917] data-[state=active]:shadow-none pl-4 pr-7 py-3 text-xs tracking-wider uppercase font-semibold text-[#A8A29E]"
+                    style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    {sf} <span className="ml-1.5 text-[10px] opacity-60">({count})</span>
+                  </TabsTrigger>
+                  <button
+                    data-testid={`delete-subfolder-${sf.replace(/\s/g, '-')}`}
+                    onClick={(e) => { e.stopPropagation(); handleDeleteSubfolder(sf); }}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 text-[#9F1239]/60 hover:text-[#9F1239]"
+                    style={{ transition: 'opacity 0.2s ease' }}
+                    title={`Remove ${sf}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
               );
             })}
           </TabsList>
