@@ -1,0 +1,212 @@
+{
+  "project_name": "Weddings By Mark - Client Gallery System",
+  "design_philosophy": {
+    "core_identity": "Cinematic Editorial",
+    "emotional_tone": ["Intimate", "Timeless", "Professional", "Authentic"],
+    "visual_style": "Warm Minimalism",
+    "key_principles": [
+      "Photography First: The UI must recede to let images breathe.",
+      "Editorial Typography: Text should feel like a high-end magazine, not a SaaS.",
+      "Tactile Depth: Use subtle grain and warm whites to avoid clinical sterility.",
+      "Frictionless Access: Client gallery access must be instant and beautiful."
+    ]
+  },
+  "typography": {
+    "font_families": {
+      "heading": "Cormorant Garamond, serif",
+      "body": "Manrope, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "display_large": "text-6xl md:text-8xl tracking-tight leading-[0.9] font-light italic",
+      "display_medium": "text-5xl md:text-7xl tracking-tight leading-none font-normal",
+      "heading_1": "text-4xl md:text-5xl tracking-tight font-medium",
+      "heading_2": "text-3xl md:text-4xl tracking-normal font-medium",
+      "heading_3": "text-2xl md:text-3xl tracking-normal font-medium",
+      "body_large": "text-lg md:text-xl tracking-wide leading-relaxed font-light",
+      "body_base": "text-base tracking-wide leading-relaxed text-muted-foreground",
+      "caption": "text-sm tracking-[0.2em] uppercase font-semibold text-muted-foreground",
+      "button": "text-sm tracking-widest uppercase font-bold"
+    },
+    "installation_instructions": "Add '@fontsource/cormorant-garamond' and '@fontsource/manrope' via yarn."
+  },
+  "colors": {
+    "theme_strategy": "Warm Light Mode Dominant (Dark Mode for Admin Optional)",
+    "palette": {
+      "background": {
+        "default": "#FDFCF8",
+        "paper": "#F5F2EB",
+        "dark": "#1A1918",
+        "overlay": "rgba(253, 252, 248, 0.9)"
+      },
+      "foreground": {
+        "primary": "#1C1917",
+        "secondary": "#57534E",
+        "muted": "#A8A29E",
+        "inverse": "#FDFCF8"
+      },
+      "accent": {
+        "gold": "#D4AF37",
+        "bronze": "#A67C52",
+        "stone": "#78716C"
+      },
+      "status": {
+        "success": "#3F6212",
+        "error": "#9F1239",
+        "warning": "#B45309"
+      }
+    },
+    "gradients": {
+      "subtle_fade": "linear-gradient(to bottom, transparent, rgba(28, 25, 23, 0.05))",
+      "photo_overlay": "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 40%)"
+    }
+  },
+  "spacing_and_layout": {
+    "base_scale": 4,
+    "container_padding": {
+      "mobile": "p-6",
+      "desktop": "p-12 md:p-24"
+    },
+    "grid_system": {
+      "gallery_masonry": "columns-1 md:columns-2 lg:columns-3 gap-8 space-y-8",
+      "admin_dashboard": "grid grid-cols-1 md:grid-cols-12 gap-6",
+      "admin_card_grid": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+    },
+    "border_radius": {
+      "default": "rounded-none",
+      "button": "rounded-sm",
+      "card": "rounded-none",
+      "input": "rounded-none"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm px-8 py-3 text-xs tracking-widest uppercase transition-all duration-300",
+      "secondary": "bg-transparent border border-input hover:bg-accent hover:text-accent-foreground rounded-sm px-8 py-3 text-xs tracking-widest uppercase transition-all duration-300",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-sm px-4 py-2 text-xs tracking-widest uppercase transition-all duration-300",
+      "link": "text-primary underline-offset-4 hover:underline decoration-1"
+    },
+    "inputs": {
+      "style": "minimalist_underline",
+      "classes": "border-0 border-b border-input bg-transparent rounded-none px-0 py-2 focus-visible:ring-0 focus-visible:border-primary placeholder:text-muted-foreground/50 transition-colors"
+    },
+    "cards": {
+      "style": "editorial_flat",
+      "classes": "bg-card text-card-foreground border-none shadow-none group"
+    },
+    "modals": {
+      "overlay": "backdrop-blur-xl bg-background/80",
+      "content": "border-none shadow-2xl bg-background rounded-none"
+    },
+    "navigation": {
+      "style": "floating_minimal",
+      "classes": "fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/10"
+    }
+  },
+  "visual_enhancers": {
+    "textures": {
+      "noise": "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E\")"
+    },
+    "shadows": {
+      "elevation_1": "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+      "elevation_2": "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)",
+      "elevation_3": "0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02)"
+    },
+    "effects": {
+      "glass": "bg-white/70 backdrop-blur-lg border border-white/20",
+      "image_hover": "transition-transform duration-700 ease-out hover:scale-[1.02]"
+    }
+  },
+  "motion": {
+    "libraries": ["framer-motion", "lenis"],
+    "defaults": {
+      "transition": { "duration": 0.5, "ease": [0.33, 1, 0.68, 1] },
+      "stagger": 0.1
+    },
+    "interactions": {
+      "page_load": "fade_in_up",
+      "gallery_item": "fade_in_scale",
+      "hover_lift": "translate-y-[-4px]"
+    }
+  },
+  "accessibility": {
+    "rules": [
+      "Ensure text contrast ratio > 4.5:1 for body text.",
+      "Focus rings must be visible (custom styled to match brand).",
+      "All images must have alt text.",
+      "Interactive elements must have at least 44x44px target size on mobile."
+    ]
+  },
+  "image_assets": {
+    "hero_images": [
+      {
+        "url": "https://images.unsplash.com/photo-1624635446269-ea81d79bbc30?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwyfHx3ZWRkaW5nJTIwY291cGxlJTIwc3Vuc2V0JTIwcm9tYW50aWMlMjBhcnRpc3RpY3xlbnwwfHx8fDE3NzEzNjM2MTR8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Silhouette of couple at sunset",
+        "category": "hero"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1685687919836-6c15deb19a54?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHw0fHx3ZWRkaW5nJTIwY291cGxlJTIwc3Vuc2V0JTIwcm9tYW50aWMlMjBhcnRpc3RpY3xlbnwwfHx8fDE3NzEzNjM2MTR8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Bride and groom kissing on beach",
+        "category": "hero"
+      }
+    ],
+    "details": [
+      {
+        "url": "https://images.unsplash.com/photo-1764380748273-7e5237219de8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwzfHx3ZWRkaW5nJTIwZGV0YWlscyUyMGZsb3dlcnMlMjByaW5ncyUyMGVsZWdhbnR8ZW58MHx8fHwxNzcxMzYzNjE2fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Bride with white flowers",
+        "category": "detail"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1769374071261-dc173067247b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwxfHx3ZWRkaW5nJTIwZGV0YWlscyUyMGZsb3dlcnMlMjByaW5ncyUyMGVsZWdhbnR8ZW58MHx8fHwxNzcxMzYzNjE2fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Hands on wedding bouquet",
+        "category": "detail"
+      }
+    ],
+    "candid": [
+      {
+        "url": "https://images.unsplash.com/photo-1707194227653-a644d1be3351?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzOTB8MHwxfHNlYXJjaHwzfHxjYW5kaWQlMjB3ZWRkaW5nJTIwZ3Vlc3RzJTIwbGF1Z2hpbmclMjBibGFjayUyMGFuZCUyMHdoaXRlfGVufDB8fHx8MTc3MTM2MzYxNnww&ixlib=rb-4.1.0&q=85",
+        "alt": "Bride and groom exchanging vows smiling",
+        "category": "candid"
+      },
+       {
+        "url": "https://images.unsplash.com/photo-1745847768366-d44dcef9ef35?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxwaG90b2dyYXBoZXIlMjBob2xkaW5nJTIwY2FtZXJhJTIwcHJvZmVzc2lvbmFsfGVufDB8fHx8MTc3MTM2MzYxN3ww&ixlib=rb-4.1.0&q=85",
+        "alt": "Photographer focusing",
+        "category": "admin"
+      }
+    ]
+  },
+  "instructions_to_main_agent": {
+    "setup": [
+      "Install 'lucide-react' for icons.",
+      "Install 'framer-motion' for animations.",
+      "Install '@fontsource/cormorant-garamond' and '@fontsource/manrope'.",
+      "Configure Tailwind theme to match 'colors' and 'typography' sections above.",
+      "Use Shadcn UI components but heavily override styles to remove 'corporate' look."
+    ],
+    "implementation_rules": [
+      "NEVER use default blue for links or buttons. Use the Gold or Black defined in palette.",
+      "Avoid 100% width containers. Use 'max-w-screen-xl mx-auto' for content.",
+      "For the Client Gallery: Use a masonry layout (CSS columns) instead of a rigid grid.",
+      "For the Admin Dashboard: Keep it clean but use the 'Manrope' font to maintain brand consistency.",
+      "Use 'sonner' for toast notifications, styled to match the minimal theme."
+    ]
+  },
+  "universal_guidelines": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡 for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use 'sonner' for toasts located in /app/src/components/ui/sonner.tsx"
+  ]
+}
