@@ -57,6 +57,8 @@ export const uploadFiles = (galleryId, subfolder, files, onProgress) => {
 };
 export const deleteFile = (galleryId, fileId) =>
   apiClient.delete(`/admin/galleries/${galleryId}/files/${fileId}`);
+export const deleteSubfolder = (galleryId, subfolderName) =>
+  apiClient.delete(`/admin/galleries/${galleryId}/subfolders/${encodeURIComponent(subfolderName)}`);
 
 // Shares
 export const createShare = (galleryId, data) =>
