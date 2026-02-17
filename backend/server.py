@@ -423,7 +423,7 @@ async def upload_files(
             "filename": final_name,
             "original_filename": file.filename,
             "file_type": file_type,
-            "file_size": len(content),
+            "file_size": file_size,
             "has_thumb": has_thumb,
             "has_preview": has_preview,
             "uploaded_by": "admin",
