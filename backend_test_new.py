@@ -291,6 +291,15 @@ class WeddingPhotographyGalleryTester:
             self.log_result("Share Creation", False, error="No admin token or gallery ID")
             return False
 
+        # Get gallery details to find available subfolders
+        response = self.make_request('GET', f'/admin/galleries/{self.test_gallery_id}')
+        if not response or response.status_code != 200:
+            self.log_result("Share Creation", False, error="Could not get gallery details")
+            return False
+            
+        gallery = response.json()
+        subfolders = gallery.get('subfolders', [])
+
         # Create password-protected share for whole gallery
         share_data = {
             "gallery_id": self.test_gallery_id,
@@ -313,10 +322,11 @@ class WeddingPhotographyGalleryTester:
             self.log_result("Create Password Share", False, error=error_msg)
             return False
 
-        # Create open share for guest uploads
+        # Create open share for guest uploads - use the last subfolder or create a generic one
+        guest_subfolder = subfolders[-1] if subfolders else None  # Use last subfolder
         guest_share_data = {
             "gallery_id": self.test_gallery_id,
-            "subfolder": "Guest Uploads",
+            "subfolder": guest_subfolder,
             "password": None,  # No password
             "allow_uploads": True,
             "label": "Upload Your Photos"
@@ -325,7 +335,7 @@ class WeddingPhotographyGalleryTester:
         response = self.make_request('POST', f'/admin/galleries/{self.test_gallery_id}/shares', guest_share_data)
         if response and response.status_code == 200:
             result = response.json()
-            self.log_result("Create Guest Upload Share", True, "Guest upload share created")
+            self.log_result("Create Guest Upload Share", True, f"Guest upload share created for '{guest_subfolder}'")
         else:
             error_msg = response.json().get('detail') if response else "Create guest share failed"
             self.log_result("Create Guest Upload Share", False, error=error_msg)
