@@ -52,6 +52,9 @@ export default function AdminGalleryDetail() {
   // QR display
   const [showQR, setShowQR] = useState(null);
 
+  // Subfolder delete confirmation
+  const [deleteSubfolderTarget, setDeleteSubfolderTarget] = useState(null);
+
   const loadGallery = useCallback(async () => {
     try {
       const res = await getGallery(id);
