@@ -438,6 +438,33 @@ export default function AdminGalleryDetail() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Subfolder Confirmation */}
+      <AlertDialog open={!!deleteSubfolderTarget} onOpenChange={(open) => { if (!open) setDeleteSubfolderTarget(null); }}>
+        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+              Remove "{deleteSubfolderTarget}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              {((gallery?.file_counts || {})[deleteSubfolderTarget] || 0) > 0
+                ? `This will permanently delete ${(gallery?.file_counts || {})[deleteSubfolderTarget]} files in this folder.`
+                : "This will remove the empty subfolder from this gallery."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-sm" style={{ fontFamily: 'Manrope, sans-serif' }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="confirm-delete-subfolder"
+              onClick={confirmDeleteSubfolder}
+              className="bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm text-xs tracking-wider uppercase font-bold"
+              style={{ fontFamily: 'Manrope, sans-serif' }}
+            >
+              Remove Folder
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
