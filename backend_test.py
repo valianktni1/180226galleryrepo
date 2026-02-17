@@ -55,6 +55,7 @@ class WeddingGalleryTester:
             request_headers['Authorization'] = f'Bearer {self.client_token}'
             
         try:
+            print(f"🌐 {method.upper()} {url}")
             if method.upper() == 'GET':
                 response = requests.get(url, headers=request_headers, timeout=30)
             elif method.upper() == 'POST':
@@ -71,9 +72,18 @@ class WeddingGalleryTester:
             else:
                 raise ValueError(f"Unsupported method: {method}")
                 
+            print(f"   Status: {response.status_code}")
+            if response.status_code >= 400:
+                try:
+                    error_detail = response.json()
+                    print(f"   Error Response: {error_detail}")
+                except:
+                    print(f"   Error Text: {response.text}")
+            
             return response
             
         except requests.exceptions.RequestException as e:
+            print(f"   Request Exception: {str(e)}")
             return None, str(e)
 
     def test_admin_setup(self):
