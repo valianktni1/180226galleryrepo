@@ -4,8 +4,8 @@ import { Toaster } from "@/components/ui/sonner";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AdminGalleryDetail from "@/pages/AdminGalleryDetail";
-import ClientAccess from "@/pages/ClientAccess";
-import ClientGallery from "@/pages/ClientGallery";
+import ShareAccess from "@/pages/ShareAccess";
+import ShareView from "@/pages/ShareView";
 
 function App() {
   return (
@@ -15,8 +15,8 @@ function App() {
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/gallery/:id" element={<AdminGalleryDetail />} />
-          <Route path="/gallery/:slug" element={<ClientAccess />} />
-          <Route path="/gallery/:slug/view" element={<ClientGallery />} />
+          <Route path="/s/:token" element={<ShareAccess />} />
+          <Route path="/s/:token/view" element={<ShareView />} />
           <Route path="/" element={<AdminLogin />} />
         </Routes>
       </BrowserRouter>

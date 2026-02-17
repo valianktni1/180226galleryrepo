@@ -6,7 +6,7 @@ const API = `${BACKEND_URL}/api`;
 const apiClient = axios.create({ baseURL: API });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('admin_token') || localStorage.getItem('client_token');
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('share_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -17,8 +17,7 @@ apiClient.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      const isAdmin = window.location.pathname.startsWith('/admin');
-      if (isAdmin) {
+      if (window.location.pathname.startsWith('/admin')) {
         localStorage.removeItem('admin_token');
         window.location.href = '/admin';
       }
@@ -31,7 +30,12 @@ apiClient.interceptors.response.use(
 export const checkSetup = () => apiClient.get('/admin/check-setup');
 export const setupAdmin = (data) => apiClient.post('/admin/setup', data);
 export const loginAdmin = (data) => apiClient.post('/admin/login', data);
-export const getAdminMe = () => apiClient.get('/admin/me');
+
+// Templates
+export const getTemplates = () => apiClient.get('/admin/templates');
+export const createTemplate = (data) => apiClient.post('/admin/templates', data);
+export const updateTemplate = (id, data) => apiClient.put(`/admin/templates/${id}`, data);
+export const deleteTemplate = (id) => apiClient.delete(`/admin/templates/${id}`);
 
 // Gallery CRUD
 export const getGalleries = () => apiClient.get('/admin/galleries');
@@ -40,46 +44,87 @@ export const createGallery = (data) => apiClient.post('/admin/galleries', data);
 export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}`, data);
 export const deleteGallery = (id) => apiClient.delete(`/admin/galleries/${id}`);
 
-// Photo Upload
-export const uploadPhotos = (galleryId, files, onProgress) => {
+// File Upload
+export const uploadFiles = (galleryId, subfolder, files, onProgress) => {
   const formData = new FormData();
+  formData.append('subfolder', subfolder);
   files.forEach(f => formData.append('files', f));
   return apiClient.post(`/admin/galleries/${galleryId}/upload`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    onUploadProgress: onProgress
+    onUploadProgress: onProgress,
+    timeout: 600000,
   });
 };
-export const deletePhoto = (galleryId, photoId) =>
-  apiClient.delete(`/admin/galleries/${galleryId}/photos/${photoId}`);
+export const deleteFile = (galleryId, fileId) =>
+  apiClient.delete(`/admin/galleries/${galleryId}/files/${fileId}`);
 
-// Client Access
-export const getGalleryInfo = (slug) => apiClient.get(`/galleries/${slug}`);
-export const accessGallery = (slug, password) => apiClient.post(`/galleries/${slug}/access`, { password });
-export const getGalleryPhotos = (slug) => {
-  const token = localStorage.getItem('client_token');
-  return apiClient.get(`/galleries/${slug}/photos`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-};
-export const toggleFavourite = (slug, photoId) => {
-  const token = localStorage.getItem('client_token');
-  return apiClient.post(`/galleries/${slug}/favourite`, { photo_id: photoId }, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-};
-export const downloadPhoto = (slug, photoId) => {
-  const token = localStorage.getItem('client_token');
-  return `${API}/galleries/${slug}/download/${photoId}?token=${token}`;
-};
-export const downloadZip = (slug, photoIds = []) => {
-  const token = localStorage.getItem('client_token');
-  return apiClient.post(`/galleries/${slug}/download-zip`, photoIds, {
-    headers: { Authorization: `Bearer ${token}` },
-    responseType: 'blob'
-  });
+// Shares
+export const createShare = (galleryId, data) =>
+  apiClient.post(`/admin/galleries/${galleryId}/shares`, data);
+export const getShares = (galleryId) =>
+  apiClient.get(`/admin/galleries/${galleryId}/shares`);
+export const deleteShare = (shareId) =>
+  apiClient.delete(`/admin/shares/${shareId}`);
+export const toggleShare = (shareId) =>
+  apiClient.put(`/admin/shares/${shareId}/toggle`);
+export const getShareQR = (shareId) => {
+  const baseUrl = window.location.origin;
+  return `${API}/admin/shares/${shareId}/qr?base_url=${encodeURIComponent(baseUrl)}`;
 };
 
-// Media URL helper
-export const mediaUrl = (galleryId, path) => `${API}/media/${galleryId}/${path}`;
+// Public Share
+export const getShareInfo = (token) => apiClient.get(`/share/${token}`);
+export const accessShare = (token, password) =>
+  apiClient.post(`/share/${token}/access`, { password });
+export const openAccessShare = (token) =>
+  apiClient.get(`/share/${token}/open-access`);
+export const getShareFiles = (token) => {
+  const jwt = localStorage.getItem('share_token');
+  return apiClient.get(`/share/${token}/files`, {
+    headers: { Authorization: `Bearer ${jwt}` }
+  });
+};
+export const toggleShareFavourite = (token, fileId) => {
+  const jwt = localStorage.getItem('share_token');
+  return apiClient.post(`/share/${token}/favourite`, { file_id: fileId }, {
+    headers: { Authorization: `Bearer ${jwt}` }
+  });
+};
+export const downloadShareFile = (token, fileId) => {
+  const jwt = localStorage.getItem('share_token');
+  return fetch(`${API}/share/${token}/download/${fileId}`, {
+    headers: { Authorization: `Bearer ${jwt}` }
+  });
+};
+export const downloadShareZip = (token, fileIds = []) => {
+  const jwt = localStorage.getItem('share_token');
+  return apiClient.post(`/share/${token}/download-zip`, fileIds, {
+    headers: { Authorization: `Bearer ${jwt}` },
+    responseType: 'blob',
+    timeout: 600000,
+  });
+};
+export const guestUpload = (token, files, onProgress) => {
+  const jwt = localStorage.getItem('share_token');
+  const formData = new FormData();
+  files.forEach(f => formData.append('files', f));
+  return apiClient.post(`/share/${token}/upload`, formData, {
+    headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: onProgress,
+    timeout: 600000,
+  });
+};
+
+// Media URL helpers
+export const thumbUrl = (galleryId, subfolder, filename) => {
+  const stem = filename.replace(/\.[^/.]+$/, '');
+  const sfSlug = subfolder.toLowerCase().replace(/ /g, '-').replace(/&/g, 'and');
+  return `${API}/media/thumb/${galleryId}/${sfSlug}/${stem}.thumb.jpg`;
+};
+export const previewUrl = (galleryId, subfolder, filename) => {
+  const stem = filename.replace(/\.[^/.]+$/, '');
+  const sfSlug = subfolder.toLowerCase().replace(/ /g, '-').replace(/&/g, 'and');
+  return `${API}/media/preview/${galleryId}/${sfSlug}/${stem}.preview.jpg`;
+};
 
 export default apiClient;
