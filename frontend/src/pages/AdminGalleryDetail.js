@@ -24,7 +24,8 @@ import {
   Download, Plus, X
 } from "lucide-react";
 import {
-  getGallery, uploadFiles, deleteFile, deleteSubfolder, createShare, deleteShare, toggleShare, getShareQR, thumbUrl
+  getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
+  createShare, deleteShare, toggleShare, getShareQR, thumbUrl
 } from "@/lib/api";
 
 export default function AdminGalleryDetail() {
