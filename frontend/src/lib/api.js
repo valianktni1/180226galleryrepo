@@ -137,6 +137,12 @@ export const guestUpload = (token, files, onProgress) => {
     timeout: 600000,
   });
 };
+export const guestDeleteFiles = (token, fileIds) => {
+  const jwt = localStorage.getItem('share_token');
+  return apiClient.post(`/share/${token}/delete`, { file_ids: fileIds }, {
+    headers: { Authorization: `Bearer ${jwt}` }
+  });
+};
 
 // Media URL helpers
 export const thumbUrl = (galleryId, subfolder, filename) => {
