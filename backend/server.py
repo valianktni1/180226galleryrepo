@@ -647,6 +647,17 @@ async def toggle_share(share_id: str, admin=Depends(get_admin)):
     await db.shares.update_one({"id": share_id}, {"$set": {"is_active": new_active}})
     return {"is_active": new_active}
 
+class ShareExpiryUpdate(BaseModel):
+    expires_at: Optional[str] = None  # ISO date string or None to remove expiry
+
+@api_router.put("/admin/shares/{share_id}/expiry")
+async def update_share_expiry(share_id: str, data: ShareExpiryUpdate, admin=Depends(get_admin)):
+    share = await db.shares.find_one({"id": share_id}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    await db.shares.update_one({"id": share_id}, {"$set": {"expires_at": data.expires_at}})
+    return {"expires_at": data.expires_at}
+
 @api_router.get("/admin/shares/{share_id}/qr")
 async def get_share_qr(share_id: str, base_url: str = Query(...), admin=Depends(get_admin)):
     share = await db.shares.find_one({"id": share_id}, {"_id": 0})
