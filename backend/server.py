@@ -262,6 +262,17 @@ async def admin_login(data: AdminLogin):
     token = create_jwt({"sub": admin["id"], "role": "admin", "username": data.username})
     return {"token": token, "username": admin["username"], "display_name": admin.get("display_name", "")}
 
+@api_router.put("/admin/change-password")
+async def change_password(data: PasswordChange, admin=Depends(get_admin)):
+    admin_doc = await db.admins.find_one({"id": admin["sub"]}, {"_id": 0})
+    if not admin_doc:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    if not bcrypt.checkpw(data.current_password.encode(), admin_doc["password"].encode()):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    new_hashed = bcrypt.hashpw(data.new_password.encode(), bcrypt.gensalt()).decode()
+    await db.admins.update_one({"id": admin["sub"]}, {"$set": {"password": new_hashed}})
+    return {"message": "Password changed successfully"}
+
 # ─── Templates ───
 @api_router.get("/admin/templates")
 async def list_templates(admin=Depends(get_admin)):
