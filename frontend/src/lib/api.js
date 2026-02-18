@@ -6,7 +6,14 @@ const API = `${BACKEND_URL}/api`;
 const apiClient = axios.create({ baseURL: API });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('admin_token') || localStorage.getItem('share_token');
+  // Use share_token for share routes, admin_token for admin routes
+  const url = config.url || '';
+  let token;
+  if (url.includes('/share/')) {
+    token = localStorage.getItem('share_token');
+  } else {
+    token = localStorage.getItem('admin_token');
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
