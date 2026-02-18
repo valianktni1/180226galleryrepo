@@ -77,6 +77,7 @@ class ShareCreate(BaseModel):
     access_level: str = "download"  # view, download, upload, full
     label: Optional[str] = None
     expires_at: Optional[str] = None  # ISO date string, None = never expires
+    custom_slug: Optional[str] = None  # Custom URL slug like "ginamark301122"
 
 class FavouriteToggle(BaseModel):
     file_id: str
