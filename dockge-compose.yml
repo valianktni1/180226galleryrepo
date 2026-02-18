@@ -7,12 +7,11 @@
 # GitHub Repo: https://github.com/valianktni1/180226galleryrepo
 #
 # BEFORE DEPLOYING:
-# 1. Change YOUR_TRUENAS_IP on line 72 to your actual IP (e.g., 192.168.1.100)
-# 2. Generate a JWT secret: openssl rand -hex 32
-# 3. Replace the JWT_SECRET value on line 51
+# 1. Generate a JWT secret: openssl rand -hex 32
+# 2. Replace the JWT_SECRET value on line 50
 #
 # AFTER DEPLOYING:
-# Access at: http://YOUR_TRUENAS_IP:3037
+# Access at: http://192.168.24.10:3037
 # ============================================
 
 services:
@@ -73,7 +72,7 @@ services:
       args:
         # CHANGE THIS to your TrueNAS IP for local testing
         # For production, change to: https://weddingsbymark.uk
-        - REACT_APP_BACKEND_URL=http://YOUR_TRUENAS_IP:3037
+        - REACT_APP_BACKEND_URL=http://192.168.24.10:3037
     container_name: wbm-frontend
     restart: unless-stopped
     ports:
