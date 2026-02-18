@@ -114,8 +114,7 @@ export default function AdminDashboard() {
       <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'rgba(253,252,248,0.85)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Camera className="w-5 h-5 text-[#D4AF37]" strokeWidth={1.5} />
-            <span className="text-xs tracking-[0.2em] uppercase font-bold" style={{ fontFamily: 'Manrope, sans-serif' }}>Weddings By Mark</span>
+            <img src="/logo.png" alt="Weddings By Mark" className="h-8" />
           </div>
           <div className="flex items-center gap-2">
             <Button data-testid="manage-templates-btn" variant="ghost" onClick={() => setShowTemplates(true)} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
