@@ -1176,7 +1176,6 @@ async def download_share_file(token: str, file_id: str, session=Depends(get_shar
 async def download_share_zip(token: str, file_ids: List[str] = [], session=Depends(get_share_session)):
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
-    # Enforce download permission
     if not session.get("allow_downloads", False):
         raise HTTPException(status_code=403, detail="Downloads not allowed on this share")
     gallery_id = session["gallery_id"]
@@ -1196,114 +1195,79 @@ async def download_share_zip(token: str, file_ids: List[str] = [], session=Depen
     if not files:
         raise HTTPException(status_code=404, detail="No files to download")
 
-    # Stream ZIP file for large downloads
-    async def generate_zip():
-        import struct
-        import zlib
-        from datetime import datetime
-        
-        files_data = []
-        offset = 0
-        
-        for f in files:
-            fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
-            if not fp.exists():
-                continue
-                
-            arcname = f"{f['subfolder']}/{f['filename']}"
-            arcname_bytes = arcname.encode('utf-8')
-            
-            # Read file and compress
-            with open(fp, 'rb') as file:
-                data = file.read()
-            
-            crc = zlib.crc32(data) & 0xffffffff
-            compressed = zlib.compress(data, 6)
-            
-            # Use compression only if it helps
-            if len(compressed) < len(data):
-                comp_data = compressed[2:-4]  # Strip zlib header/trailer
-                comp_method = 8  # Deflate
-                comp_size = len(comp_data)
-            else:
-                comp_data = data
-                comp_method = 0  # Store
-                comp_size = len(data)
-            
-            # Local file header
-            local_header = struct.pack(
-                '<4sHHHHHIIIHH',
-                b'PK\x03\x04',  # Signature
-                20,  # Version needed
-                0,   # Flags
-                comp_method,
-                0,   # Mod time
-                0,   # Mod date
-                crc,
-                comp_size,
-                len(data),
-                len(arcname_bytes),
-                0    # Extra field length
-            )
-            
-            yield local_header + arcname_bytes + comp_data
-            
-            files_data.append({
-                'arcname': arcname_bytes,
-                'comp_method': comp_method,
-                'crc': crc,
-                'comp_size': comp_size,
-                'uncomp_size': len(data),
-                'offset': offset
-            })
-            offset += len(local_header) + len(arcname_bytes) + comp_size
-        
-        # Central directory
-        cd_start = offset
-        for fd in files_data:
-            cd_header = struct.pack(
-                '<4sHHHHHHIIIHHHHHII',
-                b'PK\x01\x02',  # Signature
-                20,  # Version made by
-                20,  # Version needed
-                0,   # Flags
-                fd['comp_method'],
-                0,   # Mod time
-                0,   # Mod date
-                fd['crc'],
-                fd['comp_size'],
-                fd['uncomp_size'],
-                len(fd['arcname']),
-                0,   # Extra field length
-                0,   # Comment length
-                0,   # Disk number start
-                0,   # Internal attrs
-                0,   # External attrs
-                fd['offset']
-            )
-            yield cd_header + fd['arcname']
-            offset += len(cd_header) + len(fd['arcname'])
-        
-        # End of central directory
-        cd_size = offset - cd_start
-        eocd = struct.pack(
-            '<4sHHHHIIH',
-            b'PK\x05\x06',  # Signature
-            0,   # Disk number
-            0,   # Disk with CD
-            len(files_data),
-            len(files_data),
-            cd_size,
-            cd_start,
-            0    # Comment length
-        )
-        yield eocd
+    # Use ZIP_STORED for speed (same as admin panel)
+    def iter_zip():
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+            for f in files:
+                fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+                if fp.exists():
+                    arcname = f"{f['subfolder']}/{f['filename']}"
+                    zf.write(fp, arcname)
+        buf.seek(0)
+        while True:
+            chunk = buf.read(1024 * 1024)  # 1MB chunks
+            if not chunk:
+                break
+            yield chunk
 
     zip_name = f"{gallery['folder_name'].replace(' ', '_')}.zip"
     return StreamingResponse(
-        generate_zip(),
+        iter_zip(),
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'}
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_name}"',
+            "Cache-Control": "no-cache"
+        }
+    )
+
+# Direct GET endpoint for share ZIP download (better browser support)
+@api_router.get("/share/{token}/download-album")
+async def download_share_album_direct(token: str, subfolder: str = Query(None), jwt_token: str = Query(..., alias="t")):
+    # Verify JWT from query param
+    payload = verify_jwt(jwt_token)
+    if not payload or payload.get("role") != "share" or payload.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not payload.get("allow_downloads", False):
+        raise HTTPException(status_code=403, detail="Downloads not allowed")
+    
+    gallery_id = payload["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    query = {"gallery_id": gallery_id}
+    if subfolder:
+        query["subfolder"] = subfolder
+    files = await db.files.find(query, {"_id": 0}).to_list(50000)
+    
+    if not files:
+        raise HTTPException(status_code=404, detail="No files to download")
+
+    def iter_zip():
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+            for f in files:
+                fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+                if fp.exists():
+                    arcname = f["filename"] if subfolder else f"{f['subfolder']}/{f['filename']}"
+                    zf.write(fp, arcname)
+        buf.seek(0)
+        while True:
+            chunk = buf.read(1024 * 1024)
+            if not chunk:
+                break
+            yield chunk
+
+    folder_name = subfolder if subfolder else gallery['folder_name']
+    zip_name = f"{folder_name.replace(' ', '_')}.zip"
+    return StreamingResponse(
+        iter_zip(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_name}"',
+            "Cache-Control": "no-cache"
+        }
     )
 
 # ─── Guest Upload (via share) ───
