@@ -13,7 +13,7 @@ import {
   ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, downloadShareFile, downloadShareZip, guestUpload, guestDeleteFiles, previewUrl, thumbUrl
+  getShareFiles, toggleShareFavourite, downloadShareFile, downloadShareZip, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload
 } from "@/lib/api";
 
 export default function ShareView() {
