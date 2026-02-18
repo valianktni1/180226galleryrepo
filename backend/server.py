@@ -281,13 +281,26 @@ async def setup_admin(data: AdminSetup):
     return {"token": token, "username": data.username, "display_name": data.display_name}
 
 @api_router.post("/admin/login")
-async def admin_login(data: AdminLogin):
+async def admin_login(data: AdminLogin, request: Request):
+    # Get client IP for rate limiting
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # Check rate limit
+    if check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Too many login attempts. Please try again in 5 minutes.")
+    
     admin = await db.admins.find_one({"username": data.username}, {"_id": 0})
     if not admin:
+        record_login_attempt(client_ip)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not bcrypt.checkpw(data.password.encode(), admin["password"].encode()):
+        record_login_attempt(client_ip)
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_jwt({"sub": admin["id"], "role": "admin", "username": data.username})
+    
+    # Clear rate limit on successful login
+    clear_login_attempts(client_ip)
+    
+    token = create_jwt({"sub": admin["id"], "role": "admin", "username": data.username}, expires_hours=ADMIN_SESSION_HOURS)
     return {"token": token, "username": admin["username"], "display_name": admin.get("display_name", "")}
 
 @api_router.put("/admin/change-password")
