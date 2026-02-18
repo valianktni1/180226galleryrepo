@@ -507,8 +507,15 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
       onClick={onClick}
       data-testid={`share-file-${file.id}`}
     >
-      {file.file_type === 'photo' && file.has_preview ? (
-        <img src={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
+      {file.file_type === 'photo' ? (
+        file.has_preview ? (
+          <img src={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
+        ) : (
+          <div className="aspect-square flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+            <ImageIcon className="w-8 h-8 text-[#A8A29E] mb-1" />
+            <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+          </div>
+        )
       ) : file.file_type === 'video' ? (
         <div className="aspect-video flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
           <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
@@ -526,7 +533,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
         </div>
       )}
-      {/* Hover overlay (non-select mode) */}
+      {/* Hover overlay - always show for interaction */}
       {!selectMode && (
         <>
           <div className="photo-overlay" />
