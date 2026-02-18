@@ -792,7 +792,10 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
         "gallery_id": gallery_id,
         "gallery_name": gallery["folder_name"],
         "subfolders": subfolders_data,
-        "allow_uploads": session.get("allow_uploads", False)
+        "access_level": session.get("access_level", "download"),
+        "allow_uploads": session.get("allow_uploads", False),
+        "allow_downloads": session.get("allow_downloads", True),
+        "allow_delete": session.get("allow_delete", False)
     }
 
 @api_router.post("/share/{token}/favourite")
