@@ -120,6 +120,9 @@ export default function AdminDashboard() {
             <Button data-testid="manage-templates-btn" variant="ghost" onClick={() => setShowTemplates(true)} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Layout className="w-4 h-4" /> Templates
             </Button>
+            <Button data-testid="settings-btn" variant="ghost" onClick={() => navigate("/admin/settings")} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+              <Settings className="w-4 h-4" /> Settings
+            </Button>
             <Button data-testid="create-gallery-btn" onClick={() => setShowCreate(true)} className="bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-6 py-2 text-xs tracking-[0.15em] uppercase font-bold gap-2">
               <Plus className="w-4 h-4" /> New Gallery
             </Button>
