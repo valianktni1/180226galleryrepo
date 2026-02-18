@@ -698,6 +698,7 @@ async def get_share_info(token: str):
         "label": share.get("label", gallery["folder_name"]),
         "subfolder": share.get("subfolder"),
         "has_password": share.get("has_password", False),
+        "access_level": share.get("access_level", "download"),
         "allow_uploads": share.get("allow_uploads", False),
         "cover_url": cover_url,
         "file_count": file_count
@@ -716,13 +717,17 @@ async def access_share(token: str, body: ShareAccessBody = None):
             raise HTTPException(status_code=401, detail="Invalid password")
 
     session_id = str(uuid.uuid4())
+    access_level = share.get("access_level", "download")
     jwt_token = create_jwt({
         "sub": session_id,
         "role": "share",
         "share_id": share["id"],
         "gallery_id": share["gallery_id"],
         "subfolder": share.get("subfolder"),
-        "allow_uploads": share.get("allow_uploads", False),
+        "access_level": access_level,
+        "allow_uploads": access_level in ("upload", "full"),
+        "allow_downloads": access_level in ("download", "upload", "full"),
+        "allow_delete": access_level == "full",
         "token": token
     }, expires_hours=72)
     return {"jwt": jwt_token, "gallery_name": (await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0}))["folder_name"]}
@@ -736,13 +741,17 @@ async def open_access_share(token: str):
     if share.get("has_password"):
         raise HTTPException(status_code=401, detail="Password required")
     session_id = str(uuid.uuid4())
+    access_level = share.get("access_level", "download")
     jwt_token = create_jwt({
         "sub": session_id,
         "role": "share",
         "share_id": share["id"],
         "gallery_id": share["gallery_id"],
         "subfolder": share.get("subfolder"),
-        "allow_uploads": share.get("allow_uploads", False),
+        "access_level": access_level,
+        "allow_uploads": access_level in ("upload", "full"),
+        "allow_downloads": access_level in ("download", "upload", "full"),
+        "allow_delete": access_level == "full",
         "token": token
     }, expires_hours=72)
     gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
