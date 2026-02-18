@@ -74,7 +74,7 @@ class ShareCreate(BaseModel):
     gallery_id: str
     subfolder: Optional[str] = None  # None = whole gallery, or specific subfolder
     password: Optional[str] = None  # None = no password
-    allow_uploads: bool = False
+    access_level: str = "download"  # view, download, upload, full
     label: Optional[str] = None
 
 class FavouriteToggle(BaseModel):
