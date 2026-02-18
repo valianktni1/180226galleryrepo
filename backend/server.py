@@ -439,8 +439,20 @@ async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
     return {k: v for k, v in doc.items() if k != "_id"}
 
 @api_router.get("/admin/galleries")
-async def list_galleries(admin=Depends(get_admin)):
-    galleries = await db.galleries.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+async def list_galleries(admin=Depends(get_admin), sort_by: str = Query("date_desc")):
+    # Sorting options: date_desc, date_asc, name_asc, name_desc
+    sort_field = "created_at"
+    sort_dir = -1  # descending
+    if sort_by == "date_asc":
+        sort_dir = 1
+    elif sort_by == "name_asc":
+        sort_field = "folder_name"
+        sort_dir = 1
+    elif sort_by == "name_desc":
+        sort_field = "folder_name"
+        sort_dir = -1
+    
+    galleries = await db.galleries.find({}, {"_id": 0}).sort(sort_field, sort_dir).to_list(1000)
     # Enrich with share count + first image for cover
     for g in galleries:
         share_count = await db.shares.count_documents({"gallery_id": g["id"]})
