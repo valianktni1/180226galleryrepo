@@ -50,6 +50,19 @@ Build a full working wedding photography client gallery system. Self-hosted on T
   - Validation: only letters, numbers, hyphens allowed
   - Duplicate slug prevention
 - [x] **Admin password change** (Feb 2026)
+- [x] **Security features** (Feb 2026):
+  - Rate limiting on login (5 attempts per 5 minutes)
+  - 24-hour session timeout with auto-logout
+- [x] **Gallery sorting** (Feb 2026):
+  - Sort by name A-Z, name Z-A
+  - Sort by date (newest/oldest first)
+- [x] **Video thumbnails** (Feb 2026):
+  - Automatic thumbnail generation using ffmpeg
+  - Preview images for video files
+- [x] **Activity tracking** (Feb 2026):
+  - Gallery view tracking
+  - Download tracking
+  - Stats endpoint for admin (views, downloads, daily activity)
 - [x] **Print Shop** (Feb 2026):
   - Admin can add/edit print sizes with prices per finish (Gloss, Luster, Silk)
   - £2.50 flat shipping (UK only)
