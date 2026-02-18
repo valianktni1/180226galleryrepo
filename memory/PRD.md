@@ -18,13 +18,14 @@ Build a full working wedding photography client gallery system. Self-hosted on T
 - Guest upload via share link
 - Files stored on disk in clean folder structure (no hashes)
 - Favouriting + download (single + bulk zip)
+- **Granular Share Access Levels** (4 levels: View Only, Download, Upload, Full Access)
 
 ## Architecture
 - Backend: FastAPI + MongoDB + Pillow (thumbnails) + qrcode
 - Frontend: React 19 + Tailwind + shadcn/ui + Framer Motion
 - Storage: Local filesystem → /mnt/nextcloud/newwedidngsbymarkuserfiles
 - Thumbnails: .cache/thumbs/ directory (separate from originals)
-- Auth: JWT admin + per-share session tokens
+- Auth: JWT admin + per-share session tokens with permission flags
 - Docker: MongoDB + Backend + Frontend (Nginx) on port 3037
 
 ## What's Implemented
@@ -33,12 +34,28 @@ Build a full working wedding photography client gallery system. Self-hosted on T
 - [x] Subfolder-based file upload with original filenames
 - [x] Thumbnail + preview generation for images
 - [x] Share system (password optional, per-subfolder or whole gallery)
+- [x] **Granular access levels for shares** (Feb 2026):
+  - View Only: Can only view photos, no downloads
+  - View & Download: Can view and download photos
+  - View, Download & Upload: Can also upload files
+  - Full Access: Can view, download, upload, AND delete files
 - [x] QR code generation
 - [x] Guest upload endpoint
 - [x] Favouriting system
 - [x] Single + ZIP download
 - [x] Docker Compose + Dockerfiles
 - [x] Full frontend UI (admin + client + guest)
+- [x] Permission-based UI (buttons hidden based on share access level)
+
+## Share Access Level Implementation Details
+- Backend stores `access_level` field in share documents
+- JWT tokens include permission flags: `allow_downloads`, `allow_uploads`, `allow_delete`
+- Backend enforces permissions on:
+  - `/api/share/{token}/download/{file_id}` - checks allow_downloads
+  - `/api/share/{token}/download-zip` - checks allow_downloads
+  - `/api/share/{token}/upload` - checks allow_uploads
+  - `/api/share/{token}/delete` - checks allow_delete (new endpoint)
+- Frontend conditionally renders Download/Upload/Delete buttons based on permissions
 
 ## P1 Backlog
 - Video thumbnail generation (ffmpeg)
@@ -46,3 +63,7 @@ Build a full working wedding photography client gallery system. Self-hosted on T
 - Slideshow view mode
 - Admin password change
 - Bulk share creation
+
+## P2 Backlog
+- Finalize docker-compose.yml for TrueNAS deployment
+- Push repository to user's GitHub account
