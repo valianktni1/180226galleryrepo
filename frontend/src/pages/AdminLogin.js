@@ -8,6 +8,16 @@ import { Label } from "@/components/ui/label";
 import { Camera, Lock, User, Eye, EyeOff } from "lucide-react";
 import { checkSetup, setupAdmin, loginAdmin } from "@/lib/api";
 
+// Check if JWT token is expired
+function isTokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
 export default function AdminLogin() {
   const navigate = useNavigate();
   const [isSetup, setIsSetup] = useState(false);
@@ -19,8 +29,14 @@ export default function AdminLogin() {
   useEffect(() => {
     const token = localStorage.getItem("admin_token");
     if (token) {
-      navigate("/admin/dashboard");
-      return;
+      // Check if token is expired
+      if (isTokenExpired(token)) {
+        localStorage.removeItem("admin_token");
+        toast.info("Session expired. Please log in again.");
+      } else {
+        navigate("/admin/dashboard");
+        return;
+      }
     }
     checkSetup().then(r => setNeedsSetup(!r.data.setup_complete)).catch(() => setNeedsSetup(true));
   }, [navigate]);
