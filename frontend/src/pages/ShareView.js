@@ -488,13 +488,13 @@ export default function ShareView() {
 }
 
 // ─── Reusable Components ───
-function FileCard({ file, index, galleryId, onFav, onDownload, onClick }) {
+function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.02 }}
-      className="masonry-item photo-card cursor-pointer"
+      className={`masonry-item photo-card cursor-pointer ${isSelected ? 'ring-2 ring-[#D4AF37]' : ''}`}
       onClick={onClick}
       data-testid={`share-file-${file.id}`}
     >
@@ -510,17 +510,31 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick }) {
           <span className="text-xs text-[#A8A29E]">{file.filename}</span>
         </div>
       )}
-      <div className="photo-overlay" />
-      <div className="photo-actions flex items-center justify-between">
-        <button data-testid={`fav-btn-${file.id}`} onClick={e => { e.stopPropagation(); onFav(file.id); }}
-          className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
-          <Heart className="w-4 h-4" fill={file.is_favourite ? '#D4AF37' : 'none'} stroke={file.is_favourite ? '#D4AF37' : '#1C1917'} />
-        </button>
-        <button data-testid={`download-btn-${file.id}`} onClick={e => { e.stopPropagation(); onDownload(file); }}
-          className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
-          <Download className="w-4 h-4 text-[#1C1917]" />
-        </button>
-      </div>
+      {/* Selection checkbox - visible in select mode */}
+      {selectMode && (
+        <div className="absolute top-2 left-2 w-6 h-6 rounded-sm border flex items-center justify-center"
+          style={{ backgroundColor: isSelected ? '#D4AF37' : 'rgba(255,255,255,0.9)', borderColor: isSelected ? '#D4AF37' : '#D4D4D8' }}>
+          {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+        </div>
+      )}
+      {/* Hover overlay (non-select mode) */}
+      {!selectMode && (
+        <>
+          <div className="photo-overlay" />
+          <div className="photo-actions flex items-center justify-between">
+            <button data-testid={`fav-btn-${file.id}`} onClick={e => { e.stopPropagation(); onFav(file.id); }}
+              className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
+              <Heart className="w-4 h-4" fill={file.is_favourite ? '#D4AF37' : 'none'} stroke={file.is_favourite ? '#D4AF37' : '#1C1917'} />
+            </button>
+            {permissions.allowDownloads && (
+              <button data-testid={`download-btn-${file.id}`} onClick={e => { e.stopPropagation(); onDownload(file); }}
+                className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                <Download className="w-4 h-4 text-[#1C1917]" />
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </motion.div>
   );
 }
