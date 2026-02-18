@@ -79,16 +79,28 @@ export default function ShareView() {
   };
 
   const handleDownloadSingle = async (file) => {
+    if (!permissions.allowDownloads) {
+      toast.error("Downloads are not allowed on this share");
+      return;
+    }
     try {
       const res = await downloadShareFile(token, file.id);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Download failed");
+      }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = file.filename; a.click();
       window.URL.revokeObjectURL(url);
-    } catch { toast.error("Download failed"); }
+    } catch (err) { toast.error(err.message || "Download failed"); }
   };
 
   const handleDownloadAlbum = async () => {
+    if (!permissions.allowDownloads) {
+      toast.error("Downloads are not allowed on this share");
+      return;
+    }
     setDownloading(true);
     try {
       const ids = showFavourites
@@ -106,6 +118,31 @@ export default function ShareView() {
       toast.success("Download started");
     } catch { toast.error("Download failed"); }
     finally { setDownloading(false); }
+  };
+
+  const toggleSelect = (fileId) => {
+    setSelectedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId); else next.add(fileId);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!permissions.allowDelete) {
+      toast.error("Deleting is not allowed on this share");
+      return;
+    }
+    try {
+      const res = await guestDeleteFiles(token, Array.from(selectedFiles));
+      toast.success(`${res.data.deleted} files deleted`);
+      setSelectedFiles(new Set());
+      setSelectMode(false);
+      setShowDeleteDialog(false);
+      loadFiles();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Delete failed");
+    }
   };
 
   const handleGuestUpload = async (fileList) => {
