@@ -153,15 +153,10 @@ export const getMyPrintOrders = (token) =>
   apiClient.get(`/share/${token}/print-orders`);
 
 // Activity tracking
-export const trackGalleryView = (token) => {
-  return apiClient.post(`/share/${token}/track-view`).catch(() => {});
-};
-export const trackDownload = (token) => {
-  const jwt = localStorage.getItem('share_token');
-  return apiClient.post(`/share/${token}/track-download`, {}, {
-    headers: { Authorization: `Bearer ${jwt}` }
-  }).catch(() => {});
-};
+export const trackGalleryView = (token) =>
+  apiClient.post(`/share/${token}/track-view`).catch(() => {});
+export const trackDownload = (token) =>
+  apiClient.post(`/share/${token}/track-download`).catch(() => {});
 
 // Media URL helpers
 export const thumbUrl = (galleryId, subfolder, filename) => {
