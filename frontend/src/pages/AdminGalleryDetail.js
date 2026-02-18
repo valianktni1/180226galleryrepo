@@ -48,7 +48,7 @@ export default function AdminGalleryDetail() {
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareForm, setShareForm] = useState({
-    subfolder: null, password: "", allow_uploads: false, label: ""
+    subfolder: null, password: "", access_level: "download", label: ""
   });
   const [creatingShare, setCreatingShare] = useState(false);
 
@@ -200,13 +200,13 @@ export default function AdminGalleryDetail() {
         gallery_id: id,
         subfolder: shareForm.subfolder || null,
         password: shareForm.password || null,
-        allow_uploads: shareForm.allow_uploads,
+        access_level: shareForm.access_level,
         label: shareForm.label || null
       };
       await createShare(id, data);
       toast.success("Share link created");
       setShowShareDialog(false);
-      setShareForm({ subfolder: null, password: "", allow_uploads: false, label: "" });
+      setShareForm({ subfolder: null, password: "", access_level: "download", label: "" });
       loadGallery();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed");
