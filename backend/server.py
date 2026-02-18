@@ -131,8 +131,24 @@ class PrintOrderCreate(BaseModel):
 
 SHIPPING_COST = 2.50  # UK flat rate
 
+# ─── Rate Limiting Helper ───
+def check_rate_limit(ip: str) -> bool:
+    """Check if IP has exceeded login attempts. Returns True if blocked."""
+    now = time.time()
+    # Clean old attempts
+    login_attempts[ip] = [t for t in login_attempts[ip] if now - t < LOGIN_WINDOW_SECONDS]
+    return len(login_attempts[ip]) >= MAX_LOGIN_ATTEMPTS
+
+def record_login_attempt(ip: str):
+    """Record a failed login attempt."""
+    login_attempts[ip].append(time.time())
+
+def clear_login_attempts(ip: str):
+    """Clear login attempts on successful login."""
+    login_attempts.pop(ip, None)
+
 # ─── Auth Helpers ───
-def create_jwt(data: dict, expires_hours: int = JWT_EXPIRY_HOURS) -> str:
+def create_jwt(data: dict, expires_hours: int = ADMIN_SESSION_HOURS) -> str:
     payload = {**data, "exp": datetime.now(timezone.utc) + timedelta(hours=expires_hours)}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
