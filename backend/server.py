@@ -673,7 +673,20 @@ async def update_share_expiry(share_id: str, data: ShareExpiryUpdate, admin=Depe
     return {"expires_at": data.expires_at}
 
 @api_router.get("/admin/shares/{share_id}/qr")
-async def get_share_qr(share_id: str, base_url: str = Query(...), admin=Depends(get_admin)):
+async def get_share_qr(share_id: str, base_url: str = Query(...), token: Optional[str] = Query(None)):
+    # Verify admin token (from query param since img src can't send headers)
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            if payload.get("role") != "admin":
+                raise HTTPException(status_code=403, detail="Admin access required")
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    else:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
     share = await db.shares.find_one({"id": share_id}, {"_id": 0})
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
