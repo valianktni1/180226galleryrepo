@@ -40,6 +40,7 @@ export const deleteTemplate = (id) => apiClient.delete(`/admin/templates/${id}`)
 
 // Gallery CRUD
 export const getGalleries = (sortBy = 'date_desc') => apiClient.get(`/admin/galleries?sort_by=${sortBy}`);
+export const listGalleries = getGalleries;  // Alias
 export const getGallery = (id) => apiClient.get(`/admin/galleries/${id}`);
 export const createGallery = (data) => apiClient.post('/admin/galleries', data);
 export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}`, data);
