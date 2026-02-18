@@ -1366,6 +1366,65 @@ async def get_my_print_orders(token: str, session=Depends(get_share_session)):
     orders = await db.print_orders.find({"share_token": token}, {"_id": 0}).sort("created_at", -1).to_list(100)
     return orders
 
+# ─── Activity Tracking ───
+@api_router.post("/share/{token}/track-view")
+async def track_gallery_view(token: str):
+    """Track when a gallery is viewed."""
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share:
+        return {"ok": False}
+    
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    await db.activity.update_one(
+        {"gallery_id": share["gallery_id"], "date": today},
+        {"$inc": {"views": 1}},
+        upsert=True
+    )
+    await db.galleries.update_one(
+        {"id": share["gallery_id"]},
+        {"$inc": {"total_views": 1}}
+    )
+    return {"ok": True}
+
+@api_router.post("/share/{token}/track-download")
+async def track_download(token: str, session=Depends(get_share_session)):
+    """Track when files are downloaded."""
+    if session.get("token") != token:
+        return {"ok": False}
+    
+    gallery_id = session["gallery_id"]
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    await db.activity.update_one(
+        {"gallery_id": gallery_id, "date": today},
+        {"$inc": {"downloads": 1}},
+        upsert=True
+    )
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$inc": {"total_downloads": 1}}
+    )
+    return {"ok": True}
+
+@api_router.get("/admin/galleries/{gallery_id}/stats")
+async def get_gallery_stats(gallery_id: str, admin=Depends(get_admin)):
+    """Get activity stats for a gallery."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    # Get last 30 days activity
+    thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+    activity = await db.activity.find(
+        {"gallery_id": gallery_id, "date": {"$gte": thirty_days_ago}},
+        {"_id": 0}
+    ).sort("date", 1).to_list(30)
+    
+    return {
+        "total_views": gallery.get("total_views", 0),
+        "total_downloads": gallery.get("total_downloads", 0),
+        "daily_activity": activity
+    }
+
 app.include_router(api_router)
 
 app.add_middleware(
