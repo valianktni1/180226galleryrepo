@@ -210,7 +210,7 @@ export default function ShareView() {
         <header className="border-b" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
           <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Weddings By Mark" className="h-8" />
+              <img src="/logo.png" alt="Weddings By Mark" className="h-8" style={{ filter: 'invert(1)' }} />
             </div>
             <div className="flex items-center gap-2">
               <Button data-testid="order-prints-btn" variant="ghost" onClick={() => navigate(`/s/${token}/prints`)}
