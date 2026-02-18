@@ -121,25 +121,37 @@ export default function ShareView() {
       toast.error("Downloads are not allowed on this share");
       return;
     }
-    setDownloading(true);
-    try {
-      const ids = showFavourites
-        ? allFiles.filter(f => f.is_favourite).map(f => f.id)
-        : activeAlbum
-          ? (subfolders.find(sf => sf.name === activeAlbum)?.files || []).map(f => f.id)
-          : [];
-      const res = await downloadShareZip(token, ids);
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = showFavourites ? "favourites.zip" : `${activeAlbum || galleryName}.zip`;
-      a.click();
-      window.URL.revokeObjectURL(url);
+    
+    // For favourites, use the blob approach (selected files only)
+    if (showFavourites) {
+      setDownloading(true);
+      try {
+        const ids = allFiles.filter(f => f.is_favourite).map(f => f.id);
+        if (ids.length === 0) {
+          toast.error("No favourites selected");
+          return;
+        }
+        const res = await downloadShareZip(token, ids);
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "favourites.zip";
+        a.click();
+        window.URL.revokeObjectURL(url);
+        toast.success("Download started");
+        trackDownload(token);
+      } catch { toast.error("Download failed"); }
+      finally { setDownloading(false); }
+      return;
+    }
+    
+    // For full album download, use direct URL (better for large files)
+    if (activeAlbum) {
+      const url = getShareDownloadUrl(token, activeAlbum);
+      window.open(url, '_blank');
       toast.success("Download started");
-      // Track download
       trackDownload(token);
-    } catch { toast.error("Download failed"); }
-    finally { setDownloading(false); }
+    }
   };
 
   const toggleSelect = (fileId) => {
