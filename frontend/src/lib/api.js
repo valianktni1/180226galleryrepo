@@ -90,6 +90,8 @@ export const deleteShare = (shareId) =>
   apiClient.delete(`/admin/shares/${shareId}`);
 export const toggleShare = (shareId) =>
   apiClient.put(`/admin/shares/${shareId}/toggle`);
+export const updateShareExpiry = (shareId, expiresAt) =>
+  apiClient.put(`/admin/shares/${shareId}/expiry`, { expires_at: expiresAt });
 export const getShareQR = (shareId) => {
   const baseUrl = window.location.origin;
   return `${API}/admin/shares/${shareId}/qr?base_url=${encodeURIComponent(baseUrl)}`;
