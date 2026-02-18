@@ -120,6 +120,9 @@ export default function AdminDashboard() {
             <Button data-testid="manage-templates-btn" variant="ghost" onClick={() => setShowTemplates(true)} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Layout className="w-4 h-4" /> Templates
             </Button>
+            <Button data-testid="activity-btn" variant="ghost" onClick={() => navigate("/admin/activity")} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+              <Eye className="w-4 h-4" /> Activity
+            </Button>
             <Button data-testid="settings-btn" variant="ghost" onClick={() => navigate("/admin/settings")} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Settings className="w-4 h-4" /> Settings
             </Button>
