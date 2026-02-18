@@ -99,7 +99,7 @@ export default function ShareAccess() {
     </div>
   );
 
-  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
   return (
     <div className="min-h-screen flex relative noise-bg" style={{ backgroundColor: '#FDFCF8' }}>
