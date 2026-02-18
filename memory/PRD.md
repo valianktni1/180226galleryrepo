@@ -88,13 +88,11 @@ Build a full working wedding photography client gallery system. Self-hosted on T
 - Frontend conditionally renders Download/Upload/Delete buttons based on permissions
 
 ## P1 Backlog
-- Video thumbnail generation (ffmpeg)
 - Slideshow view mode
-- PayPal API integration (currently manual payment confirmation)
+- Email notifications for new orders
 
 ## P2 Backlog
-- Finalize docker-compose.yml for TrueNAS deployment
-- Push repository to user's GitHub account
+- Additional print products (canvas, frames)
 
 ## Deployment Notes
 - App will be deployed to weddingsbymark.uk when ready
