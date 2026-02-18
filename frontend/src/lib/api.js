@@ -130,6 +130,16 @@ export const downloadShareZip = (token, fileIds = []) =>
     responseType: 'blob',
     timeout: 600000,
   });
+
+// Direct download URL for share albums (better for large files)
+export const getShareDownloadUrl = (token, subfolder = null) => {
+  const jwt = localStorage.getItem('share_token');
+  let url = `${BACKEND_URL}/api/share/${token}/download-album?t=${encodeURIComponent(jwt)}`;
+  if (subfolder) {
+    url += `&subfolder=${encodeURIComponent(subfolder)}`;
+  }
+  return url;
+};
 export const guestUpload = (token, files, onProgress) => {
   const formData = new FormData();
   files.forEach(f => formData.append('files', f));
