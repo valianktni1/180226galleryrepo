@@ -1082,6 +1082,190 @@ async def guest_delete_files(token: str, data: DeleteFilesRequest, session=Depen
     
     return {"deleted": deleted}
 
+# ─── Print Shop Admin Endpoints ───
+@api_router.get("/admin/print-sizes")
+async def list_print_sizes(admin=Depends(get_admin)):
+    sizes = await db.print_sizes.find({}, {"_id": 0}).sort("name", 1).to_list(100)
+    return sizes
+
+@api_router.post("/admin/print-sizes")
+async def create_print_size(data: PrintSizeCreate, admin=Depends(get_admin)):
+    # Check for duplicate
+    existing = await db.print_sizes.find_one({"name": data.name}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Print size already exists")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": data.name,
+        "prices": {
+            "gloss": data.gloss_price,
+            "luster": data.luster_price,
+            "silk": data.silk_price
+        },
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.print_sizes.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.put("/admin/print-sizes/{size_id}")
+async def update_print_size(size_id: str, data: PrintSizeUpdate, admin=Depends(get_admin)):
+    size = await db.print_sizes.find_one({"id": size_id}, {"_id": 0})
+    if not size:
+        raise HTTPException(status_code=404, detail="Print size not found")
+    update = {}
+    if data.name is not None:
+        update["name"] = data.name
+    if data.gloss_price is not None:
+        update["prices.gloss"] = data.gloss_price
+    if data.luster_price is not None:
+        update["prices.luster"] = data.luster_price
+    if data.silk_price is not None:
+        update["prices.silk"] = data.silk_price
+    if update:
+        await db.print_sizes.update_one({"id": size_id}, {"$set": update})
+    updated = await db.print_sizes.find_one({"id": size_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/admin/print-sizes/{size_id}")
+async def delete_print_size(size_id: str, admin=Depends(get_admin)):
+    result = await db.print_sizes.delete_one({"id": size_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Print size not found")
+    return {"deleted": True}
+
+@api_router.get("/admin/print-orders")
+async def list_print_orders(admin=Depends(get_admin)):
+    orders = await db.print_orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return orders
+
+@api_router.put("/admin/print-orders/{order_id}/status")
+async def update_order_status(order_id: str, status: str = Query(...), admin=Depends(get_admin)):
+    if status not in ("pending", "processing", "printed", "shipped", "completed", "cancelled"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    result = await db.print_orders.update_one(
+        {"id": order_id},
+        {"$set": {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"status": status}
+
+# ─── Print Shop Public Endpoints (for couples via share) ───
+@api_router.get("/share/{token}/print-sizes")
+async def get_print_sizes_for_share(token: str):
+    """Get available print sizes for ordering"""
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share or is_share_expired(share):
+        raise HTTPException(status_code=404, detail="Share not found or expired")
+    sizes = await db.print_sizes.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(100)
+    return {"sizes": sizes, "shipping_cost": SHIPPING_COST}
+
+@api_router.post("/share/{token}/print-order")
+async def create_print_order(token: str, data: PrintOrderCreate, session=Depends(get_share_session)):
+    """Create a print order - returns PayPal payment URL"""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share or is_share_expired(share):
+        raise HTTPException(status_code=404, detail="Share not found or expired")
+    
+    gallery = await db.galleries.find_one({"id": data.gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    # Calculate order total
+    order_items = []
+    subtotal = 0.0
+    
+    for item in data.items:
+        file = await db.files.find_one({"id": item.file_id, "gallery_id": data.gallery_id}, {"_id": 0})
+        if not file:
+            raise HTTPException(status_code=404, detail=f"File {item.file_id} not found")
+        
+        size = await db.print_sizes.find_one({"id": item.size_id, "is_active": True}, {"_id": 0})
+        if not size:
+            raise HTTPException(status_code=404, detail=f"Print size {item.size_id} not found")
+        
+        if item.finish not in ("gloss", "luster", "silk"):
+            raise HTTPException(status_code=400, detail="Invalid finish type")
+        
+        price = size["prices"].get(item.finish, 0)
+        item_total = price * item.quantity
+        subtotal += item_total
+        
+        order_items.append({
+            "file_id": item.file_id,
+            "filename": file["filename"],
+            "subfolder": file["subfolder"],
+            "size_id": item.size_id,
+            "size_name": size["name"],
+            "finish": item.finish,
+            "quantity": item.quantity,
+            "unit_price": price,
+            "total": item_total
+        })
+    
+    total = subtotal + SHIPPING_COST
+    
+    # Create order
+    order_id = str(uuid.uuid4())
+    order_doc = {
+        "id": order_id,
+        "gallery_id": data.gallery_id,
+        "gallery_name": gallery["folder_name"],
+        "share_token": token,
+        "customer_email": data.customer_email,
+        "items": order_items,
+        "subtotal": subtotal,
+        "shipping": SHIPPING_COST,
+        "total": total,
+        "currency": "GBP",
+        "status": "pending",
+        "paypal_order_id": None,
+        "shipping_address": None,  # Will be filled by PayPal
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.print_orders.insert_one(order_doc)
+    
+    # Return order details - frontend will redirect to PayPal
+    return {
+        "order_id": order_id,
+        "subtotal": subtotal,
+        "shipping": SHIPPING_COST,
+        "total": total,
+        "currency": "GBP",
+        "items": order_items
+    }
+
+@api_router.put("/share/{token}/print-order/{order_id}/paypal")
+async def update_order_paypal(token: str, order_id: str, paypal_order_id: str = Query(...), status: str = Query("paid")):
+    """Update order with PayPal transaction details"""
+    order = await db.print_orders.find_one({"id": order_id, "share_token": token}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    await db.print_orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "paypal_order_id": paypal_order_id,
+            "status": status,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    return {"success": True}
+
+@api_router.get("/share/{token}/print-orders")
+async def get_my_print_orders(token: str, session=Depends(get_share_session)):
+    """Get orders for this share"""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    orders = await db.print_orders.find({"share_token": token}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return orders
+
 app.include_router(api_router)
 
 app.add_middleware(
