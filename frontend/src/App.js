@@ -7,6 +7,7 @@ import AdminGalleryDetail from "@/pages/AdminGalleryDetail";
 import AdminSettings from "@/pages/AdminSettings";
 import ShareAccess from "@/pages/ShareAccess";
 import ShareView from "@/pages/ShareView";
+import PrintShop from "@/pages/PrintShop";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/admin/settings" element={<AdminSettings />} />
           <Route path="/s/:token" element={<ShareAccess />} />
           <Route path="/s/:token/view" element={<ShareView />} />
+          <Route path="/s/:token/prints" element={<PrintShop />} />
           <Route path="/" element={<AdminLogin />} />
         </Routes>
       </BrowserRouter>
