@@ -5,11 +5,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import {
   Heart, Download, X, ChevronLeft, ChevronRight, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, downloadShareFile, downloadShareZip, guestUpload, previewUrl, thumbUrl
+  getShareFiles, toggleShareFavourite, downloadShareFile, downloadShareZip, guestUpload, guestDeleteFiles, previewUrl, thumbUrl
 } from "@/lib/api";
 
 export default function ShareView() {
@@ -21,7 +25,12 @@ export default function ShareView() {
   const [galleryName, setGalleryName] = useState("");
   const [galleryId, setGalleryId] = useState(null);
   const [subfolders, setSubfolders] = useState([]);
-  const [allowUploads, setAllowUploads] = useState(false);
+  const [permissions, setPermissions] = useState({
+    allowUploads: false,
+    allowDownloads: true,
+    allowDelete: false,
+    accessLevel: "download"
+  });
   const [loading, setLoading] = useState(true);
   const [activeAlbum, setActiveAlbum] = useState(null); // null = landing, string = subfolder name
   const [lightboxIndex, setLightboxIndex] = useState(-1);
@@ -29,6 +38,9 @@ export default function ShareView() {
   const [downloading, setDownloading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState(new Set());
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const loadFiles = useCallback(async () => {
     try {
@@ -36,7 +48,12 @@ export default function ShareView() {
       setGalleryName(res.data.gallery_name);
       setGalleryId(res.data.gallery_id);
       setSubfolders(res.data.subfolders);
-      setAllowUploads(res.data.allow_uploads);
+      setPermissions({
+        allowUploads: res.data.allow_uploads,
+        allowDownloads: res.data.allow_downloads,
+        allowDelete: res.data.allow_delete,
+        accessLevel: res.data.access_level || "download"
+      });
     } catch {
       localStorage.removeItem("share_token");
       localStorage.removeItem("share_url_token");
