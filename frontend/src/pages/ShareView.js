@@ -209,12 +209,18 @@ export default function ShareView() {
                 Weddings By Mark
               </span>
             </div>
-            {favCount > 0 && (
-              <Button data-testid="show-favourites-landing" variant="ghost" onClick={() => setShowFavourites(true)}
+            <div className="flex items-center gap-2">
+              <Button data-testid="order-prints-btn" variant="ghost" onClick={() => navigate(`/s/${token}/prints`)}
                 className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
-                <Heart className="w-3.5 h-3.5" fill="#D4AF37" stroke="#D4AF37" /> Favourites ({favCount})
+                <Printer className="w-3.5 h-3.5" /> Order Prints
               </Button>
-            )}
+              {favCount > 0 && (
+                <Button data-testid="show-favourites-landing" variant="ghost" onClick={() => setShowFavourites(true)}
+                  className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+                  <Heart className="w-3.5 h-3.5" fill="#D4AF37" stroke="#D4AF37" /> Favourites ({favCount})
+                </Button>
+              )}
+            </div>
           </div>
         </header>
 
