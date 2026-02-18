@@ -31,17 +31,7 @@ export default function PrintShop() {
   const [submitting, setSubmitting] = useState(false);
   const [orderComplete, setOrderComplete] = useState(null);
 
-  useEffect(() => {
-    const jwt = localStorage.getItem("share_token");
-    const urlToken = localStorage.getItem("share_url_token");
-    if (!jwt || urlToken !== token) {
-      navigate(`/s/${token}`);
-      return;
-    }
-    loadData();
-  }, [token, navigate]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [filesRes, sizesRes] = await Promise.all([
         getShareFiles(token),
@@ -68,7 +58,17 @@ export default function PrintShop() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, navigate]);
+
+  useEffect(() => {
+    const jwt = localStorage.getItem("share_token");
+    const urlToken = localStorage.getItem("share_url_token");
+    if (!jwt || urlToken !== token) {
+      navigate(`/s/${token}`);
+      return;
+    }
+    loadData();
+  }, [token, navigate, loadData]);
 
   const addToCart = (file, sizeId, finish) => {
     const size = printSizes.find(s => s.id === sizeId);
