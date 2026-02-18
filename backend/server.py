@@ -1066,6 +1066,96 @@ async def toggle_share_favourite(token: str, data: FavouriteToggle, session=Depe
     })
     return {"favourited": True}
 
+@api_router.post("/share/{token}/submit-favourites")
+async def submit_favourites_to_album(token: str, session=Depends(get_share_session)):
+    """Copy all favourited files to Album Favourites folder."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    # Get all favourites for this session
+    favs = await db.favourites.find({
+        "session_id": session["sub"],
+        "gallery_id": gallery_id
+    }, {"_id": 0}).to_list(50000)
+    
+    if not favs:
+        raise HTTPException(status_code=400, detail="No favourites selected")
+    
+    # Ensure Album Favourites folder exists
+    target_subfolder = "Album Favourites"
+    if target_subfolder not in gallery["subfolders"]:
+        gallery["subfolders"].append(target_subfolder)
+        await db.galleries.update_one(
+            {"id": gallery_id},
+            {"$set": {"subfolders": gallery["subfolders"]}}
+        )
+    
+    target_dir = get_gallery_path(gallery["folder_name"]) / target_subfolder
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    copied = 0
+    already_exists = 0
+    
+    for fav in favs:
+        f = await db.files.find_one({"id": fav["file_id"], "gallery_id": gallery_id}, {"_id": 0})
+        if not f:
+            continue
+        
+        # Check if file already exists in Album Favourites
+        existing = await db.files.find_one({
+            "gallery_id": gallery_id,
+            "subfolder": target_subfolder,
+            "original_filename": f["original_filename"]
+        })
+        if existing:
+            already_exists += 1
+            continue
+        
+        src_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+        if not src_path.exists():
+            continue
+        
+        dest_name = safe_filename(f["filename"], target_dir)
+        dest_path = target_dir / dest_name
+        shutil.copy2(src_path, dest_path)
+        
+        # Generate thumbnails for the copy
+        has_thumb = False
+        has_preview = False
+        if f["file_type"] == "photo":
+            has_thumb = make_thumbnail(dest_path, get_thumb_path(gallery_id, target_subfolder, dest_name))
+            has_preview = make_preview(dest_path, get_preview_path(gallery_id, target_subfolder, dest_name))
+        
+        new_doc = {
+            "id": str(uuid.uuid4()),
+            "gallery_id": gallery_id,
+            "subfolder": target_subfolder,
+            "filename": dest_name,
+            "original_filename": f["original_filename"],
+            "file_type": f["file_type"],
+            "file_size": f["file_size"],
+            "has_thumb": has_thumb,
+            "has_preview": has_preview,
+            "uploaded_by": "client_favourite",
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.files.insert_one(new_doc)
+        copied += 1
+    
+    # Update file count
+    count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": target_subfolder})
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {f"file_counts.{target_subfolder}": count, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"copied": copied, "already_existed": already_exists, "total_favourites": len(favs)}
+
 @api_router.get("/share/{token}/download/{file_id}")
 async def download_share_file(token: str, file_id: str, session=Depends(get_share_session)):
     if session.get("token") != token:
