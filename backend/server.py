@@ -21,43 +21,9 @@ import jwt
 import bcrypt
 from PIL import Image
 import aiofiles
+import qrcode
 import threading
 from concurrent.futures import ThreadPoolExecutor
-
-# Background thread pool for thumbnail generation
-thumbnail_executor = ThreadPoolExecutor(max_workers=4)
-
-def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: str, filename: str, file_type: str, file_id: str):
-    """Generate thumbnails in background thread."""
-    try:
-        has_thumb = False
-        has_preview = False
-        
-        if file_type == "photo":
-            thumb_p = get_thumb_path(gallery_id, subfolder, filename)
-            preview_p = get_preview_path(gallery_id, subfolder, filename)
-            has_thumb = make_thumbnail(file_path, thumb_p)
-            has_preview = make_preview(file_path, preview_p)
-        elif file_type == "video":
-            thumb_p = get_thumb_path(gallery_id, subfolder, filename)
-            preview_p = get_preview_path(gallery_id, subfolder, filename)
-            has_thumb = make_video_thumbnail(file_path, thumb_p)
-            has_preview = make_video_preview(file_path, preview_p)
-        
-        # Update the file record with thumbnail status
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(
-            db.files.update_one(
-                {"id": file_id},
-                {"$set": {"has_thumb": has_thumb, "has_preview": has_preview}}
-            )
-        )
-        loop.close()
-        logger.info(f"Thumbnails generated for {filename}")
-    except Exception as e:
-        logger.error(f"Background thumbnail error for {filename}: {e}")
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
