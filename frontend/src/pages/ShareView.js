@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Heart, Download, X, ChevronLeft, ChevronRight, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer
 } from "lucide-react";
 import {
   getShareFiles, toggleShareFavourite, downloadShareFile, downloadShareZip, guestUpload, guestDeleteFiles, previewUrl, thumbUrl
