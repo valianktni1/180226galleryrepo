@@ -206,12 +206,13 @@ export default function AdminGalleryDetail() {
         password: shareForm.password || null,
         access_level: shareForm.access_level,
         label: shareForm.label || null,
-        expires_at: shareForm.expires_at || null
+        expires_at: shareForm.expires_at || null,
+        custom_slug: shareForm.custom_slug || null
       };
       await createShare(id, data);
       toast.success("Share link created");
       setShowShareDialog(false);
-      setShareForm({ subfolder: null, password: "", access_level: "download", label: "", expires_at: null });
+      setShareForm({ subfolder: null, password: "", access_level: "download", label: "", expires_at: null, custom_slug: "" });
       loadGallery();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed");
