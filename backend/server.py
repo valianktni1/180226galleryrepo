@@ -755,9 +755,11 @@ async def access_share(token: str, body: ShareAccessBody = None):
 @api_router.get("/share/{token}/open-access")
 async def open_access_share(token: str):
     """For shares without password - get JWT directly."""
-    share = await db.shares.find_one({"token": token, "is_active": True}, {"_id": 0})
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
+    if is_share_expired(share):
+        raise HTTPException(status_code=410, detail="This share link has expired")
     if share.get("has_password"):
         raise HTTPException(status_code=401, detail="Password required")
     session_id = str(uuid.uuid4())
