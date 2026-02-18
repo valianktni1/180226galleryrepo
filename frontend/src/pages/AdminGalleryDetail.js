@@ -502,9 +502,24 @@ export default function AdminGalleryDetail() {
               <Input data-testid="share-password-input" value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
                 placeholder="Optional - leave blank for open access" className="border-[#D4D4D8] rounded-sm" />
             </div>
-            <div className="flex items-center gap-3 py-2">
-              <Switch data-testid="share-uploads-switch" checked={shareForm.allow_uploads} onCheckedChange={v => setShareForm(f => ({...f, allow_uploads: v}))} />
-              <Label className="text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>Allow guests to upload files</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Access Level</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'view', label: 'View Only', desc: 'Can only view photos' },
+                  { value: 'download', label: 'View & Download', desc: 'Can view and download' },
+                  { value: 'upload', label: 'View, Download & Upload', desc: 'Can also upload files' },
+                  { value: 'full', label: 'Full Access', desc: 'Can view, download, upload & delete' }
+                ].map(level => (
+                  <button key={level.value} data-testid={`access-level-${level.value}`}
+                    onClick={() => setShareForm(f => ({...f, access_level: level.value}))}
+                    className={`p-3 border text-left text-xs ${shareForm.access_level === level.value ? 'border-[#D4AF37] bg-[#D4AF37]/5' : 'border-[#F5F2EB]'}`}
+                    style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    <span className="block font-bold">{level.label}</span>
+                    <span className="text-[#A8A29E]">{level.desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <Button data-testid="create-share-submit" onClick={handleCreateShare} disabled={creatingShare}
               className="w-full bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-8 py-5 text-xs tracking-[0.15em] uppercase font-bold">
