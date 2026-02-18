@@ -132,7 +132,7 @@ def is_share_expired(share: dict) -> bool:
     try:
         expiry_date = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
         return datetime.now(timezone.utc) > expiry_date
-    except:
+    except (ValueError, TypeError):
         return False
 
 def slugify(text: str) -> str:
