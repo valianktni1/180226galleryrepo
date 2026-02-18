@@ -1,6 +1,24 @@
 version: "3.8"
 
+# ============================================
+# WEDDINGS BY MARK - Gallery Management System
+# ============================================
+# 
+# DEPLOYMENT INSTRUCTIONS:
+# 1. Push this repo to your GitHub
+# 2. In Dockge, create a new stack
+# 3. Copy this compose file content
+# 4. Update the following before deploying:
+#    - REACT_APP_BACKEND_URL: Your server IP or domain
+#    - JWT_SECRET: Generate a random secret (openssl rand -hex 32)
+# 5. Deploy!
+#
+# TEST LOCALLY: http://YOUR_TRUENAS_IP:3037
+# PRODUCTION: https://weddingsbymark.uk (after DNS setup)
+# ============================================
+
 services:
+  # MongoDB Database
   mongodb:
     image: mongo:7
     container_name: wbm-mongodb
@@ -9,7 +27,13 @@ services:
       - /mnt/apps/newweddingsbymarkgallery/mongodb:/data/db
     networks:
       - wbm-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # FastAPI Backend
   backend:
     build:
       context: ./backend
@@ -20,27 +44,37 @@ services:
       - MONGO_URL=mongodb://mongodb:27017
       - DB_NAME=weddings_by_mark
       - CORS_ORIGINS=*
-      - JWT_SECRET=change-this-to-a-strong-random-secret
+      - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-key-to-something-secure}
       - UPLOAD_DIR=/data/userfiles
     volumes:
+      # User files (photos, videos) - your SMB-accessible storage
       - /mnt/nextcloud/newwedidngsbymarkuserfiles:/data/userfiles
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - wbm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/admin/check-setup"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # React Frontend + Nginx
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - REACT_APP_BACKEND_URL=http://YOUR_SERVER_IP:3037
+        # CHANGE THIS to your TrueNAS IP for local testing, or domain for production
+        - REACT_APP_BACKEND_URL=http://YOUR_TRUENAS_IP:3037
     container_name: wbm-frontend
     restart: unless-stopped
     ports:
       - "3037:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - wbm-network
 
