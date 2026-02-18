@@ -609,36 +609,31 @@ async def upload_files(
                 file_size += len(chunk)
 
         file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
+        file_id = str(uuid.uuid4())
 
-        # Generate thumbnails for images and videos
-        has_thumb = False
-        has_preview = False
-        if file_type == "photo":
-            thumb_p = get_thumb_path(gallery_id, subfolder, final_name)
-            preview_p = get_preview_path(gallery_id, subfolder, final_name)
-            has_thumb = make_thumbnail(file_path, thumb_p)
-            has_preview = make_preview(file_path, preview_p)
-        elif file_type == "video":
-            thumb_p = get_thumb_path(gallery_id, subfolder, final_name)
-            preview_p = get_preview_path(gallery_id, subfolder, final_name)
-            has_thumb = make_video_thumbnail(file_path, thumb_p)
-            has_preview = make_video_preview(file_path, preview_p)
-
+        # Save file record immediately (thumbnails will be generated in background)
         file_doc = {
-            "id": str(uuid.uuid4()),
+            "id": file_id,
             "gallery_id": gallery_id,
             "subfolder": subfolder,
             "filename": final_name,
             "original_filename": file.filename,
             "file_type": file_type,
             "file_size": file_size,
-            "has_thumb": has_thumb,
-            "has_preview": has_preview,
+            "has_thumb": False,
+            "has_preview": False,
             "uploaded_by": "admin",
             "uploaded_at": datetime.now(timezone.utc).isoformat()
         }
         await db.files.insert_one(file_doc)
         uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
+
+        # Queue thumbnail generation in background (non-blocking)
+        if file_type in ("photo", "video"):
+            thumbnail_executor.submit(
+                generate_thumbnails_background,
+                file_path, gallery_id, subfolder, final_name, file_type, file_id
+            )
 
     # Update file counts
     count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": subfolder})
