@@ -604,11 +604,24 @@ async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_adm
     if data.access_level not in ("view", "download", "upload", "full"):
         raise HTTPException(status_code=400, detail="Invalid access level")
 
+    # Handle custom slug or generate random token
+    if data.custom_slug:
+        # Validate custom slug - only alphanumeric and hyphens
+        import re
+        if not re.match(r'^[a-zA-Z0-9-]+$', data.custom_slug):
+            raise HTTPException(status_code=400, detail="Custom URL can only contain letters, numbers, and hyphens")
+        # Check if slug already exists
+        existing = await db.shares.find_one({"token": data.custom_slug}, {"_id": 0})
+        if existing:
+            raise HTTPException(status_code=400, detail="This custom URL is already in use")
+        share_token = data.custom_slug
+    else:
+        share_token = secrets.token_urlsafe(16)
+
     hashed_pw = None
     if data.password:
         hashed_pw = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
 
-    share_token = secrets.token_urlsafe(16)
     share_doc = {
         "id": str(uuid.uuid4()),
         "gallery_id": gallery_id,
