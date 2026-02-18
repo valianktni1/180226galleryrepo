@@ -122,21 +122,16 @@ export const downloadShareZip = (token, fileIds = []) =>
     timeout: 600000,
   });
 export const guestUpload = (token, files, onProgress) => {
-  const jwt = localStorage.getItem('share_token');
   const formData = new FormData();
   files.forEach(f => formData.append('files', f));
   return apiClient.post(`/share/${token}/upload`, formData, {
-    headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'multipart/form-data' },
+    headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: onProgress,
     timeout: 600000,
   });
 };
-export const guestDeleteFiles = (token, fileIds) => {
-  const jwt = localStorage.getItem('share_token');
-  return apiClient.post(`/share/${token}/delete`, { file_ids: fileIds }, {
-    headers: { Authorization: `Bearer ${jwt}` }
-  });
-};
+export const guestDeleteFiles = (token, fileIds) =>
+  apiClient.post(`/share/${token}/delete`, { file_ids: fileIds });
 
 // Admin Print Shop
 export const getPrintSizes = () => apiClient.get('/admin/print-sizes');
