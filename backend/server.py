@@ -586,6 +586,8 @@ async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_adm
         raise HTTPException(status_code=404, detail="Gallery not found")
     if data.subfolder and data.subfolder not in gallery["subfolders"]:
         raise HTTPException(status_code=400, detail="Invalid subfolder")
+    if data.access_level not in ("view", "download", "upload", "full"):
+        raise HTTPException(status_code=400, detail="Invalid access level")
 
     hashed_pw = None
     if data.password:
@@ -599,7 +601,8 @@ async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_adm
         "subfolder": data.subfolder,
         "password_hash": hashed_pw,
         "has_password": hashed_pw is not None,
-        "allow_uploads": data.allow_uploads,
+        "access_level": data.access_level,
+        "allow_uploads": data.access_level in ("upload", "full"),
         "label": data.label or (data.subfolder or gallery["folder_name"]),
         "is_active": True,
         "created_at": datetime.now(timezone.utc).isoformat()
