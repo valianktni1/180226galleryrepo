@@ -164,6 +164,8 @@ export default function PrintShop() {
 
   // Order complete view
   if (orderComplete) {
+    const paypalLink = `https://paypal.me/weddingsbymark/${orderComplete.total.toFixed(2)}GBP`;
+    
     return (
       <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
         <div className="max-w-lg mx-auto px-6 py-12 text-center">
@@ -179,15 +181,24 @@ export default function PrintShop() {
             <p className="text-xs uppercase text-[#A8A29E] mb-2">Order Total</p>
             <p className="text-3xl font-bold mb-4">£{orderComplete.total.toFixed(2)}</p>
             
-            <p className="text-sm text-[#57534E] mb-4">
-              Please send payment to: <strong>your-paypal@email.com</strong>
+            <p className="text-xs text-[#A8A29E] mb-4">
+              Order reference: <code className="bg-[#F5F2EB] px-2 py-1 font-mono">{orderComplete.order_id.slice(0,8).toUpperCase()}</code>
             </p>
-            <p className="text-xs text-[#A8A29E]">
-              Include your order reference: <code className="bg-[#F5F2EB] px-2 py-1">{orderComplete.order_id.slice(0,8)}</code>
+            <p className="text-sm text-[#57534E] mb-2">
+              Please include your order reference in the PayPal payment note.
             </p>
           </div>
 
-          <Button onClick={() => navigate(`/s/${token}/view`)} className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6">
+          <a href={paypalLink} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 bg-[#0070BA] text-white rounded-sm px-8 py-3 text-sm font-bold tracking-wider uppercase mb-4 hover:bg-[#003087] transition-colors">
+            Pay with PayPal
+          </a>
+          
+          <p className="text-xs text-[#A8A29E] mb-6">
+            You'll be redirected to PayPal to complete your payment of £{orderComplete.total.toFixed(2)}
+          </p>
+
+          <Button variant="ghost" onClick={() => navigate(`/s/${token}/view`)} className="text-[#57534E]">
             Back to Gallery
           </Button>
         </div>
