@@ -39,11 +39,12 @@ export const updateTemplate = (id, data) => apiClient.put(`/admin/templates/${id
 export const deleteTemplate = (id) => apiClient.delete(`/admin/templates/${id}`);
 
 // Gallery CRUD
-export const getGalleries = () => apiClient.get('/admin/galleries');
+export const getGalleries = (sortBy = 'date_desc') => apiClient.get(`/admin/galleries?sort_by=${sortBy}`);
 export const getGallery = (id) => apiClient.get(`/admin/galleries/${id}`);
 export const createGallery = (data) => apiClient.post('/admin/galleries', data);
 export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}`, data);
 export const deleteGallery = (id) => apiClient.delete(`/admin/galleries/${id}`);
+export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/stats`);
 
 // File Upload
 export const uploadFiles = (galleryId, subfolder, files, onProgress) => {
