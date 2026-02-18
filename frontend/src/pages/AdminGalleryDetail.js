@@ -49,9 +49,12 @@ export default function AdminGalleryDetail() {
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareForm, setShareForm] = useState({
-    subfolder: null, password: "", access_level: "download", label: ""
+    subfolder: null, password: "", access_level: "download", label: "", expires_at: null
   });
   const [creatingShare, setCreatingShare] = useState(false);
+
+  // Expiry date picker
+  const [expiryPickerOpen, setExpiryPickerOpen] = useState(false);
 
   // QR display
   const [showQR, setShowQR] = useState(null);
