@@ -1270,6 +1270,62 @@ async def download_share_album_direct(token: str, subfolder: str = Query(None), 
         }
     )
 
+# Direct GET endpoint for downloading favourites
+@api_router.get("/share/{token}/download-favourites")
+async def download_share_favourites_direct(token: str, jwt_token: str = Query(..., alias="t")):
+    # Verify JWT from query param
+    payload = verify_jwt(jwt_token)
+    if not payload or payload.get("role") != "share" or payload.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not payload.get("allow_downloads", False):
+        raise HTTPException(status_code=403, detail="Downloads not allowed")
+    
+    gallery_id = payload["gallery_id"]
+    session_id = payload["sub"]
+    
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    # Get all favourites for this session
+    favs = await db.favourites.find({
+        "session_id": session_id,
+        "gallery_id": gallery_id
+    }, {"_id": 0}).to_list(50000)
+    
+    if not favs:
+        raise HTTPException(status_code=404, detail="No favourites to download")
+    
+    fav_ids = [f["file_id"] for f in favs]
+    files = await db.files.find({"gallery_id": gallery_id, "id": {"$in": fav_ids}}, {"_id": 0}).to_list(50000)
+    
+    if not files:
+        raise HTTPException(status_code=404, detail="No files found")
+
+    def iter_zip():
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+            for f in files:
+                fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+                if fp.exists():
+                    zf.write(fp, f["filename"])
+        buf.seek(0)
+        while True:
+            chunk = buf.read(1024 * 1024)
+            if not chunk:
+                break
+            yield chunk
+
+    zip_name = f"{gallery['folder_name'].replace(' ', '_')}_favourites.zip"
+    return StreamingResponse(
+        iter_zip(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_name}"',
+            "Cache-Control": "no-cache"
+        }
+    )
+
 # ─── Guest Upload (via share) ───
 @api_router.post("/share/{token}/upload")
 async def guest_upload(
