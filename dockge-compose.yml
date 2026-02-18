@@ -1,0 +1,110 @@
+# ============================================
+# WEDDINGS BY MARK - Gallery Management System
+# ============================================
+# 
+# DOCKGE DEPLOYMENT - COPY THIS ENTIRE FILE
+# 
+# GitHub Repo: https://github.com/valianktni1/180226galleryrepo
+#
+# BEFORE DEPLOYING:
+# 1. Change YOUR_TRUENAS_IP on line 72 to your actual IP (e.g., 192.168.1.100)
+# 2. Generate a JWT secret: openssl rand -hex 32
+# 3. Replace the JWT_SECRET value on line 51
+#
+# AFTER DEPLOYING:
+# Access at: http://YOUR_TRUENAS_IP:3037
+# ============================================
+
+version: "3.8"
+
+services:
+  # ─────────────────────────────────────────
+  # MongoDB Database
+  # ─────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: wbm-mongodb
+    restart: unless-stopped
+    volumes:
+      - /mnt/apps/newweddingsbymarkgallery/mongodb:/data/db
+    networks:
+      - wbm-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─────────────────────────────────────────
+  # FastAPI Backend
+  # ─────────────────────────────────────────
+  backend:
+    build:
+      context: https://github.com/valianktni1/180226galleryrepo.git#main:backend
+    container_name: wbm-backend
+    restart: unless-stopped
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=weddings_by_mark
+      - CORS_ORIGINS=*
+      # IMPORTANT: Generate your own secret with: openssl rand -hex 32
+      - JWT_SECRET=CHANGE_THIS_TO_YOUR_GENERATED_SECRET_KEY_HERE
+      - UPLOAD_DIR=/data/userfiles
+    volumes:
+      # User files (photos, videos) - SMB accessible storage
+      - /mnt/nextcloud/newwedidngsbymarkuserfiles:/data/userfiles
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - wbm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/admin/check-setup"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─────────────────────────────────────────
+  # React Frontend + Nginx
+  # ─────────────────────────────────────────
+  frontend:
+    build:
+      context: https://github.com/valianktni1/180226galleryrepo.git#main:frontend
+      args:
+        # CHANGE THIS to your TrueNAS IP for local testing
+        # For production, change to: https://weddingsbymark.uk
+        - REACT_APP_BACKEND_URL=http://YOUR_TRUENAS_IP:3037
+    container_name: wbm-frontend
+    restart: unless-stopped
+    ports:
+      - "3037:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - wbm-network
+
+networks:
+  wbm-network:
+    driver: bridge
+
+# ============================================
+# VOLUME PATHS SUMMARY:
+# ============================================
+# MongoDB Data:     /mnt/apps/newweddingsbymarkgallery/mongodb
+# User Files:       /mnt/nextcloud/newwedidngsbymarkuserfiles
+#
+# Your wedding photos will be stored like:
+# /mnt/nextcloud/newwedidngsbymarkuserfiles/
+# ├── Gina & Mark 30.11.22/
+# │   ├── Wedding Images/
+# │   │   ├── IMG_0001.jpg (original filename!)
+# │   │   └── IMG_0002.jpg
+# │   ├── Video/
+# │   ├── Album Favourites/
+# │   ├── Guest Uploads/
+# │   └── SelfieBooth/
+# └── .cache/thumbs/  (auto-generated)
+# ============================================
