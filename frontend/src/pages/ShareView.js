@@ -396,7 +396,7 @@ export default function ShareView() {
       <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'rgba(253,252,248,0.85)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button data-testid="back-to-albums" onClick={() => { setActiveAlbum(null); setLightboxIndex(-1); }}
+            <button data-testid="back-to-albums" onClick={() => { setActiveAlbum(null); setLightboxIndex(-1); setSelectMode(false); setSelectedFiles(new Set()); }}
               className="text-[#57534E] hover:text-[#1C1917]" style={{ transition: 'color 0.2s ease' }}>
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -406,16 +406,31 @@ export default function ShareView() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {favCount > 0 && (
+            {permissions.allowDelete && (
+              <Button data-testid="select-mode-btn" variant={selectMode ? "default" : "ghost"} 
+                onClick={() => { setSelectMode(m => !m); setSelectedFiles(new Set()); }}
+                className={`rounded-sm text-xs tracking-wider gap-1.5 ${selectMode ? 'bg-[#1C1917] text-[#FDFCF8]' : 'text-[#57534E]'}`}
+                style={{ fontFamily: 'Manrope, sans-serif' }}>
+                <Check className="w-3.5 h-3.5" /> {selectMode ? "Cancel" : "Select"}
+              </Button>
+            )}
+            {selectMode && selectedFiles.size > 0 && (
+              <Button data-testid="bulk-delete-btn" onClick={() => setShowDeleteDialog(true)} variant="ghost" className="text-[#9F1239] text-xs gap-1">
+                <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedFiles.size})
+              </Button>
+            )}
+            {favCount > 0 && !selectMode && (
               <Button data-testid="show-favourites-album" variant="ghost" onClick={() => setShowFavourites(true)}
                 className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
                 <Heart className="w-3.5 h-3.5" fill="#D4AF37" stroke="#D4AF37" /> ({favCount})
               </Button>
             )}
-            <Button data-testid="download-album-btn" variant="ghost" onClick={handleDownloadAlbum} disabled={downloading}
-              className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
-              <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing..." : "Download All"}
-            </Button>
+            {permissions.allowDownloads && !selectMode && (
+              <Button data-testid="download-album-btn" variant="ghost" onClick={handleDownloadAlbum} disabled={downloading}
+                className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+                <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing..." : "Download All"}
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -431,7 +446,10 @@ export default function ShareView() {
             {currentAlbumFiles.map((file, i) => (
               <FileCard key={file.id} file={file} index={i} galleryId={galleryId}
                 onFav={handleFavourite} onDownload={handleDownloadSingle}
-                onClick={() => setLightboxIndex(i)} />
+                onClick={selectMode ? () => toggleSelect(file.id) : () => setLightboxIndex(i)} 
+                permissions={permissions}
+                selectMode={selectMode}
+                isSelected={selectedFiles.has(file.id)} />
             ))}
           </div>
         )}
@@ -439,7 +457,32 @@ export default function ShareView() {
 
       <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
         setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
-        galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} />
+        galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+              Delete {selectedFiles.size} file(s)?
+            </AlertDialogTitle>
+            <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              This will permanently delete the selected files. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-sm" style={{ fontFamily: 'Manrope, sans-serif' }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="confirm-delete-files"
+              onClick={handleBulkDelete}
+              className="bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm text-xs tracking-wider uppercase font-bold"
+              style={{ fontFamily: 'Manrope, sans-serif' }}
+            >
+              Delete Files
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
