@@ -104,10 +104,7 @@ export default function AdminLogin() {
           className="w-full max-w-md"
         >
           <div className="flex items-center gap-3 mb-16">
-            <Camera className="w-6 h-6 text-[#D4AF37]" strokeWidth={1.5} />
-            <span className="text-sm tracking-[0.2em] uppercase font-semibold" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>
-              Weddings By Mark
-            </span>
+            <img src="/logo.png" alt="Weddings By Mark" className="h-10" />
           </div>
 
           <h2
