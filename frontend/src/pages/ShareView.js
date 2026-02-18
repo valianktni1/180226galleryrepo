@@ -358,10 +358,12 @@ export default function ShareView() {
               <h1 className="text-lg font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Your Favourites</h1>
               <span className="text-xs" style={{ color: '#A8A29E' }}>({favCount})</span>
             </div>
-            <Button data-testid="download-favourites-btn" variant="ghost" onClick={handleDownloadAlbum} disabled={downloading}
-              className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
-              <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing..." : "Download All"}
-            </Button>
+            {permissions.allowDownloads && (
+              <Button data-testid="download-favourites-btn" variant="ghost" onClick={handleDownloadAlbum} disabled={downloading}
+                className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+                <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing..." : "Download All"}
+              </Button>
+            )}
           </div>
         </header>
         <main className="max-w-screen-xl mx-auto px-6 py-8">
@@ -376,14 +378,14 @@ export default function ShareView() {
               {displayFiles.map((file, i) => (
                 <FileCard key={file.id} file={file} index={i} galleryId={galleryId}
                   onFav={handleFavourite} onDownload={handleDownloadSingle}
-                  onClick={() => setLightboxIndex(i)} />
+                  onClick={() => setLightboxIndex(i)} permissions={permissions} />
               ))}
             </div>
           )}
         </main>
         <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
           setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
-          galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} />
+          galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} />
       </div>
     );
   }
