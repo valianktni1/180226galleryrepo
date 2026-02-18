@@ -58,11 +58,11 @@ services:
     networks:
       - wbm-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/admin/check-setup"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/api/admin/check-setup || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
   # ─────────────────────────────────────────
   # React Frontend + Nginx
