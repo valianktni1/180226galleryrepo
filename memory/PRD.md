@@ -39,6 +39,11 @@ Build a full working wedding photography client gallery system. Self-hosted on T
   - View & Download: Can view and download photos
   - View, Download & Upload: Can also upload files
   - Full Access: Can view, download, upload, AND delete files
+- [x] **Share expiry system** (Feb 2026):
+  - Optional expiry date when creating shares
+  - Manual toggle to disable/expire shares
+  - Calendar picker to set/change expiry dates on existing shares
+  - Expired shares show 410 "Link Expired" page
 - [x] QR code generation
 - [x] Guest upload endpoint
 - [x] Favouriting system
@@ -59,7 +64,6 @@ Build a full working wedding photography client gallery system. Self-hosted on T
 
 ## P1 Backlog
 - Video thumbnail generation (ffmpeg)
-- Gallery link expiry dates
 - Slideshow view mode
 - Admin password change
 - Bulk share creation
@@ -67,3 +71,7 @@ Build a full working wedding photography client gallery system. Self-hosted on T
 ## P2 Backlog
 - Finalize docker-compose.yml for TrueNAS deployment
 - Push repository to user's GitHub account
+
+## Deployment Notes
+- App will be deployed to weddingsbymark.uk when ready
+- Self-hosted on TrueNAS server
