@@ -12,10 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown
 } from "lucide-react";
 import {
-  getGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl
 } from "@/lib/api";
 
 export default function AdminDashboard() {
@@ -24,6 +24,7 @@ export default function AdminDashboard() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("date_desc");
   const [showCreate, setShowCreate] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -32,7 +33,7 @@ export default function AdminDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [gRes, tRes] = await Promise.all([getGalleries(), getTemplates()]);
+      const [gRes, tRes] = await Promise.all([listGalleries(sortBy), getTemplates()]);
       setGalleries(gRes.data);
       setTemplates(tRes.data);
     } catch {
@@ -40,7 +41,7 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sortBy]);
 
   useEffect(() => {
     if (!localStorage.getItem("admin_token")) { navigate("/admin"); return; }
