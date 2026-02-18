@@ -724,9 +724,11 @@ async def get_share_info(token: str):
 
 @api_router.post("/share/{token}/access")
 async def access_share(token: str, body: ShareAccessBody = None):
-    share = await db.shares.find_one({"token": token, "is_active": True}, {"_id": 0})
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
+    if is_share_expired(share):
+        raise HTTPException(status_code=410, detail="This share link has expired")
 
     if share.get("has_password") and share.get("password_hash"):
         if not body or not body.password:
