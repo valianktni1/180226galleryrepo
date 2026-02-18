@@ -104,7 +104,7 @@ export default function AdminLogin() {
           className="w-full max-w-md"
         >
           <div className="flex items-center gap-3 mb-16">
-            <img src="/logo.png" alt="Weddings By Mark" className="h-10" />
+            <img src="/logo.png" alt="Weddings By Mark" className="h-10" style={{ filter: 'invert(1)' }} />
           </div>
 
           <h2
