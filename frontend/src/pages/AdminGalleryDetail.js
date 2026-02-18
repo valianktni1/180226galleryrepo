@@ -562,6 +562,16 @@ export default function AdminGalleryDetail() {
                 placeholder="e.g. Gina & Mark's Gallery" className="border-[#D4D4D8] rounded-sm" />
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Custom URL (optional)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#A8A29E] whitespace-nowrap">{window.location.origin}/</span>
+                <Input data-testid="share-custom-slug-input" value={shareForm.custom_slug} 
+                  onChange={e => setShareForm(f => ({...f, custom_slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')}))}
+                  placeholder="ginamark301122" className="border-[#D4D4D8] rounded-sm flex-1" />
+              </div>
+              <p className="text-xs text-[#A8A29E]">Leave empty for auto-generated URL. Only letters, numbers and hyphens allowed.</p>
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password (leave empty for no password)</Label>
               <Input data-testid="share-password-input" value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
                 placeholder="Optional - leave blank for open access" className="border-[#D4D4D8] rounded-sm" />
