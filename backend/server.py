@@ -227,6 +227,60 @@ def make_preview(input_path: Path, output_path: Path, size=(1600, 1600)):
         logger.error(f"Preview error for {input_path}: {e}")
         return False
 
+def make_video_thumbnail(input_path: Path, output_path: Path, size=(400, 400)):
+    """Generate thumbnail from video using ffmpeg."""
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_frame = output_path.parent / f"{output_path.stem}_temp.jpg"
+        
+        # Extract frame at 1 second (or first frame if video is shorter)
+        cmd = [
+            'ffmpeg', '-y', '-i', str(input_path),
+            '-ss', '00:00:01', '-vframes', '1',
+            '-vf', f'scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease',
+            '-q:v', '2', str(temp_frame)
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        
+        if result.returncode != 0 or not temp_frame.exists():
+            # Try extracting first frame if 1s failed
+            cmd[4] = '00:00:00'
+            subprocess.run(cmd, capture_output=True, timeout=30)
+        
+        if temp_frame.exists():
+            # Resize to exact thumbnail size
+            with Image.open(temp_frame) as img:
+                img.thumbnail(size, Image.LANCZOS)
+                img.save(output_path, "JPEG", quality=85)
+            temp_frame.unlink()
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Video thumbnail error for {input_path}: {e}")
+        return False
+
+def make_video_preview(input_path: Path, output_path: Path, size=(1600, 900)):
+    """Generate larger preview from video using ffmpeg."""
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        cmd = [
+            'ffmpeg', '-y', '-i', str(input_path),
+            '-ss', '00:00:01', '-vframes', '1',
+            '-vf', f'scale={size[0]}:{size[1]}:force_original_aspect_ratio=decrease',
+            '-q:v', '2', str(output_path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        
+        if result.returncode != 0 or not output_path.exists():
+            cmd[4] = '00:00:00'
+            subprocess.run(cmd, capture_output=True, timeout=30)
+        
+        return output_path.exists()
+    except Exception as e:
+        logger.error(f"Video preview error for {input_path}: {e}")
+        return False
+
 def get_gallery_path(folder_name: str) -> Path:
     return UPLOAD_DIR / folder_name
 
