@@ -299,7 +299,7 @@ export default function ShareView() {
           </div>
 
           {/* Guest Upload Section */}
-          {allowUploads && (
+          {permissions.allowUploads && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
