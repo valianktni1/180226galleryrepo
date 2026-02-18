@@ -205,18 +205,52 @@ export default function AdminGalleryDetail() {
         subfolder: shareForm.subfolder || null,
         password: shareForm.password || null,
         access_level: shareForm.access_level,
-        label: shareForm.label || null
+        label: shareForm.label || null,
+        expires_at: shareForm.expires_at || null
       };
       await createShare(id, data);
       toast.success("Share link created");
       setShowShareDialog(false);
-      setShareForm({ subfolder: null, password: "", access_level: "download", label: "" });
+      setShareForm({ subfolder: null, password: "", access_level: "download", label: "", expires_at: null });
       loadGallery();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed");
     } finally {
       setCreatingShare(false);
     }
+  };
+
+  const handleSetExpiry = async (shareId, date) => {
+    try {
+      const expiresAt = date ? date.toISOString() : null;
+      await updateShareExpiry(shareId, expiresAt);
+      toast.success(date ? "Expiry date set" : "Expiry removed");
+      loadGallery();
+    } catch (err) {
+      toast.error("Failed to update expiry");
+    }
+  };
+
+  const handleExpireNow = async (shareId) => {
+    try {
+      await toggleShare(shareId);
+      toast.success("Share link expired");
+      loadGallery();
+    } catch (err) {
+      toast.error("Failed to expire share");
+    }
+  };
+
+  const formatExpiryDate = (dateStr) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const isShareExpired = (share) => {
+    if (!share.is_active) return true;
+    if (!share.expires_at) return false;
+    return new Date(share.expires_at) < new Date();
   };
 
   const handleDeleteShare = async (shareId) => {
