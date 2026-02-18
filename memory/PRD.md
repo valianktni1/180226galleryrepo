@@ -77,8 +77,7 @@ Build a full working wedding photography client gallery system. Self-hosted on T
 ## P1 Backlog
 - Video thumbnail generation (ffmpeg)
 - Slideshow view mode
-- Admin password change
-- Bulk share creation
+- PayPal API integration (currently manual payment confirmation)
 
 ## P2 Backlog
 - Finalize docker-compose.yml for TrueNAS deployment
