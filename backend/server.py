@@ -690,9 +690,11 @@ async def serve_original(gallery_id: str, subfolder: str, filename: str):
 # ─── Public Share Access ───
 @api_router.get("/share/{token}")
 async def get_share_info(token: str):
-    share = await db.shares.find_one({"token": token, "is_active": True}, {"_id": 0})
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
     if not share:
-        raise HTTPException(status_code=404, detail="Share not found or expired")
+        raise HTTPException(status_code=404, detail="Share not found")
+    if is_share_expired(share):
+        raise HTTPException(status_code=410, detail="This share link has expired")
     gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
@@ -715,6 +717,7 @@ async def get_share_info(token: str):
         "has_password": share.get("has_password", False),
         "access_level": share.get("access_level", "download"),
         "allow_uploads": share.get("allow_uploads", False),
+        "expires_at": share.get("expires_at"),
         "cover_url": cover_url,
         "file_count": file_count
     }
