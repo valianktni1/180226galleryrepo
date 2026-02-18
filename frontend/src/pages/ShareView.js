@@ -597,16 +597,22 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
         </div>
       )}
-      {/* Hover overlay - always show for interaction */}
+      {/* Always visible heart button (top-right) - better for mobile */}
       {!selectMode && (
+        <button 
+          data-testid={`fav-btn-${file.id}`} 
+          onClick={e => { e.stopPropagation(); onFav(file.id); }}
+          className="absolute top-2 right-2 w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-transform active:scale-95"
+          style={{ backgroundColor: file.is_favourite ? '#D4AF37' : 'rgba(255,255,255,0.95)' }}
+        >
+          <Heart className="w-5 h-5" fill={file.is_favourite ? 'white' : 'none'} stroke={file.is_favourite ? 'white' : '#1C1917'} />
+        </button>
+      )}
+      {/* Hover overlay for download button */}
+      {!selectMode && permissions.allowDownloads && (
         <>
           <div className="photo-overlay" />
-          <div className="photo-actions flex items-center justify-between">
-            <button data-testid={`fav-btn-${file.id}`} onClick={e => { e.stopPropagation(); onFav(file.id); }}
-              className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
-              <Heart className="w-4 h-4" fill={file.is_favourite ? '#D4AF37' : 'none'} stroke={file.is_favourite ? '#D4AF37' : '#1C1917'} />
-            </button>
-            {permissions.allowDownloads && (
+          <div className="photo-actions flex items-center justify-end">
               <button data-testid={`download-btn-${file.id}`} onClick={e => { e.stopPropagation(); onDownload(file); }}
                 className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
                 <Download className="w-4 h-4 text-[#1C1917]" />
