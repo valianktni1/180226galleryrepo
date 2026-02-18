@@ -76,6 +76,7 @@ class ShareCreate(BaseModel):
     password: Optional[str] = None  # None = no password
     access_level: str = "download"  # view, download, upload, full
     label: Optional[str] = None
+    expires_at: Optional[str] = None  # ISO date string, None = never expires
 
 class FavouriteToggle(BaseModel):
     file_id: str
