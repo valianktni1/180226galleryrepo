@@ -261,13 +261,6 @@ export default function AdminGalleryDetail() {
     } catch { toast.error("Failed"); }
   };
 
-  const handleToggleShare = async (shareId) => {
-    try {
-      await toggleShare(shareId);
-      loadGallery();
-    } catch { toast.error("Failed"); }
-  };
-
   const copyShareLink = (token) => {
     navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
     toast.success("Share link copied");
