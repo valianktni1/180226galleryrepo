@@ -304,6 +304,39 @@ def safe_filename(filename: str, existing_dir: Path) -> str:
         counter += 1
     return f"{stem} ({counter}){ext}"
 
+# ─── Background Thumbnail Generation ───
+thumbnail_executor = ThreadPoolExecutor(max_workers=4)
+
+def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: str, filename: str, file_type: str, file_id: str):
+    """Generate thumbnails in background thread - doesn't block uploads."""
+    try:
+        has_thumb = False
+        has_preview = False
+        
+        if file_type == "photo":
+            thumb_p = get_thumb_path(gallery_id, subfolder, filename)
+            preview_p = get_preview_path(gallery_id, subfolder, filename)
+            has_thumb = make_thumbnail(file_path, thumb_p)
+            has_preview = make_preview(file_path, preview_p)
+        elif file_type == "video":
+            thumb_p = get_thumb_path(gallery_id, subfolder, filename)
+            preview_p = get_preview_path(gallery_id, subfolder, filename)
+            has_thumb = make_video_thumbnail(file_path, thumb_p)
+            has_preview = make_video_preview(file_path, preview_p)
+        
+        # Update the file record with thumbnail status using sync pymongo
+        from pymongo import MongoClient
+        sync_client = MongoClient(os.environ['MONGO_URL'])
+        sync_db = sync_client[os.environ['DB_NAME']]
+        sync_db.files.update_one(
+            {"id": file_id},
+            {"$set": {"has_thumb": has_thumb, "has_preview": has_preview}}
+        )
+        sync_client.close()
+        logger.info(f"Thumbnails generated for {filename}")
+    except Exception as e:
+        logger.error(f"Background thumbnail error for {filename}: {e}")
+
 # ─── Admin Auth ───
 @api_router.get("/admin/check-setup")
 async def check_admin_setup():
