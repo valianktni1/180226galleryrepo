@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, Form, Query, Header
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, Form, Query, Header, Request
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -9,11 +9,14 @@ import logging
 import shutil
 import zipfile
 import secrets
+import subprocess
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
+from collections import defaultdict
+import time
 import jwt
 import bcrypt
 from PIL import Image
@@ -33,6 +36,15 @@ CACHE_DIR = UPLOAD_DIR / ".cache" / "thumbs"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
+
+# Rate limiting for login attempts
+login_attempts = defaultdict(list)  # IP -> list of timestamps
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+
+# Session timeout (24 hours for admin, 72 hours for share access)
+ADMIN_SESSION_HOURS = 24
+SHARE_SESSION_HOURS = 72
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 48
 MAX_UPLOAD_SIZE = 40 * 1024 * 1024 * 1024  # 40GB for admin
