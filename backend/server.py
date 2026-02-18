@@ -122,6 +122,19 @@ def is_image(filename: str) -> bool:
 def is_video(filename: str) -> bool:
     return filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm', '.mts'))
 
+def is_share_expired(share: dict) -> bool:
+    """Check if a share has expired based on expires_at date."""
+    if not share.get("is_active"):
+        return True
+    expires_at = share.get("expires_at")
+    if not expires_at:
+        return False
+    try:
+        expiry_date = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+        return datetime.now(timezone.utc) > expiry_date
+    except:
+        return False
+
 def slugify(text: str) -> str:
     return text.lower().strip().replace(' ', '-').replace('&', 'and')
 
