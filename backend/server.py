@@ -562,7 +562,7 @@ async def upload_files(
 
         file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
 
-        # Generate thumbnails for images
+        # Generate thumbnails for images and videos
         has_thumb = False
         has_preview = False
         if file_type == "photo":
@@ -570,6 +570,11 @@ async def upload_files(
             preview_p = get_preview_path(gallery_id, subfolder, final_name)
             has_thumb = make_thumbnail(file_path, thumb_p)
             has_preview = make_preview(file_path, preview_p)
+        elif file_type == "video":
+            thumb_p = get_thumb_path(gallery_id, subfolder, final_name)
+            preview_p = get_preview_path(gallery_id, subfolder, final_name)
+            has_thumb = make_video_thumbnail(file_path, thumb_p)
+            has_preview = make_video_preview(file_path, preview_p)
 
         file_doc = {
             "id": str(uuid.uuid4()),
