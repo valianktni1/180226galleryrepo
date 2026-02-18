@@ -85,6 +85,40 @@ class FavouriteToggle(BaseModel):
 class ShareAccessBody(BaseModel):
     password: str
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+# ─── Print Shop Models ───
+class PrintSize(BaseModel):
+    name: str  # e.g. "6x4", "7x5", "10x8"
+    prices: dict  # {"gloss": 5.00, "luster": 6.00, "silk": 6.50}
+
+class PrintSizeCreate(BaseModel):
+    name: str
+    gloss_price: float
+    luster_price: float
+    silk_price: float
+
+class PrintSizeUpdate(BaseModel):
+    name: Optional[str] = None
+    gloss_price: Optional[float] = None
+    luster_price: Optional[float] = None
+    silk_price: Optional[float] = None
+
+class PrintOrderItem(BaseModel):
+    file_id: str
+    size_id: str
+    finish: str  # gloss, luster, silk
+    quantity: int = 1
+
+class PrintOrderCreate(BaseModel):
+    gallery_id: str
+    items: List[PrintOrderItem]
+    customer_email: str
+
+SHIPPING_COST = 2.50  # UK flat rate
+
 # ─── Auth Helpers ───
 def create_jwt(data: dict, expires_hours: int = JWT_EXPIRY_HOURS) -> str:
     payload = {**data, "exp": datetime.now(timezone.utc) + timedelta(hours=expires_hours)}
