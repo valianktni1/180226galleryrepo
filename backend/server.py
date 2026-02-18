@@ -1627,6 +1627,9 @@ async def track_gallery_view(token: str):
     if not share:
         return {"ok": False}
     
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+    gallery_name = gallery.get("folder_name", "Unknown") if gallery else "Unknown"
+    
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     await db.activity.update_one(
         {"gallery_id": share["gallery_id"], "date": today},
@@ -1637,6 +1640,18 @@ async def track_gallery_view(token: str):
         {"id": share["gallery_id"]},
         {"$inc": {"total_views": 1}}
     )
+    
+    # Add to detailed activity log
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "gallery_id": share["gallery_id"],
+        "gallery_name": gallery_name,
+        "share_label": share.get("label", token),
+        "action": "view",
+        "details": "Gallery viewed",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
     return {"ok": True}
 
 @api_router.post("/share/{token}/track-download")
@@ -1646,6 +1661,10 @@ async def track_download(token: str, session=Depends(get_share_session)):
         return {"ok": False}
     
     gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    gallery_name = gallery.get("folder_name", "Unknown") if gallery else "Unknown"
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     await db.activity.update_one(
         {"gallery_id": gallery_id, "date": today},
@@ -1656,7 +1675,27 @@ async def track_download(token: str, session=Depends(get_share_session)):
         {"id": gallery_id},
         {"$inc": {"total_downloads": 1}}
     )
+    
+    # Add to detailed activity log
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "gallery_name": gallery_name,
+        "share_label": share.get("label", token) if share else token,
+        "action": "download",
+        "details": "Files downloaded",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
     return {"ok": True}
+
+@api_router.get("/admin/activity")
+async def get_admin_activity(limit: int = Query(50, le=200), admin=Depends(get_admin)):
+    """Get recent activity across all galleries."""
+    activities = await db.activity_log.find(
+        {}, {"_id": 0}
+    ).sort("timestamp", -1).limit(limit).to_list(limit)
+    return {"activities": activities}
 
 @api_router.get("/admin/galleries/{gallery_id}/stats")
 async def get_gallery_stats(gallery_id: str, admin=Depends(get_admin)):
