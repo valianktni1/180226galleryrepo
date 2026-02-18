@@ -15,8 +15,6 @@
 # Access at: http://YOUR_TRUENAS_IP:3037
 # ============================================
 
-version: "3.8"
-
 services:
   # ─────────────────────────────────────────
   # MongoDB Database
