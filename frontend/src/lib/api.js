@@ -30,6 +30,7 @@ apiClient.interceptors.response.use(
 export const checkSetup = () => apiClient.get('/admin/check-setup');
 export const setupAdmin = (data) => apiClient.post('/admin/setup', data);
 export const loginAdmin = (data) => apiClient.post('/admin/login', data);
+export const changePassword = (data) => apiClient.put('/admin/change-password', data);
 
 // Templates
 export const getTemplates = () => apiClient.get('/admin/templates');
