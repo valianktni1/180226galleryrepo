@@ -279,6 +279,38 @@ export default function ShareView() {
           >
             Your special memories, beautifully captured
           </motion.p>
+          
+          {/* Album Instructions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+            className="mt-10 mx-auto max-w-2xl text-left p-6 rounded-lg border-2"
+            style={{ backgroundColor: 'white', borderColor: '#D4AF37' }}
+          >
+            <h3 className="text-xl font-medium mb-4 flex items-center gap-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+              <Heart className="w-5 h-5" fill="#D4AF37" stroke="#D4AF37" />
+              Your Wedding Album (If Included in Your Package)
+            </h3>
+            <div className="space-y-3 text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              <p>To choose your album images, simply go to your <strong>Wedding Images</strong> folder.</p>
+              <ul className="list-disc list-inside space-y-1 pl-2">
+                <li>Click the heart icon on each image to select your 40 favourites</li>
+                <li>Don't forget to choose one image for your front cover</li>
+              </ul>
+              <p>At the top of the gallery, you'll see a <span className="inline-flex items-center"><Heart className="w-4 h-4 mx-1" fill="#D4AF37" stroke="#D4AF37" /></span> gold heart showing how many images you've selected.</p>
+              <p className="font-medium pt-2">Once you're happy:</p>
+              <ol className="list-decimal list-inside space-y-1 pl-2">
+                <li>Click the gold heart</li>
+                <li>Press <strong>"Submit for Album"</strong></li>
+              </ol>
+              <p>Your selections will then appear in your <strong>Album Favourites</strong> folder.</p>
+              <p className="pt-3 border-t" style={{ borderColor: '#F5F2EB' }}>
+                Please email me at <a href="mailto:mark@perfectweddingsbymark.uk" className="underline" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a> to let me know you've submitted your choices, and include the image number of your chosen front cover.
+              </p>
+              <p className="text-center pt-2">Thank you 😊</p>
+            </div>
+          </motion.div>
         </motion.section>
 
         {/* Albums Section */}
