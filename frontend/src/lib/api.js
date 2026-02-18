@@ -54,6 +54,9 @@ export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}
 export const deleteGallery = (id) => apiClient.delete(`/admin/galleries/${id}`);
 export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/stats`);
 
+// Admin Activity Log
+export const getAdminActivity = (limit = 50) => apiClient.get(`/admin/activity?limit=${limit}`);
+
 // File Upload
 export const uploadFiles = (galleryId, subfolder, files, onProgress) => {
   const formData = new FormData();
