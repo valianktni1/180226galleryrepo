@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Camera, Lock, Heart, Upload } from "lucide-react";
+import { Camera, Lock, Heart, Upload, Clock } from "lucide-react";
 import { getShareInfo, accessShare, openAccessShare } from "@/lib/api";
 
 export default function ShareAccess() {
@@ -14,6 +14,7 @@ export default function ShareAccess() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     const existing = localStorage.getItem("share_token");
@@ -31,10 +32,20 @@ export default function ShareAccess() {
             localStorage.setItem("share_token", res.data.jwt);
             localStorage.setItem("share_url_token", token);
             navigate(`/s/${token}/view`);
-          }).catch(() => {});
+          }).catch((err) => {
+            if (err.response?.status === 410) {
+              setExpired(true);
+            }
+          });
         }
       })
-      .catch(() => setNotFound(true));
+      .catch((err) => {
+        if (err.response?.status === 410) {
+          setExpired(true);
+        } else {
+          setNotFound(true);
+        }
+      });
   }, [token, navigate]);
 
   const handleSubmit = async (e) => {
@@ -46,11 +57,29 @@ export default function ShareAccess() {
       localStorage.setItem("share_url_token", token);
       navigate(`/s/${token}/view`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Incorrect password");
+      if (err.response?.status === 410) {
+        setExpired(true);
+      } else {
+        toast.error(err.response?.data?.detail || "Incorrect password");
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  if (expired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8" style={{ backgroundColor: '#FDFCF8' }}>
+        <div className="text-center">
+          <Clock className="w-16 h-16 mx-auto mb-6 text-[#D4AF37]" strokeWidth={1} />
+          <h1 className="text-4xl mb-3 font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Link Expired</h1>
+          <p className="text-base" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            This share link has expired. Please contact the photographer for a new link.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (notFound) {
     return (
