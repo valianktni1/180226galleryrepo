@@ -1154,6 +1154,18 @@ async def submit_favourites_to_album(token: str, session=Depends(get_share_sessi
         {"$set": {f"file_counts.{target_subfolder}": count, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     
+    # Log the activity
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "gallery_name": gallery.get("folder_name", "Unknown"),
+        "share_label": share.get("label", token) if share else token,
+        "action": "favourites_submitted",
+        "details": f"{copied} photos submitted for album",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
     return {"copied": copied, "already_existed": already_exists, "total_favourites": len(favs)}
 
 @api_router.get("/share/{token}/download/{file_id}")
