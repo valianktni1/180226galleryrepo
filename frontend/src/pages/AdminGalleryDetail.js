@@ -291,7 +291,11 @@ export default function AdminGalleryDetail() {
                   <div className="flex-1 flex items-center gap-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
                     {s.has_password ? <Lock className="w-3.5 h-3.5 text-[#57534E]" /> : <Globe className="w-3.5 h-3.5 text-[#3F6212]" />}
                     <span className="text-xs font-medium">{s.label}</span>
-                    {s.allow_uploads && <span className="text-xs px-1.5 py-0.5 bg-[#D4AF37]/10 text-[#D4AF37] font-bold">UPLOADS</span>}
+                    <span className="text-xs px-1.5 py-0.5 bg-[#D4AF37]/10 text-[#D4AF37] font-bold uppercase">
+                      {s.access_level === 'view' ? 'VIEW ONLY' : 
+                       s.access_level === 'download' ? 'DOWNLOAD' :
+                       s.access_level === 'upload' ? 'UPLOAD' : 'FULL ACCESS'}
+                    </span>
                     {s.subfolder && <span className="text-xs px-1.5 py-0.5 bg-[#78716C]/10 text-[#78716C]">{s.subfolder}</span>}
                     {!s.is_active && <span className="text-xs text-[#9F1239]">Disabled</span>}
                   </div>
