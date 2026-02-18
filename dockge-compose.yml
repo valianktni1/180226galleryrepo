@@ -64,16 +64,13 @@ services:
     build:
       context: https://github.com/valianktni1/180226galleryrepo.git#main:frontend
       args:
-        # CHANGE THIS to your TrueNAS IP for local testing
-        # For production, change to: https://weddingsbymark.uk
         - REACT_APP_BACKEND_URL=http://192.168.24.10:3037
     container_name: wbm-frontend
     restart: unless-stopped
     ports:
       - "3037:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - wbm-network
 
