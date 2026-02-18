@@ -539,7 +539,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
   );
 }
 
-function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload }) {
+function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload, permissions = {} }) {
   return (
     <AnimatePresence>
       {currentPhoto && (
@@ -553,10 +553,12 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
               className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
               <Heart className="w-5 h-5" fill={currentPhoto.is_favourite ? '#D4AF37' : 'none'} stroke={currentPhoto.is_favourite ? '#D4AF37' : 'white'} />
             </button>
-            <button data-testid="lightbox-download" onClick={e => { e.stopPropagation(); onDownload(currentPhoto); }}
-              className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
-              <Download className="w-5 h-5 text-white" />
-            </button>
+            {permissions.allowDownloads && (
+              <button data-testid="lightbox-download" onClick={e => { e.stopPropagation(); onDownload(currentPhoto); }}
+                className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
+                <Download className="w-5 h-5 text-white" />
+              </button>
+            )}
           </div>
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/60 text-sm z-10" style={{ fontFamily: 'Manrope, sans-serif' }}>
             {lightboxIndex + 1} / {total}
