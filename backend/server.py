@@ -823,6 +823,9 @@ async def toggle_share_favourite(token: str, data: FavouriteToggle, session=Depe
 async def download_share_file(token: str, file_id: str, session=Depends(get_share_session)):
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
+    # Enforce download permission
+    if not session.get("allow_downloads", False):
+        raise HTTPException(status_code=403, detail="Downloads not allowed on this share")
     f = await db.files.find_one({"id": file_id, "gallery_id": session["gallery_id"]}, {"_id": 0})
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
@@ -836,6 +839,9 @@ async def download_share_file(token: str, file_id: str, session=Depends(get_shar
 async def download_share_zip(token: str, file_ids: List[str] = [], session=Depends(get_share_session)):
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
+    # Enforce download permission
+    if not session.get("allow_downloads", False):
+        raise HTTPException(status_code=403, detail="Downloads not allowed on this share")
     gallery_id = session["gallery_id"]
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
@@ -923,6 +929,53 @@ async def guest_upload(
         {"$set": {f"file_counts.{subfolder}": count}}
     )
     return {"uploaded": uploaded, "count": len(uploaded)}
+
+# ─── Guest Delete (via share with full access) ───
+class DeleteFilesRequest(BaseModel):
+    file_ids: List[str]
+
+@api_router.post("/share/{token}/delete")
+async def guest_delete_files(token: str, data: DeleteFilesRequest, session=Depends(get_share_session)):
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not session.get("allow_delete", False):
+        raise HTTPException(status_code=403, detail="Deleting not allowed on this share")
+    
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    deleted = 0
+    affected_subfolders = set()
+    
+    for file_id in data.file_ids:
+        f = await db.files.find_one({"id": file_id, "gallery_id": gallery_id}, {"_id": 0})
+        if not f:
+            continue
+        # Delete physical file
+        file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+        if file_path.exists():
+            file_path.unlink()
+        # Delete thumbnails
+        for tp in [get_thumb_path(gallery_id, f["subfolder"], f["filename"]),
+                   get_preview_path(gallery_id, f["subfolder"], f["filename"])]:
+            if tp.exists():
+                tp.unlink()
+        await db.files.delete_one({"id": file_id})
+        await db.favourites.delete_many({"file_id": file_id})
+        affected_subfolders.add(f["subfolder"])
+        deleted += 1
+    
+    # Update file counts for affected subfolders
+    for sf in affected_subfolders:
+        count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": sf})
+        await db.galleries.update_one(
+            {"id": gallery_id},
+            {"$set": {f"file_counts.{sf}": count}}
+        )
+    
+    return {"deleted": deleted}
 
 app.include_router(api_router)
 
