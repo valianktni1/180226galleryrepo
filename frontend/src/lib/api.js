@@ -143,27 +143,14 @@ export const updateOrderStatus = (orderId, status) =>
   apiClient.put(`/admin/print-orders/${orderId}/status?status=${status}`);
 
 // Public Print Shop (for couples)
-export const getSharePrintSizes = (token) => {
-  const jwt = localStorage.getItem('share_token');
-  return apiClient.get(`/share/${token}/print-sizes`, {
-    headers: { Authorization: `Bearer ${jwt}` }
-  });
-};
-export const createPrintOrder = (token, data) => {
-  const jwt = localStorage.getItem('share_token');
-  return apiClient.post(`/share/${token}/print-order`, data, {
-    headers: { Authorization: `Bearer ${jwt}` }
-  });
-};
-export const updatePrintOrderPaypal = (token, orderId, paypalOrderId, status = 'paid') => {
-  return apiClient.put(`/share/${token}/print-order/${orderId}/paypal?paypal_order_id=${paypalOrderId}&status=${status}`);
-};
-export const getMyPrintOrders = (token) => {
-  const jwt = localStorage.getItem('share_token');
-  return apiClient.get(`/share/${token}/print-orders`, {
-    headers: { Authorization: `Bearer ${jwt}` }
-  });
-};
+export const getSharePrintSizes = (token) =>
+  apiClient.get(`/share/${token}/print-sizes`);
+export const createPrintOrder = (token, data) =>
+  apiClient.post(`/share/${token}/print-order`, data);
+export const updatePrintOrderPaypal = (token, orderId, paypalOrderId, status = 'paid') =>
+  apiClient.put(`/share/${token}/print-order/${orderId}/paypal?paypal_order_id=${paypalOrderId}&status=${status}`);
+export const getMyPrintOrders = (token) =>
+  apiClient.get(`/share/${token}/print-orders`);
 
 // Activity tracking
 export const trackGalleryView = (token) => {
