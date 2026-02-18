@@ -49,6 +49,13 @@ Build a full working wedding photography client gallery system. Self-hosted on T
   - URL format: `weddingsbymark.uk/s/ginamark301122`
   - Validation: only letters, numbers, hyphens allowed
   - Duplicate slug prevention
+- [x] **Admin password change** (Feb 2026)
+- [x] **Print Shop** (Feb 2026):
+  - Admin can add/edit print sizes with prices per finish (Gloss, Luster, Silk)
+  - £2.50 flat shipping (UK only)
+  - Couples can browse photos and add to cart
+  - Order management for admin (pending → processing → printed → shipped → completed)
+  - PayPal payment flow (manual confirmation)
 - [x] QR code generation
 - [x] Guest upload endpoint
 - [x] Favouriting system
