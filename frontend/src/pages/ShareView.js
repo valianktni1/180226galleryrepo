@@ -15,7 +15,6 @@ import {
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, downloadShareZip, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload
 } from "@/lib/api";
-import { toast } from "sonner";
 
 export default function ShareView() {
   const { token } = useParams();
