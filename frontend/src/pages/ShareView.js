@@ -210,10 +210,7 @@ export default function ShareView() {
         <header className="border-b" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
           <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Camera className="w-5 h-5 text-[#D4AF37]" strokeWidth={1.5} />
-              <span className="text-sm tracking-[0.15em] font-bold" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
-                Weddings By Mark
-              </span>
+              <img src="/logo.png" alt="Weddings By Mark" className="h-8" />
             </div>
             <div className="flex items-center gap-2">
               <Button data-testid="order-prints-btn" variant="ghost" onClick={() => navigate(`/s/${token}/prints`)}
