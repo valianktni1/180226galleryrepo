@@ -116,36 +116,26 @@ export default function ShareView() {
     } catch (err) { toast.error(err.message || "Download failed"); }
   };
 
-  const handleDownloadAlbum = async () => {
+  const handleDownloadAlbum = () => {
     if (!permissions.allowDownloads) {
       toast.error("Downloads are not allowed on this share");
       return;
     }
     
-    // For favourites, use the blob approach (selected files only)
+    // For favourites, use direct URL
     if (showFavourites) {
-      setDownloading(true);
-      try {
-        const ids = allFiles.filter(f => f.is_favourite).map(f => f.id);
-        if (ids.length === 0) {
-          toast.error("No favourites selected");
-          return;
-        }
-        const res = await downloadShareZip(token, ids);
-        const url = window.URL.createObjectURL(new Blob([res.data]));
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "favourites.zip";
-        a.click();
-        window.URL.revokeObjectURL(url);
-        toast.success("Download started");
-        trackDownload(token);
-      } catch { toast.error("Download failed"); }
-      finally { setDownloading(false); }
+      if (favCount === 0) {
+        toast.error("No favourites selected");
+        return;
+      }
+      const url = getShareFavouritesDownloadUrl(token);
+      window.open(url, '_blank');
+      toast.success("Download started");
+      trackDownload(token);
       return;
     }
     
-    // For full album download, use direct URL (better for large files)
+    // For album download, use direct URL
     if (activeAlbum) {
       const url = getShareDownloadUrl(token, activeAlbum);
       window.open(url, '_blank');
