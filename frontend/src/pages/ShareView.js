@@ -384,15 +384,29 @@ export default function ShareView() {
               <h1 className="text-lg font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Your Favourites</h1>
               <span className="text-xs" style={{ color: '#A8A29E' }}>({favCount})</span>
             </div>
-            {permissions.allowDownloads && (
-              <Button data-testid="download-favourites-btn" variant="ghost" onClick={handleDownloadAlbum} disabled={downloading}
-                className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
-                <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing..." : "Download All"}
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {favCount > 0 && (
+                <Button data-testid="submit-favourites-btn" variant="default" onClick={handleSubmitFavourites} disabled={submittingFavourites}
+                  className="rounded-sm gap-2 text-xs tracking-wider" style={{ backgroundColor: '#D4AF37', color: 'white' }}>
+                  <Heart className="w-3.5 h-3.5" /> {submittingFavourites ? "Submitting..." : "Submit for Album"}
+                </Button>
+              )}
+              {permissions.allowDownloads && (
+                <Button data-testid="download-favourites-btn" variant="ghost" onClick={handleDownloadAlbum} disabled={downloading}
+                  className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+                  <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing..." : "Download All"}
+                </Button>
+              )}
+            </div>
           </div>
         </header>
         <main className="max-w-screen-xl mx-auto px-6 py-8">
+          <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: '#F5F2EB' }}>
+            <p className="text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              <Heart className="w-4 h-4 inline mr-2" fill="#D4AF37" stroke="#D4AF37" />
+              Heart your favourite photos, then click <strong>"Submit for Album"</strong> to send them for your wedding album.
+            </p>
+          </div>
           {displayFiles.length === 0 ? (
             <div className="text-center py-20">
               <Heart className="w-12 h-12 mx-auto mb-4 text-[#D4D4D8]" strokeWidth={1} />
