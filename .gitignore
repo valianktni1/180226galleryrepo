@@ -140,3 +140,8 @@ frontend/node_modules/.cache/default-development/1.pack
 # Environment files
 *.env
 *.env.*
+-e 
+# Environment files
+*.env
+*.env.*
+frontend/node_modules/.cache/default-development/6.pack
