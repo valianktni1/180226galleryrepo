@@ -12,7 +12,7 @@ from pathlib import Path
 class WeddingPhotographyGalleryTester:
     def __init__(self):
         # Use the public endpoint from frontend .env
-        self.base_url = "https://weddingvault-1.preview.emergentagent.com/api"
+        self.base_url = "https://weddingvault-2.preview.emergentagent.com/api"
         self.admin_token = None
         self.share_token = None
         self.test_template_id = None
@@ -348,7 +348,7 @@ class WeddingPhotographyGalleryTester:
             self.log_result("QR Code Generation", False, error="No admin token or share ID")
             return False
 
-        base_url = "https://weddingvault-1.preview.emergentagent.com"
+        base_url = "https://weddingvault-2.preview.emergentagent.com"
         response = self.make_request('GET', f'/admin/shares/{self.test_share_id}/qr?base_url={base_url}')
         
         if response and response.status_code == 200:
