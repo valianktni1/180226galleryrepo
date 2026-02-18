@@ -325,8 +325,8 @@ export default function AdminGalleryDetail() {
             </div>
             <div className="space-y-2">
               {shares.map(s => (
-                <div key={s.id} className="flex items-center gap-3 p-2 text-sm" style={{ backgroundColor: s.is_active ? '#F5F2EB' : '#fafafa' }}>
-                  <div className="flex-1 flex items-center gap-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                <div key={s.id} className={`flex items-center gap-3 p-2 text-sm ${isShareExpired(s) ? 'opacity-50' : ''}`} style={{ backgroundColor: s.is_active && !isShareExpired(s) ? '#F5F2EB' : '#fafafa' }}>
+                  <div className="flex-1 flex items-center gap-2 flex-wrap" style={{ fontFamily: 'Manrope, sans-serif' }}>
                     {s.has_password ? <Lock className="w-3.5 h-3.5 text-[#57534E]" /> : <Globe className="w-3.5 h-3.5 text-[#3F6212]" />}
                     <span className="text-xs font-medium">{s.label}</span>
                     <span className="text-xs px-1.5 py-0.5 bg-[#D4AF37]/10 text-[#D4AF37] font-bold uppercase">
@@ -335,11 +335,43 @@ export default function AdminGalleryDetail() {
                        s.access_level === 'upload' ? 'UPLOAD' : 'FULL ACCESS'}
                     </span>
                     {s.subfolder && <span className="text-xs px-1.5 py-0.5 bg-[#78716C]/10 text-[#78716C]">{s.subfolder}</span>}
-                    {!s.is_active && <span className="text-xs text-[#9F1239]">Disabled</span>}
+                    {s.expires_at && (
+                      <span className={`text-xs px-1.5 py-0.5 flex items-center gap-1 ${isShareExpired(s) ? 'bg-[#9F1239]/10 text-[#9F1239]' : 'bg-[#78716C]/10 text-[#78716C]'}`}>
+                        <Clock className="w-3 h-3" />
+                        {isShareExpired(s) ? 'Expired' : `Expires ${formatExpiryDate(s.expires_at)}`}
+                      </span>
+                    )}
+                    {!s.is_active && <span className="text-xs text-[#9F1239] font-bold">DISABLED</span>}
                   </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="p-1 text-[#57534E] hover:text-[#1C1917]" title="Set expiry date">
+                        <CalendarIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <div className="p-2 border-b">
+                        <p className="text-xs font-medium text-[#57534E]">Set expiry date</p>
+                      </div>
+                      <Calendar
+                        mode="single"
+                        selected={s.expires_at ? new Date(s.expires_at) : undefined}
+                        onSelect={(date) => handleSetExpiry(s.id, date)}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                      />
+                      {s.expires_at && (
+                        <div className="p-2 border-t">
+                          <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => handleSetExpiry(s.id, null)}>
+                            Remove expiry
+                          </Button>
+                        </div>
+                      )}
+                    </PopoverContent>
+                  </Popover>
                   <button data-testid={`copy-share-${s.id}`} onClick={() => copyShareLink(s.token)} className="p-1 text-[#57534E] hover:text-[#1C1917]"><Copy className="w-3.5 h-3.5" /></button>
                   <button data-testid={`qr-share-${s.id}`} onClick={() => setShowQR(s)} className="p-1 text-[#57534E] hover:text-[#1C1917]"><QrCode className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => handleToggleShare(s.id)} className="p-1 text-[#57534E] hover:text-[#1C1917]">
+                  <button onClick={() => handleExpireNow(s.id)} className="p-1 text-[#57534E] hover:text-[#1C1917]" title={s.is_active ? "Disable share" : "Enable share"}>
                     {s.is_active ? <Globe className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
                   </button>
                   <button onClick={() => handleDeleteShare(s.id)} className="p-1 text-[#9F1239]"><Trash2 className="w-3.5 h-3.5" /></button>
