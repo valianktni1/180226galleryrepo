@@ -1,99 +1,75 @@
-# Weddings By Mark - Gallery Management System PRD
+# Wedding Photography Gallery Management System
 
 ## Original Problem Statement
-Build a full working wedding photography client gallery system. Self-hosted on TrueNAS with Docker Compose.
+Build a full-featured, self-hosted wedding photography client gallery management system similar to `weddingsbymark.uk`. Core requirements include admin management of galleries, master folder templates, large file uploads (40GB+) with original filenames preserved, on-the-fly ZIP downloads, granular share permissions, share expiry, custom share URLs, QR code generation, print shop with PayPal integration, and complete removal of "Emergent" branding.
 
 ## User Personas
-1. **Mark (Admin/Photographer)**: Creates couple folders from templates, uploads photos to subfolders, creates share links with QR codes
-2. **Wedding Couples (Clients)**: Access shared gallery via link/QR, browse photos, favourite, download
-3. **Wedding Guests**: Scan QR code to upload their own photos/videos to Guest Uploads folder
+- **Admin (Photographer):** Manages galleries, uploads photos, creates shares, manages print orders
+- **Clients (Couples):** View galleries, favourite photos, submit album selections, order prints, upload guest photos
 
-## Core Requirements (v2 - Implemented Feb 2026)
-- Master folder templates with subfolders (Wedding Images, Video, SelfieBooth, Album Favourites, Guest Uploads)
-- Clone template to create couple folder (e.g. "Gina & Mark 30.11.22")
-- Upload files to specific subfolders - ORIGINAL FILENAMES preserved
-- Shares with optional password or no password
-- Separate shares for gallery vs guest upload folder
-- QR code generation for any share link
-- Guest upload via share link
-- Files stored on disk in clean folder structure (no hashes)
-- Favouriting + download (single + bulk zip)
-- **Granular Share Access Levels** (4 levels: View Only, Download, Upload, Full Access)
+## Core Requirements
+- Admin-managed client galleries with clonable master folder template
+- Large file uploads (streaming) with preserved filenames
+- ZIP downloads for albums
+- 4 granular access levels (View, Download, Upload, Full Access)
+- Password protection, share expiry, custom URL slugs
+- QR code generation for shares
+- Print shop with PayPal.me checkout
+- Custom branding (logo, no external branding)
+- Human-readable file storage structure
 
-## Architecture
-- Backend: FastAPI + MongoDB + Pillow (thumbnails) + qrcode
-- Frontend: React 19 + Tailwind + shadcn/ui + Framer Motion
-- Storage: Local filesystem → /mnt/nextcloud/newwedidngsbymarkuserfiles
-- Thumbnails: .cache/thumbs/ directory (separate from originals)
-- Auth: JWT admin + per-share session tokens with permission flags
-- Docker: MongoDB + Backend + Frontend (Nginx) on port 3037
+## Tech Stack
+- **Backend:** FastAPI, Motor (async MongoDB), PyJWT, Pillow, ffmpeg
+- **Frontend:** React, Tailwind CSS, Shadcn/UI, Framer Motion
+- **Database:** MongoDB
+- **Deployment:** Docker, Docker Compose (Dockge), Nginx
 
-## What's Implemented
-- [x] Template CRUD (default + custom)
-- [x] Gallery CRUD (clone from template, rename, delete)
-- [x] Subfolder-based file upload with original filenames
-- [x] Thumbnail + preview generation for images
-- [x] Share system (password optional, per-subfolder or whole gallery)
-- [x] **Granular access levels for shares** (Feb 2026):
-  - View Only: Can only view photos, no downloads
-  - View & Download: Can view and download photos
-  - View, Download & Upload: Can also upload files
-  - Full Access: Can view, download, upload, AND delete files
-- [x] **Share expiry system** (Feb 2026):
-  - Optional expiry date when creating shares
-  - Manual toggle to disable/expire shares
-  - Calendar picker to set/change expiry dates on existing shares
-  - Expired shares show 410 "Link Expired" page
-- [x] **Custom share URLs** (Feb 2026):
-  - Set custom slugs like `ginamark301122` instead of random tokens
-  - URL format: `weddingsbymark.uk/s/ginamark301122`
-  - Validation: only letters, numbers, hyphens allowed
-  - Duplicate slug prevention
-- [x] **Admin password change** (Feb 2026)
-- [x] **Security features** (Feb 2026):
-  - Rate limiting on login (5 attempts per 5 minutes)
-  - 24-hour session timeout with auto-logout
-- [x] **Gallery sorting** (Feb 2026):
-  - Sort by name A-Z, name Z-A
-  - Sort by date (newest/oldest first)
-- [x] **Video thumbnails** (Feb 2026):
-  - Automatic thumbnail generation using ffmpeg
-  - Preview images for video files
-- [x] **Activity tracking** (Feb 2026):
-  - Gallery view tracking
-  - Download tracking
-  - Stats endpoint for admin (views, downloads, daily activity)
-- [x] **Print Shop** (Feb 2026):
-  - Admin can add/edit print sizes with prices per finish (Gloss, Luster, Silk)
-  - £2.50 flat shipping (UK only)
-  - Couples can browse photos and add to cart
-  - Order management for admin (pending → processing → printed → shipped → completed)
-  - PayPal payment flow (manual confirmation)
-- [x] QR code generation
-- [x] Guest upload endpoint
-- [x] Favouriting system
-- [x] Single + ZIP download
-- [x] Docker Compose + Dockerfiles
-- [x] Full frontend UI (admin + client + guest)
-- [x] Permission-based UI (buttons hidden based on share access level)
+## Deployment Configuration
+- **TrueNAS IP:** 192.168.24.10
+- **Port:** 3037
+- **MongoDB Volume:** /mnt/apps/newweddingsbymarkgallery/mongodb
+- **User Files:** /mnt/nextcloud/newwedidngsbymarkuserfiles
+- **GitHub Repo:** https://github.com/valianktni1/180226galleryrepo
 
-## Share Access Level Implementation Details
-- Backend stores `access_level` field in share documents
-- JWT tokens include permission flags: `allow_downloads`, `allow_uploads`, `allow_delete`
-- Backend enforces permissions on:
-  - `/api/share/{token}/download/{file_id}` - checks allow_downloads
-  - `/api/share/{token}/download-zip` - checks allow_downloads
-  - `/api/share/{token}/upload` - checks allow_uploads
-  - `/api/share/{token}/delete` - checks allow_delete (new endpoint)
-- Frontend conditionally renders Download/Upload/Delete buttons based on permissions
+## What's Been Implemented (Dec 2025)
 
-## P1 Backlog
-- Slideshow view mode
-- Email notifications for new orders
+### Core Features ✅
+- Gallery CRUD with master folder templates
+- File upload with streaming (40GB+ support)
+- Background thumbnail generation (4 workers)
+- Granular share permissions (View/Download/Upload/Full)
+- Custom share URLs and QR codes
+- Password protection and expiry dates
+- Print shop with PayPal.me integration
+- Custom branding with logo auto-inversion
 
-## P2 Backlog
-- Additional print products (canvas, frames)
+### Recent Fixes (Feb 2026)
+- Fixed yarn.lock Docker build error
+- Fixed PyJWT missing dependency
+- Fixed API 403 errors (token interceptor)
+- Fixed empty folders not showing
+- Added "Submit for Album" feature for clients
 
-## Deployment Notes
-- App will be deployed to weddingsbymark.uk when ready
-- Self-hosted on TrueNAS server
+### Client Workflow
+1. Access share link (e.g., weddingsbymark.uk/s/ebonyjonathan281025/view)
+2. Browse galleries and heart favourite photos
+3. Click "Favourites" to review selections
+4. Click "Submit for Album" to copy to Album Favourites folder
+5. Photographer downloads Album Favourites to create album
+
+## Key API Endpoints
+- `POST /api/admin/login` - Admin authentication
+- `GET/POST /api/admin/galleries` - Gallery management
+- `POST /api/admin/galleries/{id}/upload` - File upload
+- `GET /api/share/{token}/files` - Get share files
+- `POST /api/share/{token}/submit-favourites` - Submit favourites to album
+- `GET/POST /api/admin/print-products` - Print shop management
+
+## Database Collections
+- users, galleries, files, shares, favourites, print_products, print_orders, activity_log
+
+## Backlog / Future Tasks
+- P1: Email notifications when clients submit favourites
+- P2: Client notes/comments on favourites
+- P2: Batch operations in admin panel
+- P3: Analytics dashboard for admin
