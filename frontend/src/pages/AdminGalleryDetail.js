@@ -651,7 +651,9 @@ export default function AdminGalleryDetail() {
             <div className="flex flex-col items-center gap-4 py-4">
               <img src={`${getShareQR(showQR.id)}&token=${localStorage.getItem('admin_token')}`}
                 alt="QR Code" className="w-64 h-64" data-testid="qr-code-image" />
-              <p className="text-xs break-all" style={{ color: '#A8A29E' }}>{window.location.origin}/s/{showQR.token}</p>
+              <p className="text-sm font-medium break-all" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
+                {window.location.origin}/s/{showQR.token}
+              </p>
               <Button onClick={() => copyShareLink(showQR.token)} className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2">
                 <Copy className="w-3.5 h-3.5" /> Copy Link
               </Button>
