@@ -44,6 +44,11 @@ Build a full working wedding photography client gallery system. Self-hosted on T
   - Manual toggle to disable/expire shares
   - Calendar picker to set/change expiry dates on existing shares
   - Expired shares show 410 "Link Expired" page
+- [x] **Custom share URLs** (Feb 2026):
+  - Set custom slugs like `ginamark301122` instead of random tokens
+  - URL format: `weddingsbymark.uk/s/ginamark301122`
+  - Validation: only letters, numbers, hyphens allowed
+  - Duplicate slug prevention
 - [x] QR code generation
 - [x] Guest upload endpoint
 - [x] Favouriting system
