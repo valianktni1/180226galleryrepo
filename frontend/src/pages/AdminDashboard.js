@@ -149,9 +149,21 @@ export default function AdminDashboard() {
           ))}
         </motion.div>
 
-        {/* Search */}
+        {/* Search and Sort */}
         <div className="flex items-center gap-4 mb-8">
           <h2 className="text-3xl md:text-4xl font-medium flex-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Couple Folders</h2>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-40 border-[#F5F2EB] rounded-sm text-xs" data-testid="sort-galleries">
+              <ArrowUpDown className="w-3.5 h-3.5 mr-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="date_desc">Newest First</SelectItem>
+              <SelectItem value="date_asc">Oldest First</SelectItem>
+              <SelectItem value="name_asc">Name A-Z</SelectItem>
+              <SelectItem value="name_desc">Name Z-A</SelectItem>
+            </SelectContent>
+          </Select>
           <div className="relative w-64">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#A8A29E]" />
             <Input data-testid="gallery-search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search..." className="pl-10 border-[#F5F2EB] bg-white/50 rounded-sm text-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]" />
