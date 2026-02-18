@@ -605,6 +605,7 @@ async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_adm
         "access_level": data.access_level,
         "allow_uploads": data.access_level in ("upload", "full"),
         "label": data.label or (data.subfolder or gallery["folder_name"]),
+        "expires_at": data.expires_at,  # ISO date string or None
         "is_active": True,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
