@@ -106,32 +106,21 @@ export const accessShare = (token, password) =>
   apiClient.post(`/share/${token}/access`, { password });
 export const openAccessShare = (token) =>
   apiClient.get(`/share/${token}/open-access`);
-export const getShareFiles = (token) => {
-  const jwt = localStorage.getItem('share_token');
-  return apiClient.get(`/share/${token}/files`, {
-    headers: { Authorization: `Bearer ${jwt}` }
-  });
-};
-export const toggleShareFavourite = (token, fileId) => {
-  const jwt = localStorage.getItem('share_token');
-  return apiClient.post(`/share/${token}/favourite`, { file_id: fileId }, {
-    headers: { Authorization: `Bearer ${jwt}` }
-  });
-};
+export const getShareFiles = (token) =>
+  apiClient.get(`/share/${token}/files`);
+export const toggleShareFavourite = (token, fileId) =>
+  apiClient.post(`/share/${token}/favourite`, { file_id: fileId });
 export const downloadShareFile = (token, fileId) => {
   const jwt = localStorage.getItem('share_token');
-  return fetch(`${API}/share/${token}/download/${fileId}`, {
+  return fetch(`${BACKEND_URL}/api/share/${token}/download/${fileId}`, {
     headers: { Authorization: `Bearer ${jwt}` }
   });
 };
-export const downloadShareZip = (token, fileIds = []) => {
-  const jwt = localStorage.getItem('share_token');
-  return apiClient.post(`/share/${token}/download-zip`, fileIds, {
-    headers: { Authorization: `Bearer ${jwt}` },
+export const downloadShareZip = (token, fileIds = []) =>
+  apiClient.post(`/share/${token}/download-zip`, fileIds, {
     responseType: 'blob',
     timeout: 600000,
   });
-};
 export const guestUpload = (token, files, onProgress) => {
   const jwt = localStorage.getItem('share_token');
   const formData = new FormData();
