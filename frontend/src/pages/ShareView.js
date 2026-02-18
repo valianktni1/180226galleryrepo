@@ -174,8 +174,8 @@ export default function ShareView() {
   const displayFiles = showFavourites ? allFiles.filter(f => f.is_favourite) : currentAlbumFiles;
   const favCount = allFiles.filter(f => f.is_favourite).length;
 
-  // Only show albums that have files (except for upload-only shares)
-  const visibleAlbums = subfolders.filter(sf => sf.files.length > 0 || sf.name === "Guest Uploads");
+  // Show all subfolders from the gallery (not just ones with files)
+  const visibleAlbums = subfolders;
 
   // Lightbox
   const currentPhoto = lightboxIndex >= 0 ? displayFiles[lightboxIndex] : null;
