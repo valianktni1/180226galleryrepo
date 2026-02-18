@@ -591,6 +591,43 @@ export default function AdminGalleryDetail() {
                 ))}
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Expiry Date (optional)</Label>
+              <Popover open={expiryPickerOpen} onOpenChange={setExpiryPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" data-testid="expiry-date-picker"
+                    className={`w-full justify-start text-left font-normal border-[#D4D4D8] rounded-sm ${!shareForm.expires_at ? 'text-[#A8A29E]' : ''}`}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {shareForm.expires_at 
+                      ? new Date(shareForm.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : "No expiry - link never expires"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={shareForm.expires_at ? new Date(shareForm.expires_at) : undefined}
+                    onSelect={(date) => {
+                      setShareForm(f => ({...f, expires_at: date ? date.toISOString() : null}));
+                      setExpiryPickerOpen(false);
+                    }}
+                    disabled={(date) => date < new Date()}
+                    initialFocus
+                  />
+                  {shareForm.expires_at && (
+                    <div className="p-2 border-t">
+                      <Button variant="ghost" size="sm" className="w-full text-xs" 
+                        onClick={() => { setShareForm(f => ({...f, expires_at: null})); setExpiryPickerOpen(false); }}>
+                        Remove expiry date
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-[#A8A29E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                You can also manually expire shares anytime from the shares list
+              </p>
+            </div>
             <Button data-testid="create-share-submit" onClick={handleCreateShare} disabled={creatingShare}
               className="w-full bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-8 py-5 text-xs tracking-[0.15em] uppercase font-bold">
               {creatingShare ? "Creating..." : "Create Share Link"}
