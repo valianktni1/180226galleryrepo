@@ -95,6 +95,8 @@ export default function ShareView() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = file.filename; a.click();
       window.URL.revokeObjectURL(url);
+      // Track download
+      trackDownload(token);
     } catch (err) { toast.error(err.message || "Download failed"); }
   };
 
@@ -118,6 +120,8 @@ export default function ShareView() {
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success("Download started");
+      // Track download
+      trackDownload(token);
     } catch { toast.error("Download failed"); }
     finally { setDownloading(false); }
   };
