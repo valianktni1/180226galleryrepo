@@ -66,6 +66,8 @@ export default function ShareView() {
   useEffect(() => {
     if (!localStorage.getItem("share_token")) { navigate(`/s/${token}`); return; }
     loadFiles();
+    // Track gallery view
+    trackGalleryView(token);
   }, [token, navigate, loadFiles]);
 
   const handleFavourite = async (fileId) => {
