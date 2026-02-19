@@ -49,7 +49,7 @@ export default function AdminGalleryDetail() {
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareForm, setShareForm] = useState({
-    subfolder: null, password: "", access_level: "download", label: "", expires_at: null, custom_slug: ""
+    subfolder: null, password: "", access_level: "download", label: "", expires_at: null, custom_slug: "", guest_upload_mode: false
   });
   const [creatingShare, setCreatingShare] = useState(false);
 
