@@ -139,6 +139,9 @@ export default function AdminActivity() {
                       <div className="text-sm text-gray-900">{activity.share_label}</div>
                       <div className="text-xs text-gray-500">{activity.gallery_name}</div>
                     </td>
+                    <td className="px-4 py-3 text-sm text-gray-500 font-mono">
+                      {activity.ip_address || "-"}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {activity.details}
                     </td>
