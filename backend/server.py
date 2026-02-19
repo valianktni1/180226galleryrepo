@@ -974,6 +974,7 @@ async def get_share_info(token: str):
         "has_password": share.get("has_password", False),
         "access_level": share.get("access_level", "download"),
         "allow_uploads": share.get("allow_uploads", False),
+        "guest_upload_mode": share.get("guest_upload_mode", False),
         "expires_at": share.get("expires_at"),
         "cover_url": cover_url,
         "file_count": file_count
