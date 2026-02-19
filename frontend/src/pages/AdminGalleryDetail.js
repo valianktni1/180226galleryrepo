@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
-  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, thumbUrl, setSubfolderCover
+  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, getShareQRFrame, thumbUrl, setSubfolderCover
 } from "@/lib/api";
 
 export default function AdminGalleryDetail() {
