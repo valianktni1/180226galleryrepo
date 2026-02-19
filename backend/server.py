@@ -1068,6 +1068,7 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
         "gallery_id": gallery_id,
         "gallery_name": gallery["folder_name"],
         "subfolders": subfolders_data,
+        "covers": gallery.get("covers", {}),
         "access_level": session.get("access_level", "download"),
         "allow_uploads": session.get("allow_uploads", False),
         "allow_downloads": session.get("allow_downloads", True),
