@@ -336,23 +336,32 @@ export default function ShareView() {
                 style={{ borderColor: '#F5F2EB', transition: 'box-shadow 0.3s ease' }}
                 data-testid={`album-card-${sf.name.replace(/\s/g, '-')}`}
               >
-                {/* Show cover thumbnail if available */}
-                {sf.files.length > 0 && sf.files[0].has_thumb ? (
-                  <div className="w-full aspect-[4/3] mb-4 overflow-hidden" style={{ backgroundColor: '#F5F2EB' }}>
-                    <img
-                      src={thumbUrl(galleryId, sf.name, sf.files[0].filename)}
-                      alt={sf.name}
-                      className="w-full h-full object-cover"
-                      style={{ transition: 'transform 0.5s ease' }}
-                      onMouseOver={e => e.target.style.transform = 'scale(1.05)'}
-                      onMouseOut={e => e.target.style.transform = 'scale(1)'}
-                    />
-                  </div>
-                ) : (
-                  <div className="w-12 h-12 mb-4 flex items-center justify-center">
-                    <FolderOpen className="w-8 h-8 text-[#A8A29E]" strokeWidth={1.5} />
-                  </div>
-                )}
+                {/* Show cover thumbnail - use custom cover if set, otherwise first image */}
+                {(() => {
+                  const coverId = covers[sf.name];
+                  const coverFile = coverId ? sf.files.find(f => f.id === coverId) : null;
+                  const displayFile = coverFile || (sf.files.length > 0 ? sf.files[0] : null);
+                  
+                  if (displayFile && displayFile.has_thumb) {
+                    return (
+                      <div className="w-full aspect-[4/3] mb-4 overflow-hidden" style={{ backgroundColor: '#F5F2EB' }}>
+                        <img
+                          src={thumbUrl(galleryId, sf.name, displayFile.filename)}
+                          alt={sf.name}
+                          className="w-full h-full object-cover"
+                          style={{ transition: 'transform 0.5s ease' }}
+                          onMouseOver={e => e.target.style.transform = 'scale(1.05)'}
+                          onMouseOut={e => e.target.style.transform = 'scale(1)'}
+                        />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="w-12 h-12 mb-4 flex items-center justify-center">
+                      <FolderOpen className="w-8 h-8 text-[#A8A29E]" strokeWidth={1.5} />
+                    </div>
+                  );
+                })()}
                 <p className="font-medium text-sm mb-1" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>{sf.name}</p>
                 <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{sf.files.length} files</p>
               </motion.button>
