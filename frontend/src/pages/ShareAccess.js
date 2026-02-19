@@ -31,6 +31,10 @@ export default function ShareAccess() {
           openAccessShare(token).then(res => {
             localStorage.setItem("share_token", res.data.jwt);
             localStorage.setItem("share_url_token", token);
+            // Store viewer_id for persistent favourites
+            if (res.data.viewer_id) {
+              localStorage.setItem(`viewer_id_${token}`, res.data.viewer_id);
+            }
             navigate(`/s/${token}/view`);
           }).catch((err) => {
             if (err.response?.status === 410) {
