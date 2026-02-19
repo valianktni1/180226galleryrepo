@@ -19,7 +19,7 @@ Build a full-featured, self-hosted wedding photography client gallery management
 - Human-readable file storage structure
 
 ## Tech Stack
-- **Backend:** FastAPI, Motor (async MongoDB), PyJWT, Pillow, ffmpeg
+- **Backend:** FastAPI, Motor (async MongoDB), PyJWT, Pillow, ffmpeg, qrcode
 - **Frontend:** React, Tailwind CSS, Shadcn/UI, Framer Motion
 - **Database:** MongoDB
 - **Deployment:** Docker, Docker Compose (Dockge), Nginx
@@ -31,7 +31,7 @@ Build a full-featured, self-hosted wedding photography client gallery management
 - **User Files:** /mnt/nextcloud/newwedidngsbymarkuserfiles
 - **GitHub Repo:** https://github.com/valianktni1/180226galleryrepo
 
-## What's Been Implemented (Dec 2025)
+## What's Been Implemented (Dec 2025 - Feb 2026)
 
 ### Core Features ✅
 - Gallery CRUD with master folder templates
@@ -43,12 +43,39 @@ Build a full-featured, self-hosted wedding photography client gallery management
 - Print shop with PayPal.me integration
 - Custom branding with logo auto-inversion
 
-### Recent Fixes (Feb 2026)
+### Recent Updates (Feb 19, 2026) ✅
+**QR Code Frame Generator:**
+- Elegant printable QR code frame with white roses and gold scrollwork design
+- Dynamic couple name extraction from gallery folder name
+- "❤ Weddings By Mark ❤" branding at bottom
+- New endpoint: `GET /api/admin/shares/{share_id}/qr-frame`
+- "Download Printable QR Frame" button in admin QR dialog
+- Template stored at `/app/backend/assets/qr_frame_template.png`
+
+**Guest Upload Mode:**
+- New "Guest Upload Mode" checkbox when creating upload-enabled shares
+- Simplified upload-only UI for wedding guests:
+  - Welcome message with couple's name
+  - Big prominent upload button
+  - Optional name field for uploaders
+  - Live counter showing total guest uploads
+  - Success animation after upload
+- No album browsing, no downloads, no favourites - just upload
+- "GUEST MODE" badge indicator in admin shares list
+- New files: `GuestUploadView.js`, field `guest_upload_mode` in shares collection
+- New endpoint: `GET /api/share/{token}/guest-upload-count`
+
+### Earlier Fixes (Feb 2026)
 - Fixed yarn.lock Docker build error
 - Fixed PyJWT missing dependency
 - Fixed API 403 errors (token interceptor)
 - Fixed empty folders not showing
 - Added "Submit for Album" feature for clients
+- Activity log with IP tracking
+- Set Cover Image feature
+- Bulk Select All/Delete All
+- Thank You modal after album submission
+- Persistent client sessions (Remember Me)
 
 ### Client Workflow
 1. Access share link (e.g., weddingsbymark.uk/s/ebonyjonathan281025/view)
@@ -61,15 +88,22 @@ Build a full-featured, self-hosted wedding photography client gallery management
 - `POST /api/admin/login` - Admin authentication
 - `GET/POST /api/admin/galleries` - Gallery management
 - `POST /api/admin/galleries/{id}/upload` - File upload
+- `GET /api/admin/shares/{id}/qr` - Plain QR code
+- `GET /api/admin/shares/{id}/qr-frame` - Printable QR frame with design
 - `GET /api/share/{token}/files` - Get share files
 - `POST /api/share/{token}/submit-favourites` - Submit favourites to album
+- `GET /api/share/{token}/guest-upload-count` - Get guest upload count
 - `GET/POST /api/admin/print-products` - Print shop management
 
 ## Database Collections
 - users, galleries, files, shares, favourites, print_products, print_orders, activity_log
 
+## Key Schema Fields (shares)
+- `guest_upload_mode: boolean` - If true, shows simplified guest upload UI
+
 ## Backlog / Future Tasks
-- P1: Email notifications when clients submit favourites
+- P1: Slideshow mode for client gallery view
+- P2: Email notifications when clients submit favourites
 - P2: Client notes/comments on favourites
 - P2: Batch operations in admin panel
 - P3: Analytics dashboard for admin
