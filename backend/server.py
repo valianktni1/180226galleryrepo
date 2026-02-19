@@ -977,10 +977,6 @@ async def get_share_info(token: str):
         "file_count": file_count
     }
 
-class ShareAccessBody(BaseModel):
-    password: str = None
-    viewer_id: str = None
-
 @api_router.post("/share/{token}/access")
 async def access_share(token: str, body: ShareAccessBody = None):
     share = await db.shares.find_one({"token": token}, {"_id": 0})
