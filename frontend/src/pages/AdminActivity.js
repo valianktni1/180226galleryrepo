@@ -100,7 +100,7 @@ export default function AdminActivity() {
             <p className="text-sm mt-2">Activity will appear here when couples view or download their galleries</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+          <div className="bg-white rounded-lg border shadow-sm overflow-hidden overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
@@ -112,6 +112,9 @@ export default function AdminActivity() {
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Gallery / Couple
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    IP Address
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Details
