@@ -25,6 +25,7 @@ export default function ShareView() {
   const [galleryName, setGalleryName] = useState("");
   const [galleryId, setGalleryId] = useState(null);
   const [subfolders, setSubfolders] = useState([]);
+  const [covers, setCovers] = useState({});
   const [permissions, setPermissions] = useState({
     allowUploads: false,
     allowDownloads: true,
