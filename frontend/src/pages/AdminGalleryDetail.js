@@ -441,19 +441,35 @@ export default function AdminGalleryDetail() {
                     <Check className="w-3.5 h-3.5" /> {selectMode ? "Cancel Select" : "Select"}
                   </Button>
 
-                  {selectMode && selectedFiles.size > 0 && (
+                  {selectMode && (
                     <>
-                      <span className="text-xs font-bold" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>{selectedFiles.size} selected</span>
-                      {gallery.subfolders.includes("Album Favourites") && activeTab !== "Album Favourites" && (
-                        <Button data-testid="copy-to-favourites-btn" onClick={handleCopyToFavourites} disabled={copying}
-                          className="bg-[#D4AF37] text-white hover:bg-[#D4AF37]/90 rounded-sm text-xs tracking-wider gap-1.5 font-bold"
-                          style={{ fontFamily: 'Manrope, sans-serif' }}>
-                          <Heart className="w-3.5 h-3.5" /> {copying ? "Copying..." : "Add to Album Favourites"}
-                        </Button>
-                      )}
-                      <Button data-testid="bulk-delete-btn" onClick={handleBulkDelete} variant="ghost" className="text-[#9F1239] text-xs gap-1">
-                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                      <Button data-testid="select-all-btn" variant="outline"
+                        onClick={() => {
+                          if (selectedFiles.size === currentFiles.length) {
+                            setSelectedFiles(new Set());
+                          } else {
+                            setSelectedFiles(new Set(currentFiles.map(f => f.id)));
+                          }
+                        }}
+                        className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
+                        style={{ fontFamily: 'Manrope, sans-serif' }}>
+                        {selectedFiles.size === currentFiles.length ? "Deselect All" : "Select All"}
                       </Button>
+                      {selectedFiles.size > 0 && (
+                        <>
+                          <span className="text-xs font-bold" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>{selectedFiles.size} selected</span>
+                          {gallery.subfolders.includes("Album Favourites") && activeTab !== "Album Favourites" && (
+                            <Button data-testid="copy-to-favourites-btn" onClick={handleCopyToFavourites} disabled={copying}
+                              className="bg-[#D4AF37] text-white hover:bg-[#D4AF37]/90 rounded-sm text-xs tracking-wider gap-1.5 font-bold"
+                              style={{ fontFamily: 'Manrope, sans-serif' }}>
+                              <Heart className="w-3.5 h-3.5" /> {copying ? "Copying..." : "Add to Album Favourites"}
+                            </Button>
+                          )}
+                          <Button data-testid="bulk-delete-btn" onClick={handleBulkDelete} variant="ghost" className="text-[#9F1239] text-xs gap-1">
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
+                          </Button>
+                        </>
+                      )}
                     </>
                   )}
 
