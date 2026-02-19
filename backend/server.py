@@ -976,6 +976,10 @@ async def get_share_info(token: str):
         "file_count": file_count
     }
 
+class ShareAccessBody(BaseModel):
+    password: str = None
+    viewer_id: str = None
+
 @api_router.post("/share/{token}/access")
 async def access_share(token: str, body: ShareAccessBody = None):
     share = await db.shares.find_one({"token": token}, {"_id": 0})
@@ -990,7 +994,9 @@ async def access_share(token: str, body: ShareAccessBody = None):
         if not bcrypt.checkpw(body.password.encode(), share["password_hash"].encode()):
             raise HTTPException(status_code=401, detail="Invalid password")
 
-    session_id = str(uuid.uuid4())
+    # Use provided viewer_id or generate new one (for persistent favourites)
+    session_id = body.viewer_id if body and body.viewer_id else str(uuid.uuid4())
+    
     access_level = share.get("access_level", "download")
     jwt_token = create_jwt({
         "sub": session_id,
@@ -1004,7 +1010,8 @@ async def access_share(token: str, body: ShareAccessBody = None):
         "allow_delete": access_level == "full",
         "token": token
     }, expires_hours=72)
-    return {"jwt": jwt_token, "gallery_name": (await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0}))["folder_name"]}
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+    return {"jwt": jwt_token, "viewer_id": session_id, "gallery_name": gallery["folder_name"] if gallery else ""}
 
 @api_router.get("/share/{token}/open-access")
 async def open_access_share(token: str, viewer_id: str = Query(None)):
