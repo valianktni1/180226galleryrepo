@@ -26,6 +26,16 @@ export default function ShareAccess() {
     getShareInfo(token)
       .then(r => {
         setShareInfo(r.data);
+        // Store guest_upload_mode for ShareView to use
+        if (r.data.guest_upload_mode) {
+          localStorage.setItem(`guest_upload_mode_${token}`, 'true');
+        } else {
+          localStorage.removeItem(`guest_upload_mode_${token}`);
+        }
+        // Store gallery name for guest upload view
+        if (r.data.gallery_name) {
+          localStorage.setItem(`gallery_name_${token}`, r.data.gallery_name);
+        }
         // Auto-access if no password required
         if (!r.data.has_password) {
           openAccessShare(token).then(res => {
