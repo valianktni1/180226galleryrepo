@@ -1708,6 +1708,11 @@ async def track_download(token: str, request: Request, session=Depends(get_share
     if session.get("token") != token:
         return {"ok": False}
     
+    # Get client IP
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    
     gallery_id = session["gallery_id"]
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     gallery_name = gallery.get("folder_name", "Unknown") if gallery else "Unknown"
@@ -1732,6 +1737,7 @@ async def track_download(token: str, request: Request, session=Depends(get_share
         "share_label": share.get("label", token) if share else token,
         "action": "download",
         "details": "Files downloaded",
+        "ip_address": client_ip,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
     
