@@ -329,6 +329,11 @@ export default function AdminGalleryDetail() {
                        s.access_level === 'download' ? 'DOWNLOAD' :
                        s.access_level === 'upload' ? 'UPLOAD' : 'FULL ACCESS'}
                     </span>
+                    {s.guest_upload_mode && (
+                      <span className="text-xs px-1.5 py-0.5 bg-[#0891B2]/10 text-[#0891B2] font-bold uppercase flex items-center gap-1">
+                        <Upload className="w-3 h-3" /> GUEST MODE
+                      </span>
+                    )}
                     {s.subfolder && <span className="text-xs px-1.5 py-0.5 bg-[#78716C]/10 text-[#78716C]">{s.subfolder}</span>}
                     {s.expires_at && (
                       <span className={`text-xs px-1.5 py-0.5 flex items-center gap-1 ${isShareExpired(s) ? 'bg-[#9F1239]/10 text-[#9F1239]' : 'bg-[#78716C]/10 text-[#78716C]'}`}>
