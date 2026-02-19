@@ -72,6 +72,8 @@ export const deleteFile = (galleryId, fileId) =>
   apiClient.delete(`/admin/galleries/${galleryId}/files/${fileId}`);
 export const deleteSubfolder = (galleryId, subfolderName) =>
   apiClient.delete(`/admin/galleries/${galleryId}/subfolders/${encodeURIComponent(subfolderName)}`);
+export const setSubfolderCover = (galleryId, subfolderName, fileId) =>
+  apiClient.put(`/admin/galleries/${galleryId}/subfolders/${encodeURIComponent(subfolderName)}/cover`, { file_id: fileId });
 
 // Copy files to another subfolder (e.g. Album Favourites)
 export const copyToSubfolder = (galleryId, fileIds, targetSubfolder) =>
