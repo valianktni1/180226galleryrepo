@@ -43,13 +43,16 @@ export default function ShareView() {
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [submittingFavourites, setSubmittingFavourites] = useState(false);
+  const [showThankYou, setShowThankYou] = useState(false);
+  const [submittedCount, setSubmittedCount] = useState(0);
 
   const handleSubmitFavourites = async () => {
     if (favCount === 0) return;
     setSubmittingFavourites(true);
     try {
       const res = await submitFavouritesToAlbum(token);
-      toast.success(`${res.data.copied} photos added to Album Favourites!${res.data.already_existed > 0 ? ` (${res.data.already_existed} already existed)` : ''}`);
+      setSubmittedCount(res.data.copied);
+      setShowThankYou(true);
       // Refresh files to show updated Album Favourites
       loadFiles();
     } catch (err) {
