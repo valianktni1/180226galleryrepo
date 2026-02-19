@@ -1097,10 +1097,15 @@ async def toggle_share_favourite(token: str, data: FavouriteToggle, session=Depe
     return {"favourited": True}
 
 @api_router.post("/share/{token}/submit-favourites")
-async def submit_favourites_to_album(token: str, session=Depends(get_share_session)):
+async def submit_favourites_to_album(token: str, request: Request, session=Depends(get_share_session)):
     """Copy all favourited files to Album Favourites folder."""
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get client IP
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
     
     gallery_id = session["gallery_id"]
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
