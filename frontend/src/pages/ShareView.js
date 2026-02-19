@@ -711,11 +711,13 @@ function ThankYouModal({ show, onClose, count, galleryName }) {
           <h2 className="text-2xl font-semibold mb-3" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
             Thank You!
           </h2>
-          <p className="text-base mb-2" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>
+          <p className="text-base mb-4" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>
             Your {count} favourite {count === 1 ? 'photo has' : 'photos have'} been submitted for your wedding album.
           </p>
-          <p className="text-sm mb-6" style={{ fontFamily: 'Manrope, sans-serif', color: '#A8A29E' }}>
-            Please email <a href="mailto:mark@perfectweddingsbymark.uk" className="underline" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a> to confirm your choices and let me know your front cover selection.
+          <p className="text-sm mb-6 p-3 rounded-lg" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E', backgroundColor: '#FEF9E7' }}>
+            <strong>Guys... please don't forget!</strong><br />
+            Email Mark your chosen image number for your front cover at{' '}
+            <a href="mailto:mark@perfectweddingsbymark.uk" className="underline font-medium" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a>
           </p>
           <button
             onClick={onClose}
