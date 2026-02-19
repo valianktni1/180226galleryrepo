@@ -207,12 +207,13 @@ export default function AdminGalleryDetail() {
         access_level: shareForm.access_level,
         label: shareForm.label || null,
         expires_at: shareForm.expires_at || null,
-        custom_slug: shareForm.custom_slug || null
+        custom_slug: shareForm.custom_slug || null,
+        guest_upload_mode: shareForm.guest_upload_mode
       };
       await createShare(id, data);
       toast.success("Share link created");
       setShowShareDialog(false);
-      setShareForm({ subfolder: null, password: "", access_level: "download", label: "", expires_at: null, custom_slug: "" });
+      setShareForm({ subfolder: null, password: "", access_level: "download", label: "", expires_at: null, custom_slug: "", guest_upload_mode: false });
       loadGallery();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed");
