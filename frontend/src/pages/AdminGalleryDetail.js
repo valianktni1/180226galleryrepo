@@ -475,9 +475,11 @@ export default function AdminGalleryDetail() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {currentFiles.map((file, i) => (
+                  {currentFiles.map((file, i) => {
+                    const isCover = gallery.covers && gallery.covers[activeTab] === file.id;
+                    return (
                     <motion.div key={file.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(i * 0.01, 0.5) }}
-                      className={`photo-card relative group aspect-square ${selectMode ? 'cursor-pointer' : ''} ${selectedFiles.has(file.id) ? 'ring-2 ring-[#D4AF37]' : ''}`}
+                      className={`photo-card relative group aspect-square ${selectMode ? 'cursor-pointer' : ''} ${selectedFiles.has(file.id) ? 'ring-2 ring-[#D4AF37]' : ''} ${isCover ? 'ring-2 ring-amber-400' : ''}`}
                       data-testid={`file-${file.id}`}
                       onClick={selectMode ? () => toggleSelect(file.id) : undefined}>
                       {file.file_type === 'photo' && file.has_thumb ? (
@@ -487,6 +489,13 @@ export default function AdminGalleryDetail() {
                         <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
                           <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
                           <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+                        </div>
+                      )}
+                      {/* Cover indicator */}
+                      {isCover && (
+                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full flex items-center gap-1 text-xs font-medium" 
+                          style={{ backgroundColor: '#D4AF37', color: 'white' }}>
+                          <Star className="w-3 h-3" fill="white" /> Cover
                         </div>
                       )}
                       {/* Selection checkbox - always visible in select mode */}
@@ -502,6 +511,19 @@ export default function AdminGalleryDetail() {
                           <div className="photo-overlay" />
                           <div className="photo-actions flex items-center justify-between">
                             <div className="flex items-center gap-1">
+                              {file.file_type === 'photo' && !isCover && (
+                                <button data-testid={`set-cover-${file.id}`} onClick={async () => {
+                                    try {
+                                      await setSubfolderCover(gallery.id, activeTab, file.id);
+                                      toast.success('Cover image set');
+                                      loadGallery();
+                                    } catch { toast.error('Failed to set cover'); }
+                                  }}
+                                  className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}
+                                  title="Set as Cover">
+                                  <Star className="w-3.5 h-3.5 text-amber-500" />
+                                </button>
+                              )}
                               {file.file_type === 'video' && (
                                 <button data-testid={`download-video-${file.id}`} onClick={() => handleDownloadSingleFile(file)}
                                   className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
@@ -517,7 +539,7 @@ export default function AdminGalleryDetail() {
                         </>
                       )}
                     </motion.div>
-                  ))}
+                  )})}
                 </div>
               )}
             </TabsContent>
