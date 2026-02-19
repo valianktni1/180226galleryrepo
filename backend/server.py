@@ -530,6 +530,35 @@ async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get
     updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     return updated
 
+class SetCoverRequest(BaseModel):
+    file_id: str
+
+@api_router.put("/admin/galleries/{gallery_id}/subfolders/{subfolder_name}/cover")
+async def set_subfolder_cover(gallery_id: str, subfolder_name: str, data: SetCoverRequest, admin=Depends(get_admin)):
+    """Set a specific image as the cover for a subfolder."""
+    from urllib.parse import unquote
+    subfolder_name = unquote(subfolder_name)
+    
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    if subfolder_name not in gallery["subfolders"]:
+        raise HTTPException(status_code=404, detail="Subfolder not found")
+    
+    # Verify file exists
+    file = await db.files.find_one({"id": data.file_id, "gallery_id": gallery_id, "subfolder": subfolder_name}, {"_id": 0})
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Store cover in gallery document
+    covers = gallery.get("covers", {})
+    covers[subfolder_name] = data.file_id
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {"covers": covers, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True, "cover_file_id": data.file_id}
+
 @api_router.delete("/admin/galleries/{gallery_id}/subfolders/{subfolder_name}")
 async def delete_subfolder(gallery_id: str, subfolder_name: str, admin=Depends(get_admin)):
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
