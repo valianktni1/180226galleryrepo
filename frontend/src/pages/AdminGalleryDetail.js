@@ -634,6 +634,27 @@ export default function AdminGalleryDetail() {
                 ))}
               </div>
             </div>
+            {/* Guest Upload Mode - Only show when upload is enabled */}
+            {(shareForm.access_level === 'upload' || shareForm.access_level === 'full') && (
+              <div className="p-4 border rounded-sm" style={{ borderColor: '#D4AF37', backgroundColor: 'rgba(212,175,55,0.05)' }}>
+                <label className="flex items-start gap-3 cursor-pointer" data-testid="guest-upload-mode-toggle">
+                  <input
+                    type="checkbox"
+                    checked={shareForm.guest_upload_mode}
+                    onChange={(e) => setShareForm(f => ({...f, guest_upload_mode: e.target.checked}))}
+                    className="mt-1 w-4 h-4 rounded border-[#D4AF37] text-[#D4AF37] focus:ring-[#D4AF37]"
+                  />
+                  <div>
+                    <span className="block font-bold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                      Guest Upload Mode
+                    </span>
+                    <span className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                      Shows a simplified upload-only screen for wedding guests. No album browsing, no downloads - just a big upload button and a live counter.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Expiry Date (optional)</Label>
               <Popover open={expiryPickerOpen} onOpenChange={setExpiryPickerOpen}>
