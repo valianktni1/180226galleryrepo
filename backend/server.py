@@ -1034,7 +1034,7 @@ async def open_access_share(token: str, viewer_id: str = Query(None)):
         "token": token
     }, expires_hours=72)
     gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
-    return {"jwt": jwt_token, "gallery_name": gallery["folder_name"] if gallery else ""}
+    return {"jwt": jwt_token, "viewer_id": session_id, "gallery_name": gallery["folder_name"] if gallery else ""}
 
 @api_router.get("/share/{token}/files")
 async def get_share_files(token: str, session=Depends(get_share_session)):
