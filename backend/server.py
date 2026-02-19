@@ -1007,7 +1007,7 @@ async def access_share(token: str, body: ShareAccessBody = None):
     return {"jwt": jwt_token, "gallery_name": (await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0}))["folder_name"]}
 
 @api_router.get("/share/{token}/open-access")
-async def open_access_share(token: str):
+async def open_access_share(token: str, viewer_id: str = Query(None)):
     """For shares without password - get JWT directly."""
     share = await db.shares.find_one({"token": token}, {"_id": 0})
     if not share:
@@ -1016,7 +1016,10 @@ async def open_access_share(token: str):
         raise HTTPException(status_code=410, detail="This share link has expired")
     if share.get("has_password"):
         raise HTTPException(status_code=401, detail="Password required")
-    session_id = str(uuid.uuid4())
+    
+    # Use provided viewer_id or generate new one (for persistent favourites)
+    session_id = viewer_id if viewer_id else str(uuid.uuid4())
+    
     access_level = share.get("access_level", "download")
     jwt_token = create_jwt({
         "sub": session_id,
