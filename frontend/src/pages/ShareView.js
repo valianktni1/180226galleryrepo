@@ -682,3 +682,49 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
     </AnimatePresence>
   );
 }
+
+function ThankYouModal({ show, onClose, count, galleryName }) {
+  if (!show) return null;
+  
+  return (
+    <AnimatePresence>
+      <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          transition={{ type: 'spring', duration: 0.5 }}
+          className="bg-white rounded-lg p-8 max-w-md w-full text-center shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: '#D4AF37' }}>
+            <Heart className="w-8 h-8 text-white" fill="white" />
+          </div>
+          <h2 className="text-2xl font-semibold mb-3" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+            Thank You!
+          </h2>
+          <p className="text-base mb-2" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>
+            Your {count} favourite {count === 1 ? 'photo has' : 'photos have'} been submitted for your wedding album.
+          </p>
+          <p className="text-sm mb-6" style={{ fontFamily: 'Manrope, sans-serif', color: '#A8A29E' }}>
+            Please email <a href="mailto:mark@perfectweddingsbymark.uk" className="underline" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a> to confirm your choices and let me know your front cover selection.
+          </p>
+          <button
+            onClick={onClose}
+            className="px-8 py-3 rounded-sm text-sm font-medium tracking-wider transition-colors"
+            style={{ backgroundColor: '#D4AF37', color: 'white', fontFamily: 'Manrope, sans-serif' }}
+          >
+            Close
+          </button>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
