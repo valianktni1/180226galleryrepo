@@ -92,6 +92,7 @@ class ShareCreate(BaseModel):
     label: Optional[str] = None
     expires_at: Optional[str] = None  # ISO date string, None = never expires
     custom_slug: Optional[str] = None  # Custom URL slug like "ginamark301122"
+    guest_upload_mode: bool = False  # If True, shows simplified guest upload UI
 
 class FavouriteToggle(BaseModel):
     file_id: str
