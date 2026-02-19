@@ -15,8 +15,28 @@ import {
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload
 } from "@/lib/api";
+import GuestUploadView from "@/pages/GuestUploadView";
 
 export default function ShareView() {
+  const { token } = useParams();
+  const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+  const guestInputRef = useRef(null);
+
+  // Check if this is Guest Upload Mode
+  const isGuestUploadMode = localStorage.getItem(`guest_upload_mode_${token}`) === 'true';
+  const storedGalleryName = localStorage.getItem(`gallery_name_${token}`);
+
+  // If Guest Upload Mode, render the simplified view
+  if (isGuestUploadMode) {
+    return <GuestUploadView galleryName={storedGalleryName} />;
+  }
+
+  // Continue with normal ShareView
+  return <ShareViewFull />;
+}
+
+function ShareViewFull() {
   const { token } = useParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
