@@ -714,9 +714,18 @@ export default function AdminGalleryDetail() {
               <p className="text-sm font-medium break-all" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
                 {window.location.origin}/s/{showQR.token}
               </p>
-              <Button onClick={() => copyShareLink(showQR.token)} className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2">
-                <Copy className="w-3.5 h-3.5" /> Copy Link
-              </Button>
+              <div className="flex flex-col gap-2 w-full">
+                <Button onClick={() => copyShareLink(showQR.token)} className="w-full bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2">
+                  <Copy className="w-3.5 h-3.5" /> Copy Link
+                </Button>
+                <Button 
+                  data-testid="download-qr-frame-btn"
+                  onClick={() => window.open(getShareQRFrame(showQR.id), '_blank')} 
+                  variant="outline"
+                  className="w-full rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37]/10">
+                  <Download className="w-3.5 h-3.5" /> Download Printable QR Frame
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
