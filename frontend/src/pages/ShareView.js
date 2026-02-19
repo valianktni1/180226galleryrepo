@@ -65,6 +65,7 @@ export default function ShareView() {
       setGalleryName(res.data.gallery_name);
       setGalleryId(res.data.gallery_id);
       setSubfolders(res.data.subfolders);
+      setCovers(res.data.covers || {});
       setPermissions({
         allowUploads: res.data.allow_uploads,
         allowDownloads: res.data.allow_downloads,
