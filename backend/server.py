@@ -1543,6 +1543,27 @@ async def guest_upload(
     )
     return {"uploaded": uploaded, "count": len(uploaded)}
 
+@api_router.get("/share/{token}/guest-upload-count")
+async def get_guest_upload_count(token: str):
+    """Get the count of files uploaded by guests (for live counter in Guest Upload Mode)."""
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    if is_share_expired(share):
+        raise HTTPException(status_code=410, detail="This share link has expired")
+    
+    gallery_id = share["gallery_id"]
+    subfolder = share.get("subfolder") or "Guest Uploads"
+    
+    # Count files uploaded by guests in this subfolder
+    count = await db.files.count_documents({
+        "gallery_id": gallery_id,
+        "subfolder": subfolder,
+        "uploaded_by": "guest"
+    })
+    
+    return {"count": count}
+
 # ─── Guest Delete (via share with full access) ───
 class DeleteFilesRequest(BaseModel):
     file_ids: List[str]
