@@ -597,12 +597,12 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
         </div>
       )}
-      {/* Always visible heart button (top-right) - better for mobile */}
+      {/* Always visible heart button (bottom-left) - permanent overlay */}
       {!selectMode && (
         <button 
           data-testid={`fav-btn-${file.id}`} 
           onClick={e => { e.stopPropagation(); onFav(file.id); }}
-          className="absolute top-2 right-2 w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-transform active:scale-95"
+          className="absolute bottom-2 left-2 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 z-10"
           style={{ backgroundColor: file.is_favourite ? '#D4AF37' : 'rgba(255,255,255,0.95)' }}
         >
           <Heart className="w-5 h-5" fill={file.is_favourite ? 'white' : 'none'} stroke={file.is_favourite ? 'white' : '#1C1917'} />
