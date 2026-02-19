@@ -919,6 +919,103 @@ async def get_share_qr(share_id: str, base_url: str = Query(...), token: Optiona
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
+@api_router.get("/admin/shares/{share_id}/qr-frame")
+async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: Optional[str] = Query(None)):
+    """Generate elegant QR code frame with couple name and branding."""
+    # Verify admin token
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            if payload.get("role") != "admin":
+                raise HTTPException(status_code=403, detail="Admin access required")
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    else:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    share = await db.shares.find_one({"id": share_id}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    # Extract couple name from folder (e.g., "Gina & Mark 30.11.22" -> "GINA & MARK")
+    import re
+    folder_name = gallery["folder_name"]
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip().upper()
+    if not couple_name:
+        couple_name = folder_name.upper()
+    
+    share_url = f"{base_url}/s/{share['token']}"
+    
+    # Generate QR code
+    qr = qrcode.QRCode(version=1, box_size=12, border=2, error_correction=qrcode.constants.ERROR_CORRECT_H)
+    qr.add_data(share_url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="#1C1917", back_color="white").convert('RGBA')
+    
+    # Load the template
+    template_path = ROOT_DIR / "assets" / "qr_frame_template.png"
+    if not template_path.exists():
+        raise HTTPException(status_code=500, detail="QR frame template not found")
+    
+    from PIL import ImageDraw, ImageFont
+    template = Image.open(template_path).convert('RGBA')
+    
+    # Calculate QR code position (center of template)
+    template_width, template_height = template.size
+    
+    # The QR code should be placed in the golden frame area
+    # Based on the template, the QR area is roughly in the center
+    qr_target_size = int(min(template_width, template_height) * 0.32)
+    qr_img = qr_img.resize((qr_target_size, qr_target_size), Image.LANCZOS)
+    
+    # Center position for QR code
+    qr_x = (template_width - qr_target_size) // 2
+    qr_y = int(template_height * 0.38)  # Slightly above center
+    
+    # Paste QR code onto template
+    template.paste(qr_img, (qr_x, qr_y), qr_img)
+    
+    # Add couple name text at top
+    draw = ImageDraw.Draw(template)
+    
+    # Try to load a nice font, fall back to default
+    try:
+        # Try system fonts
+        font_size = int(template_width * 0.045)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", font_size)
+    except:
+        font = ImageFont.load_default()
+    
+    # Draw couple name centered near top
+    text_bbox = draw.textbbox((0, 0), couple_name, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_x = (template_width - text_width) // 2
+    text_y = int(template_height * 0.22)
+    draw.text((text_x, text_y), couple_name, fill="#1C1917", font=font)
+    
+    # Convert to RGB for JPEG output (smaller file size)
+    output = template.convert('RGB')
+    buf = io.BytesIO()
+    output.save(buf, format="PNG", quality=95)
+    buf.seek(0)
+    
+    # Set filename for download
+    safe_name = couple_name.replace(' ', '_').replace('&', 'and')
+    
+    return StreamingResponse(
+        buf, 
+        media_type="image/png",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}_QR_Code.png"'
+        }
+    )
+
 # ─── Media Serving ───
 @api_router.get("/media/thumb/{gallery_id}/{subfolder_slug}/{filename}")
 async def serve_thumb(gallery_id: str, subfolder_slug: str, filename: str):
