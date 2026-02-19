@@ -97,7 +97,8 @@ class FavouriteToggle(BaseModel):
     file_id: str
 
 class ShareAccessBody(BaseModel):
-    password: str
+    password: str = None
+    viewer_id: str = None
 
 class PasswordChange(BaseModel):
     current_password: str
