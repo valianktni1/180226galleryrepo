@@ -1198,6 +1198,7 @@ async def submit_favourites_to_album(token: str, request: Request, session=Depen
         "share_label": share.get("label", token) if share else token,
         "action": "favourites_submitted",
         "details": f"{copied} photos submitted for album",
+        "ip_address": client_ip,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
     
