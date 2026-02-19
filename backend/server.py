@@ -849,6 +849,7 @@ async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_adm
         "has_password": hashed_pw is not None,
         "access_level": data.access_level,
         "allow_uploads": data.access_level in ("upload", "full"),
+        "guest_upload_mode": data.guest_upload_mode,  # Simplified upload-only UI
         "label": data.label or (data.subfolder or gallery["folder_name"]),
         "expires_at": data.expires_at,  # ISO date string or None
         "is_active": True,
