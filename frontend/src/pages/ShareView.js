@@ -473,6 +473,7 @@ export default function ShareView() {
         <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
           setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
           galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} />
+        <ThankYouModal show={showThankYou} onClose={() => setShowThankYou(false)} count={submittedCount} galleryName={galleryName} />
       </div>
     );
   }
