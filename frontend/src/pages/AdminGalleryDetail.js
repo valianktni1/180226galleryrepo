@@ -22,11 +22,11 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock
+  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
-  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, thumbUrl
+  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, thumbUrl, setSubfolderCover
 } from "@/lib/api";
 
 export default function AdminGalleryDetail() {
