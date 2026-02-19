@@ -59,6 +59,10 @@ export default function ShareAccess() {
       const res = await accessShare(token, password);
       localStorage.setItem("share_token", res.data.jwt);
       localStorage.setItem("share_url_token", token);
+      // Store viewer_id for persistent favourites
+      if (res.data.viewer_id) {
+        localStorage.setItem(`viewer_id_${token}`, res.data.viewer_id);
+      }
       navigate(`/s/${token}/view`);
     } catch (err) {
       if (err.response?.status === 410) {
