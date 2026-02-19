@@ -197,6 +197,10 @@ export const trackGalleryView = (token) =>
 export const trackDownload = (token) =>
   apiClient.post(`/share/${token}/track-download`).catch(() => {});
 
+// Guest Upload Mode - get upload count
+export const getGuestUploadCount = (token) =>
+  apiClient.get(`/share/${token}/guest-upload-count`);
+
 // Media URL helpers
 export const thumbUrl = (galleryId, subfolder, filename) => {
   const stem = filename.replace(/\.[^/.]+$/, '');
