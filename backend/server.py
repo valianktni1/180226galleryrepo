@@ -1663,11 +1663,16 @@ async def get_my_print_orders(token: str, session=Depends(get_share_session)):
 
 # ─── Activity Tracking ───
 @api_router.post("/share/{token}/track-view")
-async def track_gallery_view(token: str):
+async def track_gallery_view(token: str, request: Request):
     """Track when a gallery is viewed."""
     share = await db.shares.find_one({"token": token}, {"_id": 0})
     if not share:
         return {"ok": False}
+    
+    # Get client IP
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
     
     gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
     gallery_name = gallery.get("folder_name", "Unknown") if gallery else "Unknown"
@@ -1691,13 +1696,14 @@ async def track_gallery_view(token: str):
         "share_label": share.get("label", token),
         "action": "view",
         "details": "Gallery viewed",
+        "ip_address": client_ip,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
     
     return {"ok": True}
 
 @api_router.post("/share/{token}/track-download")
-async def track_download(token: str, session=Depends(get_share_session)):
+async def track_download(token: str, request: Request, session=Depends(get_share_session)):
     """Track when files are downloaded."""
     if session.get("token") != token:
         return {"ok": False}
