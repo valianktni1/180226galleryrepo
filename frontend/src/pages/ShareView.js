@@ -716,7 +716,7 @@ function ThankYouModal({ show, onClose, count, galleryName }) {
           </p>
           <p className="text-sm mb-6 p-3 rounded-lg" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E', backgroundColor: '#FEF9E7' }}>
             <strong>Guys... please don't forget!</strong><br />
-            Email Mark your chosen image number for your front cover at{' '}
+            Email Mark your chosen image for your front cover at{' '}
             <a href="mailto:mark@perfectweddingsbymark.uk" className="underline font-medium" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a>
           </p>
           <button
