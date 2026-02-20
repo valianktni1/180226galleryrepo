@@ -255,10 +255,10 @@ function ShareViewFull() {
             <div className="flex items-center gap-3">
               <img src="/logo.png" alt="Weddings By Mark" className="h-8" style={{ filter: 'invert(1)' }} />
             </div>
-            <div className="flex items-center gap-2">
-              <Button data-testid="order-prints-btn" variant="ghost" onClick={() => navigate(`/s/${token}/prints`)}
-                className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
-                <Printer className="w-3.5 h-3.5" /> Order Prints
+            <div className="flex items-center gap-3">
+              <Button data-testid="order-prints-btn" onClick={() => navigate(`/s/${token}/prints`)}
+                className="bg-[#D4AF37] hover:bg-[#B8962E] text-white rounded-sm gap-2 text-xs tracking-wider uppercase font-bold px-4 py-2 shadow-md">
+                <Printer className="w-4 h-4" /> Order Prints
               </Button>
               {favCount > 0 && (
                 <Button data-testid="show-favourites-landing" variant="ghost" onClick={() => setShowFavourites(true)}
