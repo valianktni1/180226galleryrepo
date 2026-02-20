@@ -96,6 +96,10 @@ export const adminDownloadFile = (galleryId, fileId) => {
   });
 };
 
+// Backup
+export const runBackup = () =>
+  apiClient.post('/admin/backup');
+
 // Shares
 export const createShare = (galleryId, data) =>
   apiClient.post(`/admin/galleries/${galleryId}/shares`, data);
