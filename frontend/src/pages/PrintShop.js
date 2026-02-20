@@ -312,7 +312,21 @@ export default function PrintShop() {
                     <Input type="email" value={email} onChange={e => setEmail(e.target.value)}
                       placeholder="your@email.com" className="border-[#D4D4D8] rounded-sm" />
                   </div>
-                  <Button onClick={handleCheckout} disabled={submitting} className="w-full bg-[#1C1917] text-[#FDFCF8] rounded-sm">
+                  {subtotal < MINIMUM_ORDER && cart.length > 0 && (
+                    <div className="p-3 rounded-sm text-center" style={{ backgroundColor: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)' }}>
+                      <p className="text-sm font-medium" style={{ color: '#92400E' }}>
+                        Minimum order: £{MINIMUM_ORDER.toFixed(2)}
+                      </p>
+                      <p className="text-xs" style={{ color: '#A8A29E' }}>
+                        Add £{(MINIMUM_ORDER - subtotal).toFixed(2)} more to checkout
+                      </p>
+                    </div>
+                  )}
+                  <Button 
+                    onClick={handleCheckout} 
+                    disabled={submitting || subtotal < MINIMUM_ORDER} 
+                    className={`w-full rounded-sm ${subtotal >= MINIMUM_ORDER ? 'bg-[#1C1917] text-[#FDFCF8]' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                  >
                     {submitting ? "Processing..." : "Checkout with PayPal"}
                   </Button>
                   <p className="text-xs text-center text-[#A8A29E]">
