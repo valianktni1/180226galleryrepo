@@ -19,6 +19,8 @@ export default function PrintShop() {
   const { token } = useParams();
   const navigate = useNavigate();
   
+  const MINIMUM_ORDER = 15.00; // Minimum order value in GBP
+  
   const [galleryName, setGalleryName] = useState("");
   const [galleryId, setGalleryId] = useState(null);
   const [files, setFiles] = useState([]);
