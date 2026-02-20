@@ -130,6 +130,9 @@ export default function AdminDashboard() {
             <img src="/logo.png" alt="Weddings By Mark" className="h-8" style={{ filter: 'invert(1)' }} />
           </div>
           <div className="flex items-center gap-2">
+            <Button data-testid="backup-btn" variant="ghost" onClick={handleBackup} disabled={backingUp} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+              <HardDrive className={`w-4 h-4 ${backingUp ? 'animate-pulse' : ''}`} /> {backingUp ? 'Backing up...' : 'Backup'}
+            </Button>
             <Button data-testid="manage-templates-btn" variant="ghost" onClick={() => setShowTemplates(true)} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Layout className="w-4 h-4" /> Templates
             </Button>
