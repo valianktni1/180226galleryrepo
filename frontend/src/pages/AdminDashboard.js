@@ -30,6 +30,7 @@ export default function AdminDashboard() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ folder_name: "", template_id: "" });
   const [newTemplate, setNewTemplate] = useState({ name: "", subfolders: "" });
+  const [backingUp, setBackingUp] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +48,18 @@ export default function AdminDashboard() {
     if (!localStorage.getItem("admin_token")) { navigate("/admin"); return; }
     load();
   }, [navigate, load]);
+
+  const handleBackup = async () => {
+    setBackingUp(true);
+    try {
+      const res = await runBackup();
+      toast.success(res.data.message);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Backup failed");
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
