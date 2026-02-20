@@ -1904,6 +1904,69 @@ async def get_gallery_stats(gallery_id: str, admin=Depends(get_admin)):
         "daily_activity": activity
     }
 
+# ─── Backup Endpoint ───
+BACKUP_DIR = Path(os.environ.get('BACKUP_DIR', '/backup'))
+
+@api_router.post("/admin/backup")
+async def run_backup(admin=Depends(get_admin)):
+    """Run incremental backup of all galleries to the backup directory."""
+    if not BACKUP_DIR.exists():
+        raise HTTPException(status_code=500, detail="Backup directory not configured or not accessible")
+    
+    stats = {"copied": 0, "skipped": 0, "errors": [], "galleries": 0}
+    
+    try:
+        # Iterate through all gallery folders in UPLOAD_DIR
+        for gallery_folder in UPLOAD_DIR.iterdir():
+            if not gallery_folder.is_dir():
+                continue
+            
+            stats["galleries"] += 1
+            backup_gallery_path = BACKUP_DIR / gallery_folder.name
+            backup_gallery_path.mkdir(parents=True, exist_ok=True)
+            
+            # Walk through all subfolders and files
+            for src_path in gallery_folder.rglob("*"):
+                if src_path.is_file():
+                    # Skip thumbnail/preview files
+                    if '.thumb.' in src_path.name or '.preview.' in src_path.name:
+                        continue
+                    
+                    # Calculate relative path and destination
+                    rel_path = src_path.relative_to(gallery_folder)
+                    dst_path = backup_gallery_path / rel_path
+                    
+                    # Create parent directories if needed
+                    dst_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Check if file needs copying (incremental logic)
+                    needs_copy = False
+                    if not dst_path.exists():
+                        needs_copy = True
+                    else:
+                        # Compare modification time and size
+                        src_stat = src_path.stat()
+                        dst_stat = dst_path.stat()
+                        if src_stat.st_size != dst_stat.st_size or src_stat.st_mtime > dst_stat.st_mtime:
+                            needs_copy = True
+                    
+                    if needs_copy:
+                        try:
+                            shutil.copy2(src_path, dst_path)  # copy2 preserves metadata
+                            stats["copied"] += 1
+                        except Exception as e:
+                            stats["errors"].append(f"{src_path.name}: {str(e)}")
+                    else:
+                        stats["skipped"] += 1
+        
+        return {
+            "success": True,
+            "message": f"Backup complete. {stats['copied']} files copied, {stats['skipped']} unchanged.",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
+
 app.include_router(api_router)
 
 app.add_middleware(
