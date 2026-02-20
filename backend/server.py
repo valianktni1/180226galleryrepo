@@ -969,14 +969,13 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
     # Calculate QR code position (center of template)
     template_width, template_height = template.size
     
-    # The QR code should be placed in the golden frame area
-    # Based on the template, the QR area is roughly in the center
-    qr_target_size = int(min(template_width, template_height) * 0.32)
+    # The QR code should be placed centered in the golden frame area
+    qr_target_size = int(min(template_width, template_height) * 0.30)
     qr_img = qr_img.resize((qr_target_size, qr_target_size), Image.LANCZOS)
     
-    # Center position for QR code
+    # Center position for QR code - centered both horizontally and vertically in the frame
     qr_x = (template_width - qr_target_size) // 2
-    qr_y = int(template_height * 0.38)  # Slightly above center
+    qr_y = (template_height - qr_target_size) // 2  # True center
     
     # Paste QR code onto template
     template.paste(qr_img, (qr_x, qr_y), qr_img)
