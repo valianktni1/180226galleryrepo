@@ -124,6 +124,10 @@ export default function PrintShop() {
       toast.error("Your cart is empty");
       return;
     }
+    if (subtotal < MINIMUM_ORDER) {
+      toast.error(`Minimum order is £${MINIMUM_ORDER.toFixed(2)} (excluding shipping)`);
+      return;
+    }
 
     setSubmitting(true);
     try {
