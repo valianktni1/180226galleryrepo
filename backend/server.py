@@ -996,7 +996,7 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
     text_bbox = draw.textbbox((0, 0), couple_name, font=font)
     text_width = text_bbox[2] - text_bbox[0]
     text_x = (template_width - text_width) // 2
-    text_y = int(template_height * 0.22)
+    text_y = int(template_height * 0.15)  # Position at top of frame
     draw.text((text_x, text_y), couple_name, fill="#1C1917", font=font)
     
     # Convert to RGB for JPEG output (smaller file size)
