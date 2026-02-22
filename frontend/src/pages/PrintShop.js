@@ -18,6 +18,7 @@ import {
 export default function PrintShop() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const cartRef = React.useRef(null);
   
   const MINIMUM_ORDER = 15.00; // Minimum order value in GBP
   
