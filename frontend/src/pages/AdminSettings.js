@@ -13,11 +13,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Key, Package, Plus, Pencil, Trash2, Printer, Eye, Check
+  ArrowLeft, Key, Package, Plus, Pencil, Trash2, Printer, Eye, Check, Film
 } from "lucide-react";
 import {
   changePassword, getPrintSizes, createPrintSize, updatePrintSize, deletePrintSize,
-  getPrintOrders, updateOrderStatus
+  getPrintOrders, updateOrderStatus, getCompressionSetting, setCompressionSetting
 } from "@/lib/api";
 
 export default function AdminSettings() {
