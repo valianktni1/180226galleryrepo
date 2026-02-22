@@ -349,6 +349,19 @@ export default function PrintShop() {
           </div>
         </div>
       </div>
+
+      {/* Floating Cart Button for Mobile */}
+      {cart.length > 0 && (
+        <button 
+          onClick={scrollToCart}
+          className="lg:hidden fixed bottom-6 right-6 bg-[#D4AF37] text-white px-5 py-3 rounded-full shadow-lg flex items-center gap-2 z-50"
+          data-testid="floating-cart-btn"
+        >
+          <ShoppingCart className="w-5 h-5" />
+          <span className="font-bold">{cart.length}</span>
+          <span className="text-sm">• £{subtotal.toFixed(2)}</span>
+        </button>
+      )}
     </div>
   );
 }
