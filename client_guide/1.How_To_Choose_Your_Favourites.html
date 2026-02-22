@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How To Choose Your Favourites - Weddings By Mark</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Manrope', sans-serif;
+            background: #FDFCF8;
+            color: #1C1917;
+            line-height: 1.6;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid #D4AF37;
+        }
+        
+        .brand {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 28px;
+            font-style: italic;
+            color: #1C1917;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 36px;
+            font-weight: 500;
+            color: #1C1917;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 14px;
+            color: #57534E;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .intro {
+            background: linear-gradient(135deg, rgba(212,175,55,0.08) 0%, rgba(212,175,55,0.03) 100%);
+            border: 1px solid rgba(212,175,55,0.2);
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+        
+        .intro p {
+            font-size: 16px;
+            color: #57534E;
+        }
+        
+        .step {
+            display: flex;
+            gap: 25px;
+            margin-bottom: 35px;
+            align-items: flex-start;
+        }
+        
+        .step-number {
+            flex-shrink: 0;
+            width: 50px;
+            height: 50px;
+            background: #D4AF37;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-content h2 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 22px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #1C1917;
+        }
+        
+        .step-content p {
+            font-size: 15px;
+            color: #57534E;
+            margin-bottom: 10px;
+        }
+        
+        .tip {
+            background: #F5F2EB;
+            border-left: 3px solid #D4AF37;
+            padding: 12px 15px;
+            margin-top: 12px;
+            font-size: 14px;
+            color: #57534E;
+        }
+        
+        .tip strong {
+            color: #1C1917;
+        }
+        
+        .icon-heart {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            background: #D4AF37;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/%3E%3C/svg%3E") center/contain no-repeat;
+            vertical-align: middle;
+            margin: 0 3px;
+        }
+        
+        .summary-box {
+            background: #1C1917;
+            color: #FDFCF8;
+            border-radius: 8px;
+            padding: 30px;
+            margin-top: 40px;
+            text-align: center;
+        }
+        
+        .summary-box h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 15px;
+            color: #D4AF37;
+        }
+        
+        .summary-box p {
+            font-size: 15px;
+            opacity: 0.9;
+        }
+        
+        .summary-steps {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .summary-step {
+            text-align: center;
+        }
+        
+        .summary-step .num {
+            width: 30px;
+            height: 30px;
+            background: #D4AF37;
+            color: #1C1917;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            margin: 0 auto 8px;
+        }
+        
+        .summary-step span {
+            font-size: 13px;
+            display: block;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(212,175,55,0.2);
+        }
+        
+        .footer p {
+            font-size: 14px;
+            color: #A8A29E;
+        }
+        
+        .footer .brand-footer {
+            font-family: 'Cormorant Garamond', serif;
+            font-style: italic;
+            font-size: 20px;
+            color: #1C1917;
+            margin-top: 15px;
+        }
+        
+        @media print {
+            body {
+                padding: 20px;
+            }
+            .step {
+                page-break-inside: avoid;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            body {
+                padding: 25px;
+            }
+            .step {
+                flex-direction: column;
+                gap: 15px;
+            }
+            .summary-steps {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="brand">Weddings By Mark</div>
+        <h1>How To Choose Your Favourites</h1>
+        <p class="subtitle">Your Simple Guide to Selecting Album Photos</p>
+    </div>
+    
+    <div class="intro">
+        <p>Congratulations on your wedding! Your gallery is now ready for you to browse. 
+        This guide will show you how to select your favourite photos for your album. 
+        Take your time, enjoy reliving the memories, and don't worry - you can change your selections at any time!</p>
+    </div>
+    
+    <div class="steps">
+        <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <h2>Browse Your Gallery</h2>
+                <p>Click on any album folder (e.g., "Wedding Images", "Ceremony", "Reception") to view your photos. 
+                You can click on any photo to see it larger, and use the arrows to move between images.</p>
+                <div class="tip">
+                    <strong>Tip:</strong> Take your time! There's no rush. You can come back as many times as you like.
+                </div>
+            </div>
+        </div>
+        
+        <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <h2>Heart Your Favourites</h2>
+                <p>When you see a photo you love, simply tap the <span class="icon-heart"></span> heart icon on the image. 
+                The heart will turn gold to show it's been added to your favourites. 
+                To remove a photo from your favourites, just tap the heart again.</p>
+                <div class="tip">
+                    <strong>Tip:</strong> You can favourite photos from the thumbnail view or when viewing a photo full-screen.
+                </div>
+            </div>
+        </div>
+        
+        <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <h2>Review Your Selections</h2>
+                <p>Click the "Favourites" button at the top of the page to see all the photos you've selected. 
+                This lets you review your choices in one place. You'll see a count showing how many photos you've chosen.</p>
+                <div class="tip">
+                    <strong>Tip:</strong> Your favourites are automatically saved - even if you close the browser and come back later!
+                </div>
+            </div>
+        </div>
+        
+        <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <h2>Submit for Your Album</h2>
+                <p>Once you're happy with your selections, click the "Submit for Album" button. 
+                Your chosen photos will be sent to me, and I'll use them to create your beautiful wedding album.</p>
+                <div class="tip">
+                    <strong>Tip:</strong> You can submit your favourites multiple times if you change your mind - I'll always use your most recent selection.
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="summary-box">
+        <h3>Quick Summary</h3>
+        <p>Just four simple steps to choose your album photos:</p>
+        <div class="summary-steps">
+            <div class="summary-step">
+                <div class="num">1</div>
+                <span>Browse</span>
+            </div>
+            <div class="summary-step">
+                <div class="num">2</div>
+                <span>Heart</span>
+            </div>
+            <div class="summary-step">
+                <div class="num">3</div>
+                <span>Review</span>
+            </div>
+            <div class="summary-step">
+                <div class="num">4</div>
+                <span>Submit</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>Need help? Just get in touch and I'll be happy to assist.</p>
+        <div class="brand-footer">Weddings By Mark</div>
+    </div>
+</body>
+</html>
