@@ -75,6 +75,30 @@ export default function AdminSettings() {
     finally { setLoadingOrders(false); }
   };
 
+  const loadCompressionSetting = async () => {
+    setLoadingCompression(true);
+    try {
+      const res = await getCompressionSetting();
+      setCompressionEnabled(res.data.enabled);
+      setCompressionThreshold(res.data.threshold_mb);
+    } catch { toast.error("Failed to load compression settings"); }
+    finally { setLoadingCompression(false); }
+  };
+
+  const handleToggleCompression = async () => {
+    setTogglingCompression(true);
+    try {
+      const newValue = !compressionEnabled;
+      await setCompressionSetting(newValue);
+      setCompressionEnabled(newValue);
+      toast.success(`Video compression ${newValue ? 'enabled' : 'disabled'}`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to update setting");
+    } finally {
+      setTogglingCompression(false);
+    }
+  };
+
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     if (passwordForm.new_password !== passwordForm.confirm_password) {
