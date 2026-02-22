@@ -252,9 +252,12 @@ export default function PrintShop() {
             </div>
           ) : (
             <>
-              <p className="text-sm text-[#57534E] mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                Select a photo, choose size and finish, then add to cart
-              </p>
+              <div className="mb-4 p-3 rounded-sm flex items-center gap-3" style={{ backgroundColor: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.2)' }}>
+                <Printer className="w-5 h-5 text-[#D4AF37] flex-shrink-0" />
+                <p className="text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                  <strong>Minimum order: £{MINIMUM_ORDER.toFixed(2)}</strong> — Select your photos, choose size and finish, then add to cart.
+                </p>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {files.map(file => (
                   <PhotoCard key={file.id} file={file} galleryId={galleryId} printSizes={printSizes} onAdd={addToCart} />
