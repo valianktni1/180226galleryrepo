@@ -1500,6 +1500,9 @@ async def guest_upload(
     subfolder = session.get("subfolder") or "Guest Uploads"
     target_dir = get_gallery_path(gallery["folder_name"]) / subfolder
     target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check if compression is enabled
+    compression_enabled = await get_compression_setting()
 
     uploaded = []
     for file in files:
@@ -1534,6 +1537,16 @@ async def guest_upload(
         }
         await db.files.insert_one(file_doc)
         uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
+        
+        # Schedule background compression for large guest videos if enabled
+        if compression_enabled and file_type == "video" and len(content) > VIDEO_COMPRESSION_SIZE_THRESHOLD:
+            # Run compression in background thread
+            thumbnail_executor.submit(
+                compress_guest_video_background,
+                file_path,
+                file_doc["id"],
+                gallery_id
+            )
 
     count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": subfolder})
     await db.galleries.update_one(
