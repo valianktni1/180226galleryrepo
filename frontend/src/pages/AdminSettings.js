@@ -266,6 +266,81 @@ export default function AdminSettings() {
           </motion.div>
         )}
 
+        {/* Video Compression Tab */}
+        {activeTab === "video" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
+            {loadingCompression ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Main Toggle */}
+                <div className="border rounded-sm p-6" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-medium mb-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                        Guest Video Compression
+                      </h3>
+                      <p className="text-sm text-[#57534E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                        Automatically compress large videos uploaded by wedding guests to save storage space.
+                        Videos over {compressionThreshold}MB will be compressed in the background.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleToggleCompression}
+                      disabled={togglingCompression}
+                      data-testid="toggle-compression-btn"
+                      className={`px-6 py-2 rounded-sm text-xs tracking-wider uppercase font-bold ${
+                        compressionEnabled 
+                          ? 'bg-green-600 hover:bg-green-700 text-white' 
+                          : 'bg-[#1C1917] hover:bg-[#1C1917]/90 text-[#FDFCF8]'
+                      }`}
+                    >
+                      {togglingCompression ? "..." : compressionEnabled ? "ON" : "OFF"}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Info Cards */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                    <Film className="w-6 h-6 text-[#D4AF37] mb-2" />
+                    <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>How it works</h4>
+                    <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                      <li>• Guest uploads video normally</li>
+                      <li>• If over {compressionThreshold}MB, compression starts in background</li>
+                      <li>• Uses high-quality H.264 encoding (visually lossless)</li>
+                      <li>• Typically saves 50-70% storage space</li>
+                    </ul>
+                  </div>
+                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                    <Check className="w-6 h-6 text-green-600 mb-2" />
+                    <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>What's protected</h4>
+                    <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                      <li>• Your professional uploads are NEVER compressed</li>
+                      <li>• Only affects new guest uploads</li>
+                      <li>• Existing videos unchanged</li>
+                      <li>• Original kept until compression verified</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Status Indicator */}
+                <div className={`border rounded-sm p-4 flex items-center gap-3 ${compressionEnabled ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className={`w-3 h-3 rounded-full ${compressionEnabled ? 'bg-green-500' : 'bg-gray-400'}`} />
+                  <span className="text-sm font-medium" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    {compressionEnabled 
+                      ? `Active — Videos over ${compressionThreshold}MB will be automatically compressed`
+                      : 'Disabled — Guest videos will be stored at original size'
+                    }
+                  </span>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {/* Print Sizes Tab */}
         {activeTab === "print-sizes" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
