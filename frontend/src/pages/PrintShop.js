@@ -268,7 +268,7 @@ export default function PrintShop() {
         </div>
 
         {/* Cart Sidebar */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1" ref={cartRef}>
           <div className="sticky top-24 border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
             <h2 className="text-lg font-medium mb-4" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Your Cart</h2>
             
