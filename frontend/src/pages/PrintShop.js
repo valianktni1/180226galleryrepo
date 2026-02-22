@@ -232,8 +232,11 @@ export default function PrintShop() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ShoppingCart className="w-4 h-4 text-[#57534E]" />
-            <span className="text-sm font-medium">{cart.length} items</span>
+            <button onClick={scrollToCart} className="flex items-center gap-2 hover:bg-[#F5F2EB] px-3 py-2 rounded-sm transition-colors" data-testid="cart-header-btn">
+              <ShoppingCart className="w-4 h-4 text-[#57534E]" />
+              <span className="text-sm font-medium">{cart.length} items</span>
+              {cart.length > 0 && <span className="text-sm font-bold text-[#D4AF37]">£{subtotal.toFixed(2)}</span>}
+            </button>
           </div>
         </div>
       </header>
