@@ -1967,6 +1967,124 @@ async def run_backup(admin=Depends(get_admin)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
 
+# ─── Video Compression Settings ───
+VIDEO_COMPRESSION_SIZE_THRESHOLD = 200 * 1024 * 1024  # 200MB in bytes
+
+async def get_compression_setting():
+    """Get video compression enabled setting from DB."""
+    setting = await db.settings.find_one({"key": "guest_video_compression"}, {"_id": 0})
+    return setting.get("enabled", False) if setting else False
+
+async def set_compression_setting(enabled: bool):
+    """Set video compression enabled setting in DB."""
+    await db.settings.update_one(
+        {"key": "guest_video_compression"},
+        {"$set": {"key": "guest_video_compression", "enabled": enabled}},
+        upsert=True
+    )
+
+def compress_video_ffmpeg(input_path: Path, output_path: Path) -> bool:
+    """
+    Compress video using FFmpeg with high-quality settings.
+    Returns True if successful, False otherwise.
+    Uses H.264 codec with CRF 23 (visually lossless) and same resolution.
+    """
+    try:
+        cmd = [
+            'ffmpeg', '-y', '-i', str(input_path),
+            '-c:v', 'libx264',      # H.264 codec (universal compatibility)
+            '-crf', '23',           # Quality setting (18-23 is visually lossless)
+            '-preset', 'medium',    # Balance between speed and compression
+            '-c:a', 'aac',          # Audio codec
+            '-b:a', '128k',         # Audio bitrate
+            '-movflags', '+faststart',  # Enable streaming
+            str(output_path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=600)  # 10 min timeout
+        return result.returncode == 0
+    except Exception as e:
+        logger.error(f"Video compression failed: {e}")
+        return False
+
+def compress_guest_video_background(file_path: Path, file_id: str, gallery_id: str):
+    """
+    Background task to compress a guest video if it exceeds threshold.
+    Keeps original until compression is verified, then replaces.
+    """
+    import asyncio
+    
+    try:
+        file_size = file_path.stat().st_size
+        if file_size < VIDEO_COMPRESSION_SIZE_THRESHOLD:
+            logger.info(f"Video {file_path.name} is under 200MB, skipping compression")
+            return
+        
+        logger.info(f"Starting compression for {file_path.name} ({file_size / 1024 / 1024:.1f}MB)")
+        
+        # Create temp output path
+        temp_output = file_path.with_suffix('.compressed.mp4')
+        
+        # Compress
+        success = compress_video_ffmpeg(file_path, temp_output)
+        
+        if success and temp_output.exists():
+            new_size = temp_output.stat().st_size
+            
+            # Only replace if we actually saved space
+            if new_size < file_size:
+                # Backup original just in case
+                backup_path = file_path.with_suffix('.original' + file_path.suffix)
+                shutil.move(str(file_path), str(backup_path))
+                
+                # Move compressed to original location
+                shutil.move(str(temp_output), str(file_path))
+                
+                # Update file size in database
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(
+                    db.files.update_one(
+                        {"id": file_id},
+                        {"$set": {
+                            "file_size": new_size,
+                            "compressed": True,
+                            "original_size": file_size
+                        }}
+                    )
+                )
+                loop.close()
+                
+                # Remove backup after successful update
+                backup_path.unlink(missing_ok=True)
+                
+                savings = ((file_size - new_size) / file_size) * 100
+                logger.info(f"Compressed {file_path.name}: {file_size/1024/1024:.1f}MB → {new_size/1024/1024:.1f}MB ({savings:.1f}% smaller)")
+            else:
+                # Compression didn't help, remove temp file
+                temp_output.unlink(missing_ok=True)
+                logger.info(f"Compression didn't reduce size for {file_path.name}, keeping original")
+        else:
+            # Compression failed, clean up
+            if temp_output.exists():
+                temp_output.unlink()
+            logger.warning(f"Compression failed for {file_path.name}, keeping original")
+            
+    except Exception as e:
+        logger.error(f"Error in compression background task: {e}")
+
+@api_router.get("/admin/settings/compression")
+async def get_compression_status(admin=Depends(get_admin)):
+    """Get current video compression setting."""
+    enabled = await get_compression_setting()
+    return {"enabled": enabled, "threshold_mb": VIDEO_COMPRESSION_SIZE_THRESHOLD / 1024 / 1024}
+
+@api_router.post("/admin/settings/compression")
+async def toggle_compression(enabled: bool = Query(...), admin=Depends(get_admin)):
+    """Enable or disable guest video compression."""
+    await set_compression_setting(enabled)
+    status = "enabled" if enabled else "disabled"
+    return {"success": True, "message": f"Guest video compression {status}", "enabled": enabled}
+
 app.include_router(api_router)
 
 app.add_middleware(
