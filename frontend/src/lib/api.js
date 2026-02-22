@@ -100,6 +100,12 @@ export const adminDownloadFile = (galleryId, fileId) => {
 export const runBackup = () =>
   apiClient.post('/admin/backup');
 
+// Video Compression Settings
+export const getCompressionSetting = () =>
+  apiClient.get('/admin/settings/compression');
+export const setCompressionSetting = (enabled) =>
+  apiClient.post(`/admin/settings/compression?enabled=${enabled}`);
+
 // Shares
 export const createShare = (galleryId, data) =>
   apiClient.post(`/admin/galleries/${galleryId}/shares`, data);
