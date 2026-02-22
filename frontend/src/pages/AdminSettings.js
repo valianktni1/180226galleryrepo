@@ -215,9 +215,10 @@ export default function AdminSettings() {
 
       <main className="max-w-screen-xl mx-auto px-6 py-8">
         {/* Tabs */}
-        <div className="flex gap-2 mb-8 border-b" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+        <div className="flex gap-2 mb-8 border-b flex-wrap" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
           {[
             { id: "password", label: "Change Password", icon: Key },
+            { id: "video", label: "Video Compression", icon: Film },
             { id: "print-sizes", label: "Print Sizes & Prices", icon: Printer },
             { id: "orders", label: "Print Orders", icon: Package }
           ].map(tab => (
