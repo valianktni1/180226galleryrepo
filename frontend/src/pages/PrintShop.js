@@ -113,6 +113,10 @@ export default function PrintShop() {
     setCart(cart.filter((_, i) => i !== index));
   };
 
+  const scrollToCart = () => {
+    cartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const subtotal = cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
   const total = subtotal + (cart.length > 0 ? shippingCost : 0);
 
