@@ -45,9 +45,16 @@ export default function AdminSettings() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
 
+  // Video compression
+  const [compressionEnabled, setCompressionEnabled] = useState(false);
+  const [compressionThreshold, setCompressionThreshold] = useState(200);
+  const [loadingCompression, setLoadingCompression] = useState(false);
+  const [togglingCompression, setTogglingCompression] = useState(false);
+
   useEffect(() => {
     if (activeTab === "print-sizes") loadPrintSizes();
     if (activeTab === "orders") loadOrders();
+    if (activeTab === "video") loadCompressionSetting();
   }, [activeTab]);
 
   const loadPrintSizes = async () => {
