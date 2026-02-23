@@ -124,7 +124,7 @@ export default function GuestUploadView({ galleryName }) {
               style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}
               data-testid="guest-upload-title"
             >
-              Share your photos from<br />{coupleName}'s wedding!
+              Share your photos & videos from<br />{coupleName}'s wedding!
             </h1>
             <p className="text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
               Help capture every special moment by uploading your photos and videos
