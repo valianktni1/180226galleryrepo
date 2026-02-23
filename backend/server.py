@@ -1557,7 +1557,12 @@ async def guest_upload(
         {"id": gallery_id},
         {"$set": {f"file_counts.{subfolder}": count}}
     )
-    return {"uploaded": uploaded, "count": len(uploaded)}
+    
+    result = {"uploaded": uploaded, "count": len(uploaded)}
+    if skipped_too_large:
+        result["skipped"] = skipped_too_large
+        result["message"] = f"{len(skipped_too_large)} file(s) exceeded 500MB limit and were not uploaded"
+    return result
 
 @api_router.get("/share/{token}/guest-upload-count")
 async def get_guest_upload_count(token: str):
