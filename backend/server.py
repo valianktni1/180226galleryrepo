@@ -50,6 +50,7 @@ SHARE_SESSION_HOURS = 72
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 48
 MAX_UPLOAD_SIZE = 40 * 1024 * 1024 * 1024  # 40GB for admin
+MAX_GUEST_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB per file for guests
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
