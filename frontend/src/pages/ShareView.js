@@ -348,7 +348,7 @@ function ShareViewFull() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-12">
-            {visibleAlbums.filter(sf => sf.name !== "Guest Uploads").map((sf, i) => (
+            {visibleAlbums.map((sf, i) => (
               <motion.button
                 key={sf.name}
                 initial={{ opacity: 0, y: 20 }}
