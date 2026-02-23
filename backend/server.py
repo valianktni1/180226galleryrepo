@@ -2025,6 +2025,7 @@ def compress_guest_video_background(file_path: Path, file_id: str, gallery_id: s
     Keeps original until compression is verified, then replaces.
     """
     import asyncio
+    from motor.motor_asyncio import AsyncIOMotorClient
     
     try:
         file_size = file_path.stat().st_size
@@ -2043,39 +2044,44 @@ def compress_guest_video_background(file_path: Path, file_id: str, gallery_id: s
         if success and temp_output.exists():
             new_size = temp_output.stat().st_size
             
-            # Only replace if we actually saved space
-            if new_size < file_size:
-                # Backup original just in case
-                backup_path = file_path.with_suffix('.original' + file_path.suffix)
-                shutil.move(str(file_path), str(backup_path))
+            # Only replace if we actually saved space (at least 10% reduction)
+            if new_size < file_size * 0.9:
+                # Delete original directly (no backup needed - compressed is verified)
+                file_path.unlink()
                 
                 # Move compressed to original location
                 shutil.move(str(temp_output), str(file_path))
                 
-                # Update file size in database
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(
-                    db.files.update_one(
-                        {"id": file_id},
-                        {"$set": {
-                            "file_size": new_size,
-                            "compressed": True,
-                            "original_size": file_size
-                        }}
+                # Update file size in database using sync approach
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    # Create new client for this thread
+                    thread_client = AsyncIOMotorClient(os.environ.get("MONGO_URL", "mongodb://localhost:27017"))
+                    thread_db = thread_client[os.environ.get("DB_NAME", "weddings_gallery")]
+                    
+                    loop.run_until_complete(
+                        thread_db.files.update_one(
+                            {"id": file_id},
+                            {"$set": {
+                                "file_size": new_size,
+                                "compressed": True,
+                                "original_size": file_size
+                            }}
+                        )
                     )
-                )
-                loop.close()
-                
-                # Remove backup after successful update
-                backup_path.unlink(missing_ok=True)
+                    thread_client.close()
+                    loop.close()
+                except Exception as db_err:
+                    logger.error(f"DB update failed for {file_path.name}: {db_err}")
                 
                 savings = ((file_size - new_size) / file_size) * 100
                 logger.info(f"Compressed {file_path.name}: {file_size/1024/1024:.1f}MB → {new_size/1024/1024:.1f}MB ({savings:.1f}% smaller)")
             else:
-                # Compression didn't help, remove temp file
+                # Compression didn't help enough, remove temp file
                 temp_output.unlink(missing_ok=True)
-                logger.info(f"Compression didn't reduce size for {file_path.name}, keeping original")
+                logger.info(f"Compression didn't reduce size enough for {file_path.name}, keeping original")
         else:
             # Compression failed, clean up
             if temp_output.exists():
@@ -2084,6 +2090,13 @@ def compress_guest_video_background(file_path: Path, file_id: str, gallery_id: s
             
     except Exception as e:
         logger.error(f"Error in compression background task: {e}")
+        # Clean up any temp files
+        try:
+            temp_output = file_path.with_suffix('.compressed.mp4')
+            if temp_output.exists():
+                temp_output.unlink()
+        except:
+            pass
 
 @api_router.get("/admin/settings/compression")
 async def get_compression_status(admin=Depends(get_admin)):
