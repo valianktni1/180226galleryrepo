@@ -57,14 +57,24 @@ export default function GuestUploadView({ galleryName }) {
       });
       
       setUploadedFiles(res.data.uploaded || []);
-      setShowSuccess(true);
-      fetchUploadCount(); // Refresh count
       
-      // Auto-hide success after 5 seconds
-      setTimeout(() => {
-        setShowSuccess(false);
-        setUploadedFiles([]);
-      }, 5000);
+      // Show warning if some files were skipped due to size
+      if (res.data.skipped && res.data.skipped.length > 0) {
+        toast.warning(`${res.data.skipped.length} file(s) exceeded 500MB limit and were not uploaded`);
+      }
+      
+      if (res.data.uploaded && res.data.uploaded.length > 0) {
+        setShowSuccess(true);
+        fetchUploadCount(); // Refresh count
+        
+        // Auto-hide success after 5 seconds
+        setTimeout(() => {
+          setShowSuccess(false);
+          setUploadedFiles([]);
+        }, 5000);
+      } else if (!res.data.skipped || res.data.skipped.length === 0) {
+        toast.error("No files were uploaded");
+      }
       
     } catch (err) {
       toast.error(err.response?.data?.detail || "Upload failed. Please try again.");
