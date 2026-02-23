@@ -1506,9 +1506,12 @@ async def guest_upload(
     compression_enabled = await get_compression_setting()
 
     uploaded = []
+    skipped_too_large = []
     for file in files:
         content = await file.read()
-        if len(content) > MAX_UPLOAD_SIZE:
+        # Enforce 500MB limit for guest uploads
+        if len(content) > MAX_GUEST_UPLOAD_SIZE:
+            skipped_too_large.append(file.filename)
             continue
 
         final_name = safe_filename(file.filename, target_dir)
