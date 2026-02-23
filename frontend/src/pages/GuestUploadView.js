@@ -194,7 +194,7 @@ export default function GuestUploadView({ galleryName }) {
               <>
                 <Upload className="w-14 h-14 mx-auto mb-4 text-[#D4AF37]" strokeWidth={1.5} />
                 <p className="text-xl font-medium mb-2" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
-                  Tap here to choose photos
+                  Tap here to choose photos & videos
                 </p>
                 <p className="text-sm mb-4" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
                   or drag & drop your files
