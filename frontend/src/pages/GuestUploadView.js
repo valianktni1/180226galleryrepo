@@ -77,7 +77,7 @@ export default function GuestUploadView({ galleryName }) {
       }
       
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Upload failed. Please try again.");
+      toast.error(getErrorMessage(err, "Upload failed. Please try again."));
     } finally {
       setUploading(false);
       setUploadProgress(0);
