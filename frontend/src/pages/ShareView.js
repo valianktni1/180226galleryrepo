@@ -73,7 +73,7 @@ function ShareViewFull() {
       // Refresh files to show updated Album Favourites
       loadFiles();
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to submit favourites');
+      toast.error(getErrorMessage(err, 'Failed to submit favourites'));
     } finally {
       setSubmittingFavourites(false);
     }
