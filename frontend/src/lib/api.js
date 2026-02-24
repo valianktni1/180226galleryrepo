@@ -3,6 +3,18 @@ import axios from 'axios';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const API = `${BACKEND_URL}/api`;
 
+// Helper to extract error message from API errors (handles Pydantic validation errors)
+export const getErrorMessage = (err, fallback = "An error occurred") => {
+  const detail = err?.response?.data?.detail;
+  if (!detail) return fallback;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    // Pydantic validation error - extract first message
+    return detail[0]?.msg || fallback;
+  }
+  return fallback;
+};
+
 const apiClient = axios.create({ baseURL: API });
 
 apiClient.interceptors.request.use((config) => {
