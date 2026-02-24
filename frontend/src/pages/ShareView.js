@@ -240,6 +240,27 @@ function ShareViewFull() {
     </div>
   );
 
+  // If no gallery name, something went wrong - show error
+  if (!galleryName) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#FDFCF8' }}>
+        <div className="text-center">
+          <p className="text-lg mb-4" style={{ color: '#57534E' }}>Unable to load gallery</p>
+          <button 
+            onClick={() => { 
+              localStorage.removeItem("share_token"); 
+              localStorage.removeItem("share_url_token"); 
+              navigate(`/s/${token}`); 
+            }}
+            className="text-[#D4AF37] underline"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Extract couple name from gallery folder name (e.g. "Gina & Mark 30.11.22" → "Gina & Mark")
   const coupleName = galleryName.replace(/\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$/, '').trim() || galleryName;
 
