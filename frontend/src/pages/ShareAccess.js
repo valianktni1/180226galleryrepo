@@ -78,7 +78,7 @@ export default function ShareAccess() {
       if (err.response?.status === 410) {
         setExpired(true);
       } else {
-        toast.error(err.response?.data?.detail || "Incorrect password");
+        toast.error(getErrorMessage(err, "Incorrect password"));
       }
     } finally {
       setLoading(false);
