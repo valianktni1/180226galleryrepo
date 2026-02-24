@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Camera, Lock, Heart, Upload, Clock } from "lucide-react";
-import { getShareInfo, accessShare, openAccessShare } from "@/lib/api";
+import { getShareInfo, accessShare, openAccessShare, getErrorMessage } from "@/lib/api";
 
 export default function ShareAccess() {
   const { token } = useParams();
