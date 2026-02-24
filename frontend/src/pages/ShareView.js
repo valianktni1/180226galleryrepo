@@ -188,7 +188,7 @@ function ShareViewFull() {
       setShowDeleteDialog(false);
       loadFiles();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Delete failed");
+      toast.error(getErrorMessage(err, "Delete failed"));
     }
   };
 
