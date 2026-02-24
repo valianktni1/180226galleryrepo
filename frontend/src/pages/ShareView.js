@@ -563,6 +563,25 @@ function ShareViewFull() {
         )}
       </main>
 
+      {/* Elegant Footer */}
+      <footer className="mt-16 mb-8">
+        <div className="max-w-screen-xl mx-auto px-6">
+          <div className="border-t pt-8 text-center" style={{ borderColor: 'rgba(212,175,55,0.3)' }}>
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <div className="h-px w-12" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }}></div>
+              <span className="text-[#D4AF37] text-lg">✦</span>
+              <div className="h-px w-12" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }}></div>
+            </div>
+            <p className="text-sm tracking-wide" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>
+              Site Designed & Maintained by
+            </p>
+            <p className="text-xl font-medium italic mt-1" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+              Weddings By Mark
+            </p>
+          </div>
+        </div>
+      </footer>
+
       <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
         setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
         galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} />
