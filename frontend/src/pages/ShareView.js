@@ -203,7 +203,7 @@ function ShareViewFull() {
       toast.success("Photos uploaded! Thank you!");
       loadFiles();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Upload failed");
+      toast.error(getErrorMessage(err, "Upload failed"));
     } finally {
       setUploading(false);
       setUploadProgress(0);
