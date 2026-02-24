@@ -95,12 +95,12 @@ function ShareViewFull() {
         allowDelete: res.data.allow_delete,
         accessLevel: res.data.access_level || "download"
       });
-    } catch {
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load share files:", err);
       localStorage.removeItem("share_token");
       localStorage.removeItem("share_url_token");
       navigate(`/s/${token}`);
-    } finally {
-      setLoading(false);
     }
   }, [token, navigate]);
 
