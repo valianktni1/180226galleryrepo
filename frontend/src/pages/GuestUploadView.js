@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Upload, Camera, Check, Heart, Image as ImageIcon, Film } from "lucide-react";
-import { guestUpload, getGuestUploadCount, trackGalleryView } from "@/lib/api";
+import { guestUpload, getGuestUploadCount, trackGalleryView, getErrorMessage } from "@/lib/api";
 
 export default function GuestUploadView({ galleryName }) {
   const { token } = useParams();
