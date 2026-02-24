@@ -19,9 +19,6 @@ import GuestUploadView from "@/pages/GuestUploadView";
 
 export default function ShareView() {
   const { token } = useParams();
-  const navigate = useNavigate();
-  const fileInputRef = useRef(null);
-  const guestInputRef = useRef(null);
 
   // Check if this is Guest Upload Mode
   const isGuestUploadMode = localStorage.getItem(`guest_upload_mode_${token}`) === 'true';
