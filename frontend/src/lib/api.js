@@ -142,8 +142,12 @@ export const getShareQRFrame = (shareId) => {
 
 // Public Share
 export const getShareInfo = (token) => apiClient.get(`/share/${token}`);
-export const accessShare = (token, password) =>
-  apiClient.post(`/share/${token}/access`, { password, viewer_id: localStorage.getItem(`viewer_id_${token}`) });
+export const accessShare = (token, password) => {
+  const body = { password };
+  const viewerId = localStorage.getItem(`viewer_id_${token}`);
+  if (viewerId) body.viewer_id = viewerId;
+  return apiClient.post(`/share/${token}/access`, body);
+};
 export const openAccessShare = (token) => {
   const viewerId = localStorage.getItem(`viewer_id_${token}`);
   const url = viewerId ? `/share/${token}/open-access?viewer_id=${encodeURIComponent(viewerId)}` : `/share/${token}/open-access`;
