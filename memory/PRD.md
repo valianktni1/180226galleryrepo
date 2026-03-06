@@ -30,6 +30,14 @@ Build a full-featured, self-hosted wedding photography client gallery management
 - **MongoDB Volume:** /mnt/apps/newweddingsbymarkgallery/mongodb
 - **User Files:** /mnt/nextcloud/newwedidngsbymarkuserfiles
 - **GitHub Repo:** https://github.com/valianktni1/180226galleryrepo
+- **Compose File:** /mnt/apps/dockge/data/180226galleryrepo/compose.yaml
+
+### TrueNAS Deploy Commands (3-step)
+```bash
+docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml down
+docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml build --no-cache
+docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml up -d
+```
 
 ## What's Been Implemented (Dec 2025 - Mar 2026)
 
