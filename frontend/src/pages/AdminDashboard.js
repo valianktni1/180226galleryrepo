@@ -12,16 +12,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats
 } from "@/lib/api";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [galleries, setGalleries] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [galleriesStats, setGalleriesStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("date_desc");
@@ -37,6 +38,10 @@ export default function AdminDashboard() {
       const [gRes, tRes] = await Promise.all([listGalleries(sortBy), getTemplates()]);
       setGalleries(gRes.data);
       setTemplates(tRes.data);
+      // Load stats separately (don't block main load)
+      getAllGalleriesStats().then(statsRes => {
+        setGalleriesStats(statsRes.data);
+      }).catch(() => {}); // Silently fail if stats unavailable
     } catch {
       toast.error("Failed to load data");
     } finally {
@@ -211,6 +216,7 @@ export default function AdminDashboard() {
               {filtered.map((g, i) => {
                 const fileCounts = g.file_counts || {};
                 const total = Object.values(fileCounts).reduce((a, b) => a + b, 0);
+                const stats = galleriesStats[g.id] || {};
                 return (
                   <motion.div key={g.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
                     className="group border overflow-hidden cursor-pointer" style={{ borderColor: '#F5F2EB' }}
@@ -227,6 +233,14 @@ export default function AdminDashboard() {
                           <FolderOpen className="w-12 h-12 text-[#D4D4D8]" strokeWidth={1} />
                         </div>
                       )}
+                      {/* Album Submitted Badge */}
+                      {stats.album_submitted && (
+                        <div className="absolute top-3 left-3 px-2 py-1 rounded-sm flex items-center gap-1" 
+                          style={{ backgroundColor: 'rgba(34,197,94,0.9)' }}>
+                          <CheckCircle className="w-3 h-3 text-white" />
+                          <span className="text-xs font-medium text-white">Album Submitted</span>
+                        </div>
+                      )}
                       <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100" style={{ transition: 'opacity 0.3s ease' }}>
                         <button data-testid={`delete-gallery-${g.id}`}
                           onClick={e => { e.stopPropagation(); handleDelete(g.id, g.folder_name); }}
@@ -240,6 +254,18 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-3 text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
                         <span>{total} files</span>
                         <span>{g.share_count || 0} shares</span>
+                      </div>
+                      {/* Stats Row */}
+                      <div className="flex items-center gap-4 mt-2 text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                        <span className="flex items-center gap-1" title="Total Views">
+                          <Eye className="w-3 h-3" /> {stats.total_views || 0}
+                        </span>
+                        <span className="flex items-center gap-1" title="Unique Visitors">
+                          <Users className="w-3 h-3" /> {stats.unique_visitors || 0}
+                        </span>
+                        <span className="flex items-center gap-1" title="Downloads">
+                          <Download className="w-3 h-3" /> {stats.total_downloads || 0}
+                        </span>
                       </div>
                     </div>
                   </motion.div>

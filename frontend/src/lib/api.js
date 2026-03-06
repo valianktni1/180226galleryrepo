@@ -65,6 +65,7 @@ export const createGallery = (data) => apiClient.post('/admin/galleries', data);
 export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}`, data);
 export const deleteGallery = (id) => apiClient.delete(`/admin/galleries/${id}`);
 export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/stats`);
+export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats');
 
 // Admin Activity Log
 export const getAdminActivity = (limit = 50) => apiClient.get(`/admin/activity?limit=${limit}`);

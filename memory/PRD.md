@@ -14,7 +14,7 @@ Build a full-featured, self-hosted wedding photography client gallery management
 - 4 granular access levels (View, Download, Upload, Full Access)
 - Password protection, share expiry, custom URL slugs
 - QR code generation for shares
-- Print shop with PayPal.me checkout
+- Print shop with PayPal.me checkout (£15 minimum order)
 - Custom branding (logo, no external branding)
 - Human-readable file storage structure
 
@@ -31,79 +31,108 @@ Build a full-featured, self-hosted wedding photography client gallery management
 - **User Files:** /mnt/nextcloud/newwedidngsbymarkuserfiles
 - **GitHub Repo:** https://github.com/valianktni1/180226galleryrepo
 
-## What's Been Implemented (Dec 2025 - Feb 2026)
+## What's Been Implemented (Dec 2025 - Mar 2026)
 
-### Core Features ✅
+### Core Features
 - Gallery CRUD with master folder templates
 - File upload with streaming (40GB+ support)
 - Background thumbnail generation (4 workers)
 - Granular share permissions (View/Download/Upload/Full)
 - Custom share URLs and QR codes
 - Password protection and expiry dates
-- Print shop with PayPal.me integration
+- Print shop with PayPal.me integration (£15 minimum order)
 - Custom branding with logo auto-inversion
+- Branded footer "Site Designed & Maintained by Weddings By Mark"
 
-### Recent Updates (Feb 19, 2026) ✅
-**QR Code Frame Generator:**
-- Elegant printable QR code frame with white roses and gold scrollwork design
+### Gallery Stats Dashboard (Feb 2026)
+- Total views, unique visitors, total downloads per gallery
+- Album Submitted badge on dashboard cards
+- Backend endpoints: `/api/admin/galleries-stats` and `/api/admin/galleries/{id}/stats`
+
+### QR Code Frame Generator
+- Elegant printable QR code frame with design
 - Dynamic couple name extraction from gallery folder name
-- "❤ Weddings By Mark ❤" branding at bottom
-- New endpoint: `GET /api/admin/shares/{share_id}/qr-frame`
-- "Download Printable QR Frame" button in admin QR dialog
-- Template stored at `/app/backend/assets/qr_frame_template.png`
+- Endpoint: `GET /api/admin/shares/{share_id}/qr-frame`
 
-**Guest Upload Mode:**
-- New "Guest Upload Mode" checkbox when creating upload-enabled shares
-- Simplified upload-only UI for wedding guests:
-  - Welcome message with couple's name
-  - Big prominent upload button
-  - Optional name field for uploaders
-  - Live counter showing total guest uploads
-  - Success animation after upload
-- No album browsing, no downloads, no favourites - just upload
-- "GUEST MODE" badge indicator in admin shares list
-- New files: `GuestUploadView.js`, field `guest_upload_mode` in shares collection
-- New endpoint: `GET /api/share/{token}/guest-upload-count`
+### Guest Upload Mode
+- Simplified upload-only UI for wedding guests
+- 500MB file size limit for guest uploads
+- Optional background video compression (FFmpeg, off by default)
 
-### Earlier Fixes (Feb 2026)
-- Fixed yarn.lock Docker build error
-- Fixed PyJWT missing dependency
-- Fixed API 403 errors (token interceptor)
-- Fixed empty folders not showing
-- Added "Submit for Album" feature for clients
+### Print Shop
+- £15 minimum order with disabled checkout until threshold met
+- Size/finish (Gloss/Luster/Silk) selection
+- Cart with PayPal.me redirect for payment
+- Mobile-friendly floating cart button
+
+### Incremental Backup System
+- rsync-like backup to user-defined volume
+- Endpoint: `POST /api/admin/backup`
+
+### Security
+- Login rate limiting (5 attempts/5 minutes)
+- 24-hour admin session timeout (JWT)
+- Password-protected shares (bug fix for blank screen)
+
+### Activity & Tracking
 - Activity log with IP tracking
-- Set Cover Image feature
-- Bulk Select All/Delete All
-- Thank You modal after album submission
-- Persistent client sessions (Remember Me)
-
-### Client Workflow
-1. Access share link (e.g., weddingsbymark.uk/s/ebonyjonathan281025/view)
-2. Browse galleries and heart favourite photos
-3. Click "Favourites" to review selections
-4. Click "Submit for Album" to copy to Album Favourites folder
-5. Photographer downloads Album Favourites to create album
+- View tracking per gallery
+- Download tracking
 
 ## Key API Endpoints
 - `POST /api/admin/login` - Admin authentication
 - `GET/POST /api/admin/galleries` - Gallery management
+- `GET /api/admin/galleries-stats` - All galleries summary stats
+- `GET /api/admin/galleries/{id}/stats` - Single gallery detailed stats
 - `POST /api/admin/galleries/{id}/upload` - File upload
 - `GET /api/admin/shares/{id}/qr` - Plain QR code
-- `GET /api/admin/shares/{id}/qr-frame` - Printable QR frame with design
+- `GET /api/admin/shares/{id}/qr-frame` - Printable QR frame
+- `POST /api/admin/backup` - Incremental backup
+- `GET /api/admin/settings/compression` - Compression status
+- `GET /api/share/{token}` - Share info
+- `POST /api/share/{token}/access` - Access share
 - `GET /api/share/{token}/files` - Get share files
-- `POST /api/share/{token}/submit-favourites` - Submit favourites to album
-- `GET /api/share/{token}/guest-upload-count` - Get guest upload count
-- `GET/POST /api/admin/print-products` - Print shop management
+- `POST /api/share/{token}/submit-favourites` - Submit favourites
+- `POST /api/share/{token}/upload` - Guest upload
+- `GET /api/share/{token}/guest-upload-count` - Guest upload count
+- `GET /api/share/{token}/print-sizes` - Print sizes for share
+- `POST /api/share/{token}/print-order` - Create print order
 
 ## Database Collections
-- users, galleries, files, shares, favourites, print_products, print_orders, activity_log
+- users, galleries, files, shares, favourites, print_products, print_orders, activity_log, activity, settings
 
-## Key Schema Fields (shares)
-- `guest_upload_mode: boolean` - If true, shows simplified guest upload UI
+## Key Schema Fields
+- **shares:** `guest_upload_mode: boolean`
+- **settings:** `{ "key": "guest_video_compression", "enabled": boolean }`
+- **galleries:** `total_views`, `total_downloads` fields for stats
+
+## Frontend Routes
+- `/admin` - Admin login
+- `/admin/dashboard` - Admin dashboard
+- `/admin/gallery/:id` - Gallery detail
+- `/admin/settings` - Settings (Password, Compression, Print Sizes, Print Orders)
+- `/admin/activity` - Activity log
+- `/s/:token` - Share access (client-facing entry)
+- `/s/:token/view` - Share view (client gallery)
+- `/s/:token/prints` - Print shop
 
 ## Backlog / Future Tasks
-- P1: Slideshow mode for client gallery view
-- P2: Email notifications when clients submit favourites
-- P2: Client notes/comments on favourites
-- P2: Batch operations in admin panel
-- P3: Analytics dashboard for admin
+- **P0:** QR Code Design Selector - 4 different QR frame designs at 8"x6"
+- **P1:** Email Notifications when clients submit album favourites
+- **P2:** Slideshow Mode for client gallery view
+- **P3:** Client Comments on favourited photos
+- **P4:** Watermark Previews (preview only, not downloads)
+- **P5:** Dark Mode for client gallery view
+
+## PayPal Integration
+MOCKED - Uses paypal.me link redirect, not full API integration
+
+## Verified Working (Mar 6, 2026)
+All features tested and verified working after fork:
+- Admin login, dashboard, gallery management
+- Gallery stats (views, visitors, downloads, album submitted)
+- Share access and client gallery view
+- Print shop with £15 minimum
+- Settings (all 4 tabs)
+- Branded footer on client pages
+- All backend APIs responding correctly

@@ -11,7 +11,7 @@ from pathlib import Path
 class WeddingGalleryTester:
     def __init__(self):
         # Use the public endpoint from frontend .env
-        self.base_url = "https://mark-weddings.preview.emergentagent.com/api"
+        self.base_url = "https://wedding-photo-hub-2.preview.emergentagent.com/api"
         self.admin_token = None
         self.client_token = None
         self.test_gallery_id = None

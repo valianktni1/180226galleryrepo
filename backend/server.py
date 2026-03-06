@@ -1920,11 +1920,52 @@ async def get_gallery_stats(gallery_id: str, admin=Depends(get_admin)):
         {"_id": 0}
     ).sort("date", 1).to_list(30)
     
+    # Count unique visitors (by IP) from activity log
+    unique_ips = await db.activity_log.distinct("ip_address", {"gallery_id": gallery_id, "ip_address": {"$ne": None}})
+    
+    # Check if album has been submitted (files exist in Album Favourites)
+    album_submitted = await db.files.count_documents({
+        "gallery_id": gallery_id,
+        "subfolder": "Album Favourites"
+    }) > 0
+    
     return {
         "total_views": gallery.get("total_views", 0),
         "total_downloads": gallery.get("total_downloads", 0),
+        "unique_visitors": len(unique_ips),
+        "album_submitted": album_submitted,
         "daily_activity": activity
     }
+
+@api_router.get("/admin/galleries-stats")
+async def get_all_galleries_stats(admin=Depends(get_admin)):
+    """Get summary stats for all galleries (for dashboard cards)."""
+    galleries = await db.galleries.find({}, {"_id": 0, "id": 1}).to_list(1000)
+    
+    stats = {}
+    for gallery in galleries:
+        gid = gallery["id"]
+        
+        # Get gallery doc for view/download counts
+        gallery_doc = await db.galleries.find_one({"id": gid}, {"_id": 0, "total_views": 1, "total_downloads": 1})
+        
+        # Count unique visitors
+        unique_ips = await db.activity_log.distinct("ip_address", {"gallery_id": gid, "ip_address": {"$ne": None}})
+        
+        # Check album submitted
+        album_submitted = await db.files.count_documents({
+            "gallery_id": gid,
+            "subfolder": "Album Favourites"
+        }) > 0
+        
+        stats[gid] = {
+            "total_views": gallery_doc.get("total_views", 0) if gallery_doc else 0,
+            "total_downloads": gallery_doc.get("total_downloads", 0) if gallery_doc else 0,
+            "unique_visitors": len(unique_ips),
+            "album_submitted": album_submitted
+        }
+    
+    return stats
 
 # ─── Backup Endpoint ───
 BACKUP_DIR = Path(os.environ.get('BACKUP_DIR', '/backup'))
