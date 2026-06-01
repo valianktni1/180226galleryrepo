@@ -51,6 +51,12 @@ export const setupAdmin = (data) => apiClient.post('/admin/setup', data);
 export const loginAdmin = (data) => apiClient.post('/admin/login', data);
 export const changePassword = (data) => apiClient.put('/admin/change-password', data);
 
+// 2FA
+export const get2FAStatus = () => apiClient.get('/admin/2fa/status');
+export const setup2FA = () => apiClient.post('/admin/2fa/setup');
+export const enable2FA = (code) => apiClient.post('/admin/2fa/enable', { code });
+export const disable2FA = (code) => apiClient.post('/admin/2fa/disable', { code });
+
 // Templates
 export const getTemplates = () => apiClient.get('/admin/templates');
 export const createTemplate = (data) => apiClient.post('/admin/templates', data);

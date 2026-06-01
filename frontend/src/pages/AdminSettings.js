@@ -13,11 +13,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Key, Package, Plus, Pencil, Trash2, Printer, Eye, Check, Film
+  ArrowLeft, Key, Package, Plus, Pencil, Trash2, Printer, Eye, Check, Film, Shield, Copy, AlertTriangle
 } from "lucide-react";
 import {
   changePassword, getPrintSizes, createPrintSize, updatePrintSize, deletePrintSize,
-  getPrintOrders, updateOrderStatus, getCompressionSetting, setCompressionSetting
+  getPrintOrders, updateOrderStatus, getCompressionSetting, setCompressionSetting,
+  get2FAStatus, setup2FA, enable2FA, disable2FA
 } from "@/lib/api";
 
 export default function AdminSettings() {
@@ -51,10 +52,21 @@ export default function AdminSettings() {
   const [loadingCompression, setLoadingCompression] = useState(false);
   const [togglingCompression, setTogglingCompression] = useState(false);
 
+  // 2FA
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+  const [loading2FA, setLoading2FA] = useState(false);
+  const [setupQR, setSetupQR] = useState(null);
+  const [setupSecret, setSetupSecret] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState(null);
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+
   useEffect(() => {
     if (activeTab === "print-sizes") loadPrintSizes();
     if (activeTab === "orders") loadOrders();
     if (activeTab === "video") loadCompressionSetting();
+    if (activeTab === "2fa") load2FAStatus();
   }, [activeTab]);
 
   const loadPrintSizes = async () => {
@@ -96,6 +108,70 @@ export default function AdminSettings() {
       toast.error(err.response?.data?.detail || "Failed to update setting");
     } finally {
       setTogglingCompression(false);
+    }
+  };
+
+  // 2FA functions
+  const load2FAStatus = async () => {
+    setLoading2FA(true);
+    try {
+      const res = await get2FAStatus();
+      setTwoFAEnabled(res.data.enabled);
+    } catch { /* silently fail */ }
+    finally { setLoading2FA(false); }
+  };
+
+  const handleSetup2FA = async () => {
+    try {
+      const res = await setup2FA();
+      setSetupQR(res.data.qr_code);
+      setSetupSecret(res.data.secret);
+      setVerifyCode("");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to start 2FA setup");
+    }
+  };
+
+  const handleEnable2FA = async () => {
+    if (verifyCode.length < 6) {
+      toast.error("Please enter the 6-digit code from your authenticator app");
+      return;
+    }
+    try {
+      const res = await enable2FA(verifyCode);
+      setTwoFAEnabled(true);
+      setRecoveryCodes(res.data.recovery_codes);
+      setSetupQR(null);
+      setSetupSecret("");
+      setVerifyCode("");
+      toast.success("Two-factor authentication enabled!");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Invalid code. Please try again.");
+      setVerifyCode("");
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    if (disableCode.length < 6) {
+      toast.error("Please enter your 2FA code or a recovery code");
+      return;
+    }
+    try {
+      await disable2FA(disableCode);
+      setTwoFAEnabled(false);
+      setShowDisableConfirm(false);
+      setDisableCode("");
+      toast.success("Two-factor authentication disabled");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Invalid code");
+      setDisableCode("");
+    }
+  };
+
+  const copyRecoveryCodes = () => {
+    if (recoveryCodes) {
+      navigator.clipboard.writeText(recoveryCodes.join('\n'));
+      toast.success("Recovery codes copied to clipboard");
     }
   };
 
@@ -218,6 +294,7 @@ export default function AdminSettings() {
         <div className="flex gap-2 mb-8 border-b flex-wrap" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
           {[
             { id: "password", label: "Change Password", icon: Key },
+            { id: "2fa", label: "Two-Factor Auth", icon: Shield },
             { id: "video", label: "Video Compression", icon: Film },
             { id: "print-sizes", label: "Print Sizes & Prices", icon: Printer },
             { id: "orders", label: "Print Orders", icon: Package }
@@ -263,6 +340,191 @@ export default function AdminSettings() {
                 {changingPassword ? "Changing..." : "Change Password"}
               </Button>
             </form>
+          </motion.div>
+        )}
+
+        {/* Two-Factor Authentication Tab */}
+        {activeTab === "2fa" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
+            {loading2FA ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : recoveryCodes ? (
+              /* Recovery Codes Display */
+              <div className="space-y-6">
+                <div className="border rounded-sm p-6" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+                  <div className="flex items-start gap-3 mb-4">
+                    <AlertTriangle className="w-6 h-6 text-[#D4AF37] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-lg font-medium mb-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                        Save Your Recovery Codes
+                      </h3>
+                      <p className="text-sm text-[#57534E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                        If you lose your phone, you can use these codes to log in. Each code can only be used once.
+                        <strong> Save them somewhere safe — you won't see them again.</strong>
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 p-4 rounded-sm mb-4" style={{ backgroundColor: '#F5F2EB' }}>
+                    {recoveryCodes.map((code, i) => (
+                      <code key={i} className="text-sm font-mono font-bold text-center py-1" data-testid={`recovery-code-${i}`}>
+                        {code}
+                      </code>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button onClick={copyRecoveryCodes} data-testid="copy-recovery-codes-btn"
+                      className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2">
+                      <Copy className="w-3.5 h-3.5" /> Copy Codes
+                    </Button>
+                    <Button onClick={() => setRecoveryCodes(null)} variant="outline" 
+                      className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold">
+                      I've Saved Them
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : twoFAEnabled ? (
+              /* 2FA Enabled State */
+              <div className="space-y-6">
+                <div className="border rounded-sm p-6" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <Shield className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-medium mb-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                          Two-Factor Authentication is ON
+                        </h3>
+                        <p className="text-sm text-[#57534E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                          Your account is protected with Google Authenticator. A 6-digit code is required every time you log in.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border rounded-sm p-6 border-red-200 bg-red-50/50">
+                  <h4 className="font-medium mb-2 text-red-800" style={{ fontFamily: 'Manrope, sans-serif' }}>Disable 2FA</h4>
+                  <p className="text-sm text-red-700 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    This will remove the extra security from your account. You'll need to enter a code to confirm.
+                  </p>
+                  <Button onClick={() => setShowDisableConfirm(true)} data-testid="disable-2fa-btn"
+                    className="bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold">
+                    Disable 2FA
+                  </Button>
+                </div>
+              </div>
+            ) : setupQR ? (
+              /* QR Code Setup Step */
+              <div className="space-y-6">
+                <div className="border rounded-sm p-6" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+                  <h3 className="text-lg font-medium mb-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                    Step 1: Scan QR Code
+                  </h3>
+                  <p className="text-sm text-[#57534E] mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    Open Google Authenticator on your phone and scan this QR code.
+                  </p>
+                  
+                  <div className="flex justify-center p-6 rounded-sm mb-4" style={{ backgroundColor: '#F5F2EB' }}>
+                    <img src={setupQR} alt="2FA QR Code" className="w-48 h-48" data-testid="2fa-qr-code" />
+                  </div>
+
+                  <p className="text-xs text-[#A8A29E] text-center mb-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    Can't scan? Enter this code manually:
+                  </p>
+                  <code className="block text-center text-sm font-mono font-bold p-2 rounded-sm select-all" 
+                    style={{ backgroundColor: '#F5F2EB' }} data-testid="2fa-manual-secret">
+                    {setupSecret}
+                  </code>
+                </div>
+
+                <div className="border rounded-sm p-6" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+                  <h3 className="text-lg font-medium mb-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                    Step 2: Enter Verification Code
+                  </h3>
+                  <p className="text-sm text-[#57534E] mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    Enter the 6-digit code shown in Google Authenticator to verify it's working.
+                  </p>
+                  
+                  <div className="flex gap-3">
+                    <Input
+                      data-testid="2fa-verify-code"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      value={verifyCode}
+                      onChange={e => setVerifyCode(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="000000"
+                      className="border-[#D4D4D8] rounded-sm text-center text-xl tracking-[0.3em] font-mono max-w-[200px]"
+                    />
+                    <Button onClick={handleEnable2FA} disabled={verifyCode.length < 6} data-testid="enable-2fa-btn"
+                      className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold">
+                      Verify & Enable
+                    </Button>
+                  </div>
+                </div>
+
+                <button onClick={() => { setSetupQR(null); setSetupSecret(""); }} 
+                  className="text-sm text-[#57534E] hover:text-[#1C1917]" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                  Cancel setup
+                </button>
+              </div>
+            ) : (
+              /* Initial State - Not Enabled */
+              <div className="space-y-6">
+                <div className="border rounded-sm p-6" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <Shield className="w-5 h-5 text-[#57534E]" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-medium mb-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                          Two-Factor Authentication
+                        </h3>
+                        <p className="text-sm text-[#57534E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                          Add an extra layer of security to your account. After enabling, you'll need your password 
+                          AND a code from the Google Authenticator app on your phone to log in.
+                        </p>
+                      </div>
+                    </div>
+                    <Button onClick={handleSetup2FA} data-testid="setup-2fa-btn"
+                      className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold flex-shrink-0">
+                      Enable 2FA
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                    <Shield className="w-6 h-6 text-[#D4AF37] mb-2" />
+                    <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>How it works</h4>
+                    <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                      <li>1. Enable 2FA and scan a QR code</li>
+                      <li>2. Google Authenticator generates a new code every 30 seconds</li>
+                      <li>3. Enter the code after your password when logging in</li>
+                      <li>4. Even if someone knows your password, they can't get in</li>
+                    </ul>
+                  </div>
+                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                    <Key className="w-6 h-6 text-[#D4AF37] mb-2" />
+                    <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>What you need</h4>
+                    <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                      <li>• Google Authenticator app on your phone</li>
+                      <li>• Free from Play Store or App Store</li>
+                      <li>• Recovery codes provided as backup</li>
+                      <li>• Can be disabled at any time</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -603,6 +865,42 @@ export default function AdminSettings() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Disable 2FA Confirmation Dialog */}
+      <Dialog open={showDisableConfirm} onOpenChange={(open) => { setShowDisableConfirm(open); if (!open) setDisableCode(""); }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+              Disable Two-Factor Authentication
+            </DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              Enter your current 2FA code or a recovery code to disable two-factor authentication.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              data-testid="disable-2fa-code"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9A-Fa-f]*"
+              maxLength={8}
+              value={disableCode}
+              onChange={e => setDisableCode(e.target.value.replace(/[^0-9A-Fa-f]/g, ''))}
+              placeholder="Enter code"
+              className="border-[#D4D4D8] rounded-sm text-center text-xl tracking-[0.3em] font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setShowDisableConfirm(false); setDisableCode(""); }} className="rounded-sm">
+              Cancel
+            </Button>
+            <Button onClick={handleDisable2FA} disabled={disableCode.length < 6} data-testid="confirm-disable-2fa-btn"
+              className="bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm px-6 text-xs tracking-wider uppercase font-bold">
+              Disable 2FA
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

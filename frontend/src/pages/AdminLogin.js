@@ -24,6 +24,8 @@ export default function AdminLogin() {
   const [needsSetup, setNeedsSetup] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [needs2FA, setNeeds2FA] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
   const [form, setForm] = useState({ username: "", password: "", display_name: "Weddings By Mark" });
 
   useEffect(() => {
@@ -49,16 +51,36 @@ export default function AdminLogin() {
       if (needsSetup) {
         res = await setupAdmin(form);
       } else {
-        res = await loginAdmin({ username: form.username, password: form.password });
+        res = await loginAdmin({ 
+          username: form.username, 
+          password: form.password,
+          totp_code: needs2FA ? totpCode : undefined
+        });
       }
+      
+      // Check if 2FA is required
+      if (res.data.requires_2fa) {
+        setNeeds2FA(true);
+        setLoading(false);
+        return;
+      }
+      
       localStorage.setItem("admin_token", res.data.token);
       toast.success("Welcome back");
       navigate("/admin/dashboard");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Authentication failed");
+      if (needs2FA) {
+        setTotpCode("");
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBack = () => {
+    setNeeds2FA(false);
+    setTotpCode("");
   };
 
   if (needsSetup === null) return null;
@@ -111,13 +133,69 @@ export default function AdminLogin() {
             className="text-4xl md:text-5xl mb-3 font-medium"
             style={{ fontFamily: 'Cormorant Garamond, serif' }}
           >
-            {needsSetup ? "Set Up" : "Sign In"}
+            {needs2FA ? "Verification" : needsSetup ? "Set Up" : "Sign In"}
           </h2>
           <p className="text-base mb-12" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-            {needsSetup ? "Create your admin account to get started" : "Enter your credentials to continue"}
+            {needs2FA 
+              ? "Enter the 6-digit code from your Google Authenticator app" 
+              : needsSetup 
+                ? "Create your admin account to get started" 
+                : "Enter your credentials to continue"}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-8">
+            {needs2FA ? (
+              /* 2FA Code Input */
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs tracking-[0.15em] uppercase font-semibold" style={{ color: '#57534E' }}>
+                    Authentication Code
+                  </Label>
+                  <div className="relative">
+                    <Lock className="absolute left-0 top-3.5 w-4 h-4 text-[#A8A29E]" />
+                    <Input
+                      data-testid="totp-code"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9A-Fa-f]*"
+                      maxLength={8}
+                      autoComplete="one-time-code"
+                      autoFocus
+                      value={totpCode}
+                      onChange={e => setTotpCode(e.target.value.replace(/[^0-9A-Fa-f]/g, ''))}
+                      className="border-0 border-b border-[#D4D4D8] bg-transparent rounded-none pl-6 pr-0 py-3 focus-visible:ring-0 focus-visible:border-[#1C1917] placeholder:text-[#A8A29E] text-2xl tracking-[0.5em] text-center"
+                      style={{ fontFamily: 'monospace' }}
+                      placeholder="000000"
+                      required
+                    />
+                  </div>
+                  <p className="text-xs mt-2" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                    Or enter a recovery code
+                  </p>
+                </div>
+
+                <Button
+                  data-testid="verify-2fa-btn"
+                  type="submit"
+                  disabled={loading || totpCode.length < 6}
+                  className="w-full bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-8 py-6 text-xs tracking-[0.2em] uppercase font-bold"
+                  style={{ transition: 'background-color 0.3s ease', fontFamily: 'Manrope, sans-serif' }}
+                >
+                  {loading ? "Verifying..." : "Verify"}
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="w-full text-center text-sm text-[#57534E] hover:text-[#1C1917]"
+                  style={{ fontFamily: 'Manrope, sans-serif' }}
+                >
+                  Back to sign in
+                </button>
+              </>
+            ) : (
+              /* Normal Login Form */
+              <>
             {needsSetup && (
               <div className="space-y-2">
                 <Label className="text-xs tracking-[0.15em] uppercase font-semibold" style={{ color: '#57534E' }}>
@@ -188,6 +266,8 @@ export default function AdminLogin() {
             >
               {loading ? "Please wait..." : (needsSetup ? "Create Account" : "Sign In")}
             </Button>
+              </>
+            )}
           </form>
         </motion.div>
       </div>

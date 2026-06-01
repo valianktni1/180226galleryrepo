@@ -24,6 +24,8 @@ import aiofiles
 import qrcode
 import threading
 from concurrent.futures import ThreadPoolExecutor
+import pyotp
+import base64
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -41,8 +43,8 @@ JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 
 # Rate limiting for login attempts
 login_attempts = defaultdict(list)  # IP -> list of timestamps
-MAX_LOGIN_ATTEMPTS = 5
-LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+MAX_LOGIN_ATTEMPTS = 3
+LOGIN_WINDOW_SECONDS = 1800  # 30 minutes
 
 # Session timeout (24 hours for admin, 72 hours for share access)
 ADMIN_SESSION_HOURS = 24
@@ -64,6 +66,7 @@ DEFAULT_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourite
 class AdminLogin(BaseModel):
     username: str
     password: str
+    totp_code: Optional[str] = None
 
 class AdminSetup(BaseModel):
     username: str
@@ -379,7 +382,7 @@ async def admin_login(data: AdminLogin, request: Request):
     
     # Check rate limit
     if check_rate_limit(client_ip):
-        raise HTTPException(status_code=429, detail="Too many login attempts. Please try again in 5 minutes.")
+        raise HTTPException(status_code=429, detail="Too many login attempts. Please try again in 30 minutes.")
     
     admin = await db.admins.find_one({"username": data.username}, {"_id": 0})
     if not admin:
@@ -388,6 +391,25 @@ async def admin_login(data: AdminLogin, request: Request):
     if not bcrypt.checkpw(data.password.encode(), admin["password"].encode()):
         record_login_attempt(client_ip)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Check if 2FA is enabled
+    if admin.get("totp_enabled"):
+        if not data.totp_code:
+            # Password correct, but need 2FA code
+            return {"requires_2fa": True}
+        
+        # Verify TOTP code
+        totp = pyotp.TOTP(admin["totp_secret"])
+        if not totp.verify(data.totp_code, valid_window=1):
+            # Check recovery codes
+            recovery_codes = admin.get("recovery_codes", [])
+            if data.totp_code in recovery_codes:
+                # Valid recovery code - remove it after use
+                recovery_codes.remove(data.totp_code)
+                await db.admins.update_one({"id": admin["id"]}, {"$set": {"recovery_codes": recovery_codes}})
+            else:
+                record_login_attempt(client_ip)
+                raise HTTPException(status_code=401, detail="Invalid 2FA code")
     
     # Clear rate limit on successful login
     clear_login_attempts(client_ip)
@@ -405,6 +427,102 @@ async def change_password(data: PasswordChange, admin=Depends(get_admin)):
     new_hashed = bcrypt.hashpw(data.new_password.encode(), bcrypt.gensalt()).decode()
     await db.admins.update_one({"id": admin["sub"]}, {"$set": {"password": new_hashed}})
     return {"message": "Password changed successfully"}
+
+# ─── Two-Factor Authentication ───
+class TotpVerify(BaseModel):
+    code: str
+
+@api_router.get("/admin/2fa/status")
+async def get_2fa_status(admin=Depends(get_admin)):
+    """Check if 2FA is enabled for the admin."""
+    admin_doc = await db.admins.find_one({"id": admin["sub"]}, {"_id": 0})
+    if not admin_doc:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    return {"enabled": admin_doc.get("totp_enabled", False)}
+
+@api_router.post("/admin/2fa/setup")
+async def setup_2fa(admin=Depends(get_admin)):
+    """Generate a new TOTP secret and return the provisioning URI for QR code scanning."""
+    admin_doc = await db.admins.find_one({"id": admin["sub"]}, {"_id": 0})
+    if not admin_doc:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    # Generate new secret
+    secret = pyotp.random_base32()
+    
+    # Store secret temporarily (not enabled yet until verified)
+    await db.admins.update_one({"id": admin["sub"]}, {"$set": {"totp_secret_pending": secret}})
+    
+    # Generate provisioning URI
+    display_name = admin_doc.get("display_name", "Gallery Admin")
+    totp = pyotp.TOTP(secret)
+    uri = totp.provisioning_uri(name=admin_doc["username"], issuer_name=display_name)
+    
+    # Generate QR code as base64 image
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=6, border=2)
+    qr.add_data(uri)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    
+    return {"secret": secret, "qr_code": f"data:image/png;base64,{qr_base64}", "uri": uri}
+
+@api_router.post("/admin/2fa/enable")
+async def enable_2fa(data: TotpVerify, admin=Depends(get_admin)):
+    """Verify a TOTP code and enable 2FA. Returns recovery codes."""
+    admin_doc = await db.admins.find_one({"id": admin["sub"]}, {"_id": 0})
+    if not admin_doc:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    pending_secret = admin_doc.get("totp_secret_pending")
+    if not pending_secret:
+        raise HTTPException(status_code=400, detail="No 2FA setup in progress. Please start setup first.")
+    
+    # Verify the code
+    totp = pyotp.TOTP(pending_secret)
+    if not totp.verify(data.code, valid_window=1):
+        raise HTTPException(status_code=400, detail="Invalid code. Please try again.")
+    
+    # Generate recovery codes
+    recovery_codes = [secrets.token_hex(4).upper() for _ in range(8)]
+    
+    # Enable 2FA
+    await db.admins.update_one({"id": admin["sub"]}, {
+        "$set": {
+            "totp_secret": pending_secret,
+            "totp_enabled": True,
+            "recovery_codes": recovery_codes
+        },
+        "$unset": {"totp_secret_pending": ""}
+    })
+    
+    return {"enabled": True, "recovery_codes": recovery_codes}
+
+@api_router.post("/admin/2fa/disable")
+async def disable_2fa(data: TotpVerify, admin=Depends(get_admin)):
+    """Disable 2FA. Requires a valid TOTP code or recovery code."""
+    admin_doc = await db.admins.find_one({"id": admin["sub"]}, {"_id": 0})
+    if not admin_doc:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    
+    if not admin_doc.get("totp_enabled"):
+        raise HTTPException(status_code=400, detail="2FA is not enabled")
+    
+    # Verify with TOTP code or recovery code
+    totp = pyotp.TOTP(admin_doc["totp_secret"])
+    recovery_codes = admin_doc.get("recovery_codes", [])
+    
+    if not totp.verify(data.code, valid_window=1) and data.code not in recovery_codes:
+        raise HTTPException(status_code=400, detail="Invalid code")
+    
+    # Disable 2FA
+    await db.admins.update_one({"id": admin["sub"]}, {
+        "$unset": {"totp_secret": "", "totp_secret_pending": "", "totp_enabled": "", "recovery_codes": ""}
+    })
+    
+    return {"enabled": False}
 
 # ─── Templates ───
 @api_router.get("/admin/templates")
