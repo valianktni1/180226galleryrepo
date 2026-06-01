@@ -141,6 +141,13 @@ All features tested and verified working after fork:
 - Gallery stats (views, visitors, downloads, album submitted)
 - Share access and client gallery view
 - Print shop with £15 minimum
-- Settings (all 4 tabs)
+- Settings (all 5 tabs including 2FA)
 - Branded footer on client pages
 - All backend APIs responding correctly
+
+### Two-Factor Authentication (May 2026)
+- TOTP-based 2FA using Google Authenticator
+- QR code setup flow in Settings
+- 8 recovery codes (single-use, uppercase hex)
+- Rate limiting: 3 attempts / 30 minute lockout
+- Backend endpoints: `/api/admin/2fa/status`, `/api/admin/2fa/setup`, `/api/admin/2fa/enable`, `/api/admin/2fa/disable`
