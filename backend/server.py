@@ -1117,152 +1117,160 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
         bbox = draw.textbbox((0, 0), b, font=bf)
         draw.text((FW - (bbox[2] - bbox[0]) - 60, FH - 60), b, fill='#AAAAAA', font=bf)
     
-    # Scale factors from original 1264x848 to output 2400x1800
+    # Original templates are 1264x848, output is 2400x1800 (8"x6" at 300dpi)
     SX = FW / 1264.0
     SY = FH / 848.0
 
-    def extract_decoration(template_path, regions):
-        """Load template and extract decorative regions onto a transparent canvas."""
-        tmpl = Image.open(str(template_path)).convert('RGBA').resize((FW, FH), Image.LANCZOS)
-        canvas = Image.new('RGBA', (FW, FH), (0, 0, 0, 0))
-        for x1, y1, x2, y2 in regions:
-            crop = tmpl.crop((x1, y1, x2, y2))
-            canvas.paste(crop, (x1, y1))
-        return canvas
-
     if design == 1:
-        # ── FLORAL ── Build from scratch on cream canvas
+        # ── FLORAL ── Fresh canvas + flower decorations from corners only
         BG = (248, 246, 242)
         img = Image.new('RGB', (FW, FH), BG)
         draw = ImageDraw.Draw(img)
         
-        # Extract flower decorations from template corners (top-right and bottom-left)
-        tmpl = Image.open(str(TEMPLATES_DIR / "design_1_floral.png")).convert('RGBA').resize((FW, FH), Image.LANCZOS)
-        # Top-right flowers
-        tr_crop = tmpl.crop((FW - 900, 0, FW, 650))
-        img.paste(tr_crop, (FW - 900, 0), tr_crop)
-        # Bottom-left flowers
-        bl_crop = tmpl.crop((0, FH - 650, 900, FH))
-        img.paste(bl_crop, (0, FH - 650), bl_crop)
-        draw = ImageDraw.Draw(img)
+        # Heading: "CAPTURE" at ~20%, "the love" at ~28%
+        tc(draw, "CAPTURE", serif_bf(int(55 * SX)), int(FH * 0.20), fill='#2C2C2C')
+        tc(draw, "the love", script_f(int(65 * SX)), int(FH * 0.28), fill='#2C2C2C')
         
-        # Heading
-        tc(draw, "CAPTURE", serif_bf(110), 180, fill='#2C2C2C')
-        tc(draw, "the love", script_f(130), 310, fill='#2C2C2C')
-        
-        # Thin decorative line
-        line_y = 460
-        draw.line([(FW//2 - 200, line_y), (FW//2 + 200, line_y)], fill='#D4D0C8', width=2)
-        
-        # QR code
-        qr_size = 500
+        # QR code: center at ~47%, size ~27% of width
+        qr_size = int(FW * 0.27)
         qr_img = make_qr_img(share_url, qr_size)
         qr_x = (FW - qr_size) // 2
-        qr_y = 510
+        qr_y = int(FH * 0.47) - qr_size // 2
+        # Thin border around QR area
+        draw.rectangle([qr_x - 4, qr_y - 4, qr_x + qr_size + 4, qr_y + qr_size + 4], outline='#D0CCC4', width=2)
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
-        # Subtle border around QR
-        draw.rectangle([qr_x-3, qr_y-3, qr_x+qr_size+3, qr_y+qr_size+3], outline='#E0DCD4', width=2)
         
-        # Instructions
-        tc(draw, "Please share your photos with us!", sans_f(36), 1070, fill='#666666')
-        tc(draw, "Simply scan the QR code & upload.", sans_f(30), 1120, fill='#888888')
+        # Instructions at ~67%
+        tc(draw, "Please share your photos with us!", sans_f(int(18 * SX)), int(FH * 0.67), fill='#555555')
+        tc(draw, "Simply scan the QR code & upload.", sans_f(int(15 * SX)), int(FH * 0.70), fill='#777777')
         
-        # Couple name (gold script)
-        tc(draw, couple_name, script_f(95), 1240, fill='#8B7536')
+        # Couple name at ~77% (gold script)
+        tc(draw, couple_name, script_f(int(48 * SX)), int(FH * 0.77), fill='#8B7536')
         
-        # Date
+        # Date at ~85%
         if date_str:
-            tc(draw, date_str, serif_f(42), 1380, fill='#666666')
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.85), fill='#555555')
         
+        # Brand text
         add_brand(draw)
+        
+        # NOW paste flower decorations ON TOP of everything (corners only, avoiding text)
+        tmpl = Image.open(str(TEMPLATES_DIR / "original_floral_white.png")).convert('RGBA').resize((FW, FH), Image.LANCZOS)
+        # Top-right corner roses only: x>70%, y<40%
+        tr = tmpl.crop((int(FW * 0.70), 0, FW, int(FH * 0.40)))
+        img.paste(tr, (int(FW * 0.70), 0), tr)
+        # Bottom-left corner roses only: x<30%, y>65%
+        bl = tmpl.crop((0, int(FH * 0.65), int(FW * 0.30), FH))
+        img.paste(bl, (0, int(FH * 0.65)), bl)
+        # Camera icon from template: small crop at top center
+        cam = tmpl.crop((int(FW * 0.46), int(FH * 0.11), int(FW * 0.54), int(FH * 0.19)))
+        img.paste(cam, (int(FW * 0.46), int(FH * 0.11)), cam)
 
     elif design == 2:
-        # ── WAVY ── Build from scratch on white canvas with border
+        # ── WAVY ── Fresh canvas + wavy border from original
         img = Image.new('RGB', (FW, FH), (255, 255, 255))
         draw = ImageDraw.Draw(img)
         
-        # Extract wavy border from template edges (all 4 sides)
-        tmpl = Image.open(str(TEMPLATES_DIR / "design_2_wavy.png")).convert('RGBA').resize((FW, FH), Image.LANCZOS)
-        border_w = 120  # Width of border strip to extract
-        # Top strip
-        img.paste(tmpl.crop((0, 0, FW, border_w)), (0, 0), tmpl.crop((0, 0, FW, border_w)))
-        # Bottom strip
-        img.paste(tmpl.crop((0, FH-border_w, FW, FH)), (0, FH-border_w), tmpl.crop((0, FH-border_w, FW, FH)))
-        # Left strip
-        img.paste(tmpl.crop((0, border_w, border_w, FH-border_w)), (0, border_w), tmpl.crop((0, border_w, border_w, FH-border_w)))
-        # Right strip
-        img.paste(tmpl.crop((FW-border_w, border_w, FW, FH-border_w)), (FW-border_w, border_w), tmpl.crop((FW-border_w, border_w, FW, FH-border_w)))
-        # Corner decorations (hearts/flourishes) - extract larger corner areas
-        for cx1, cy1, cx2, cy2 in [(0, 0, 300, 300), (FW-300, 0, FW, 300), (0, FH-300, 300, FH), (FW-300, FH-300, FW, FH)]:
-            corner = tmpl.crop((cx1, cy1, cx2, cy2))
-            img.paste(corner, (cx1, cy1), corner)
-        draw = ImageDraw.Draw(img)
+        # Heading: "Capture" script + "THE LOVE" bold side by side at ~22%
+        cap_font = script_f(int(60 * SX))
+        love_font = serif_bf(int(40 * SX))
+        cap_bb = draw.textbbox((0, 0), "Capture", font=cap_font)
+        love_bb = draw.textbbox((0, 0), "THE LOVE", font=love_font)
+        cap_w = cap_bb[2] - cap_bb[0]
+        love_w = love_bb[2] - love_bb[0]
+        total = cap_w + love_w + 30
+        sx = (FW - total) // 2
+        head_y = int(FH * 0.22)
+        draw.text((sx, head_y), "Capture", fill='#1C1917', font=cap_font)
+        draw.text((sx + cap_w + 30, head_y + int(25 * SY)), "THE LOVE", fill='#1C1917', font=love_font)
         
-        # Heading
-        tc(draw, "Capture", script_f(130), 160, fill='#1C1917')
-        tc(draw, "THE LOVE", serif_bf(80), 310, fill='#1C1917')
-        
-        # QR code
-        qr_size = 480
+        # QR code: center at ~50%, ~28% width
+        qr_size = int(FW * 0.28)
         qr_img = make_qr_img(share_url, qr_size)
         qr_x = (FW - qr_size) // 2
-        qr_y = 460
+        qr_y = int(FH * 0.50) - qr_size // 2
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
         
-        # Instructions
-        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(34), 1010, fill='#444444')
-        tc(draw, "JUST SCAN THE QR CODE", sans_f(28), 1060, fill='#666666')
+        # Instructions at ~71%
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(17 * SX)), int(FH * 0.71), fill='#333333')
+        tc(draw, "JUST SCAN THE QR CODE", sans_f(int(14 * SX)), int(FH * 0.74), fill='#555555')
         
-        # Couple name (bold uppercase)
-        tc(draw, couple_name.upper(), serif_bf(70), 1160, fill='#1C1917')
+        # Couple name at ~79% (bold uppercase)
+        tc(draw, couple_name.upper(), serif_bf(int(35 * SX)), int(FH * 0.79), fill='#1C1917')
         
-        # Date
+        # Date at ~87%
         if date_str:
-            tc(draw, date_str, serif_f(42), 1280, fill='#666666')
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
         
         add_brand(draw)
+        
+        # NOW overlay wavy border + decorations from original (edges only)
+        tmpl = Image.open(str(TEMPLATES_DIR / "original_wavy.png")).convert('RGBA').resize((FW, FH), Image.LANCZOS)
+        bw = int(FW * 0.06)  # border strip width
+        bh = int(FH * 0.06)
+        # Top
+        top = tmpl.crop((0, 0, FW, bh))
+        img.paste(top, (0, 0), top)
+        # Bottom
+        bot = tmpl.crop((0, FH - bh, FW, FH))
+        img.paste(bot, (0, FH - bh), bot)
+        # Left
+        left = tmpl.crop((0, bh, bw, FH - bh))
+        img.paste(left, (0, bh), left)
+        # Right
+        right = tmpl.crop((FW - bw, bh, FW, FH - bh))
+        img.paste(right, (FW - bw, bh), right)
+        # Top-left hearts decoration
+        tl = tmpl.crop((0, 0, int(FW * 0.18), int(FH * 0.22)))
+        img.paste(tl, (0, 0), tl)
+        # Bottom-right heart decoration
+        br = tmpl.crop((int(FW * 0.82), int(FH * 0.85), FW, FH))
+        img.paste(br, (int(FW * 0.82), int(FH * 0.85)), br)
+        # Camera icon from template
+        cam = tmpl.crop((int(FW * 0.44), int(FH * 0.10), int(FW * 0.56), int(FH * 0.20)))
+        img.paste(cam, (int(FW * 0.44), int(FH * 0.10)), cam)
 
     else:
-        # ── MINIMAL ── Build from scratch on white canvas
+        # ── MINIMAL ── Clean white, built entirely from scratch
         img = Image.new('RGB', (FW, FH), (255, 255, 255))
         draw = ImageDraw.Draw(img)
         
-        # "Share the Love" heading in mixed fonts
-        sf = script_f(160)
-        tf = serif_if(50)
+        # "Share the Love" heading at y=15%
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
         sb = draw.textbbox((0, 0), "Share", font=sf)
         tb = draw.textbbox((0, 0), "the", font=tf)
         lb = draw.textbbox((0, 0), "Love", font=sf)
         sw = sb[2] - sb[0]
         tw2 = tb[2] - tb[0]
         lw = lb[2] - lb[0]
-        total_w = sw + tw2 + lw + 80
+        total_w = sw + tw2 + lw + int(40 * SX)
         sx = (FW - total_w) // 2
-        ty = 200
+        ty = int(FH * 0.15)
         draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
-        draw.text((sx + sw + 40, ty + 80), "the", fill='#666666', font=tf)
-        draw.text((sx + sw + 40 + tw2 + 40, ty), "Love", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
         
-        # QR code
-        qr_size = 520
+        # QR code at y=48%, ~28% width
+        qr_size = int(FW * 0.28)
         qr_img = make_qr_img(share_url, qr_size)
         qr_x = (FW - qr_size) // 2
-        qr_y = 500
+        qr_y = int(FH * 0.48) - qr_size // 2
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
         
-        # Instructions
-        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(30), 1090, fill='#888888')
-        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(30), 1135, fill='#888888')
+        # Instructions at y=68%
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#888888')
         
-        # Couple name (script)
-        tc(draw, couple_name, script_f(100), 1250, fill='#1C1917')
+        # Couple name at y=78%
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
         
-        # Date
+        # Date at y=87%
         if date_str:
-            tc(draw, date_str, serif_f(42), 1400, fill='#666666')
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
         
         add_brand(draw)
     
