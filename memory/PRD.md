@@ -1,167 +1,98 @@
-# Wedding Photography Gallery Management System
+# Wedding Photography Gallery - PRD
 
 ## Original Problem Statement
-Build a full-featured, self-hosted wedding photography client gallery management system similar to `weddingsbymark.uk`. Core requirements include admin management of galleries, master folder templates, large file uploads (40GB+) with original filenames preserved, on-the-fly ZIP downloads, granular share permissions, share expiry, custom share URLs, QR code generation, print shop with PayPal integration, and complete removal of "Emergent" branding.
+Self-hosted wedding photography client gallery management system. Full-featured admin panel with gallery management, chunked file uploads/downloads, robust sharing, password protection, print shop, and QR code generation.
 
-## User Personas
-- **Admin (Photographer):** Manages galleries, uploads photos, creates shares, manages print orders
-- **Clients (Couples):** View galleries, favourite photos, submit album selections, order prints, upload guest photos
+## Core Architecture
+- **Frontend:** React + Tailwind CSS + Shadcn/UI
+- **Backend:** FastAPI + Motor (async MongoDB) + Pillow
+- **Deployment:** Docker Compose on TrueNAS (user's own server)
+- **Auth:** JWT + optional TOTP 2FA via pyotp
 
-## Core Requirements
-- Admin-managed client galleries with clonable master folder template
-- Large file uploads (streaming) with preserved filenames
-- ZIP downloads for albums
-- 4 granular access levels (View, Download, Upload, Full Access)
-- Password protection, share expiry, custom URL slugs
-- QR code generation for shares
-- Print shop with PayPal.me checkout (£15 minimum order)
-- Custom branding (logo, no external branding)
-- Human-readable file storage structure
+## Implemented Features
 
-## Tech Stack
-- **Backend:** FastAPI, Motor (async MongoDB), PyJWT, Pillow, ffmpeg, qrcode
-- **Frontend:** React, Tailwind CSS, Shadcn/UI, Framer Motion
-- **Database:** MongoDB
-- **Deployment:** Docker, Docker Compose (Dockge), Nginx
+### Core Gallery System
+- Admin-managed galleries with subfolders
+- Chunked large file uploads/downloads
+- Share links with password protection and expiry
+- Guest upload capability
+- Print shop with size selection
 
-## Deployment Configuration
-- **TrueNAS IP:** 192.168.24.10
-- **Port:** 3037
-- **MongoDB Volume:** /mnt/apps/newweddingsbymarkgallery/mongodb
-- **User Files:** /mnt/nextcloud/newwedidngsbymarkuserfiles
-- **GitHub Repo:** https://github.com/valianktni1/180226galleryrepo
-- **Compose File:** /mnt/apps/dockge/data/180226galleryrepo/compose.yaml
+### Two-Factor Authentication (2FA)
+- Google Authenticator TOTP via pyotp
+- QR setup, recovery codes, admin settings UI
 
-### TrueNAS Deploy Commands (3-step)
+### Photographer Upload Mode
+- Toggle `allow_all_file_types` on shares for second shooters
+- Streaming uploads: chunks streamed directly to SSD (no memory buffering)
+- RAW/XMP files visible in admin panel with FileText icon, hidden from guest shares
+
+### QR Code Frame Generator (3 Designs)
+- **Design 1 - Floral:** Botanical watercolor corners, camera icon, gold script couple name
+- **Design 2 - Wavy:** Decorative wavy border with hearts, bold uppercase name
+- **Design 3 - Minimal:** Clean "Share the Love" heading, centered script name
+- Full AI-generated templates used as backgrounds
+- Dynamic QR code, couple name, and date overlay
+- Branded footer: "Designed and hosted by Weddings By Mark"
+- Frontend design selector with thumbnail previews
+- Endpoint: `GET /api/admin/shares/{share_id}/qr-frame?design=1|2|3`
+- Preview: `GET /api/admin/qr-design-preview/{design_num}`
+
+### Bug Fixes
+- TrueNAS disaster recovery
+- Hidden RAW files in admin UI
+- Dockerfile: Added `fonts-liberation` for QR PDF generation in Docker
+
+## Key API Endpoints
+- `POST /api/admin/login` — Admin login (returns `requires_2fa` if enabled)
+- `GET /api/admin/galleries` — List all galleries
+- `POST /api/share/{token}/upload` — Streaming chunk upload
+- `GET /api/admin/shares/{share_id}/qr-frame` — Generate printable QR frame PDF
+- `GET /api/admin/qr-design-preview/{design_num}` — Thumbnail preview of QR design
+
+## Key DB Schema
+- `shares`: `allow_all_file_types: boolean`
+- `admins`: `username, password (bcrypt hash), display_name`
+- Settings stored in `settings` collection (2FA config)
+
+## File Structure
+```
+/app
+├── backend/
+│   ├── assets/
+│   │   ├── qr_templates/ (3 AI-generated design PNGs)
+│   │   └── fonts/ (GreatVibes-Regular.ttf)
+│   ├── Dockerfile (includes fonts-liberation)
+│   ├── server.py
+│   └── requirements.txt
+├── frontend/src/
+│   ├── lib/api.js
+│   └── pages/
+│       ├── AdminSettings.js (2FA)
+│       ├── AdminLogin.js (2FA flow)
+│       ├── AdminGalleryDetail.js (QR design selector)
+│       ├── GuestUploadView.js (sequential uploads)
+│       └── ShareView.js
+└── memory/PRD.md
+```
+
+## Backlog / Future Tasks
+- **P1:** Email Notifications when clients submit album favourites
+- **P2:** Slideshow Mode for client gallery view
+- **P3:** Client Comments on favourited photos
+- **P4:** Watermark Previews (not affecting downloads)
+- **P5:** Dark Mode for client gallery view
+- **Refactoring:** Modularize server.py into route files, break down large React components
+
+## Critical Rules
+- NEVER modify `/s/{token}` URL structure (live physical QR codes exist)
+- NEVER delete existing shares
+- User deploys manually on TrueNAS via Docker Compose
+- PayPal integration is MOCKED (paypal.me link redirect)
+
+## Deployment Commands
 ```bash
 docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml down
 docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml build --no-cache
 docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml up -d
 ```
-
-## What's Been Implemented (Dec 2025 - Mar 2026)
-
-### Core Features
-- Gallery CRUD with master folder templates
-- File upload with streaming (40GB+ support)
-- Background thumbnail generation (4 workers)
-- Granular share permissions (View/Download/Upload/Full)
-- Custom share URLs and QR codes
-- Password protection and expiry dates
-- Print shop with PayPal.me integration (£15 minimum order)
-- Custom branding with logo auto-inversion
-- Branded footer "Site Designed & Maintained by Weddings By Mark"
-
-### Gallery Stats Dashboard (Feb 2026)
-- Total views, unique visitors, total downloads per gallery
-- Album Submitted badge on dashboard cards
-- Backend endpoints: `/api/admin/galleries-stats` and `/api/admin/galleries/{id}/stats`
-
-### QR Code Frame Generator
-- Elegant printable QR code frame with 3 branded designs (Floral, Wavy, Minimal)
-- Dynamic couple name extraction from gallery folder name
-- Branded footer: "Designed and hosted by Weddings By Mark"
-- Frontend design selector UI in QR dialog
-- Endpoint: `GET /api/admin/shares/{share_id}/qr-frame?design=1|2|3`
-
-### Guest Upload Mode
-- Simplified upload-only UI for wedding guests
-- 500MB file size limit for guest uploads
-- Optional background video compression (FFmpeg, off by default)
-
-### Print Shop
-- £15 minimum order with disabled checkout until threshold met
-- Size/finish (Gloss/Luster/Silk) selection
-- Cart with PayPal.me redirect for payment
-- Mobile-friendly floating cart button
-
-### Incremental Backup System
-- rsync-like backup to user-defined volume
-- Endpoint: `POST /api/admin/backup`
-
-### Security
-- Login rate limiting (5 attempts/5 minutes)
-- 24-hour admin session timeout (JWT)
-- Password-protected shares (bug fix for blank screen)
-
-### Activity & Tracking
-- Activity log with IP tracking
-- View tracking per gallery
-- Download tracking
-
-## Key API Endpoints
-- `POST /api/admin/login` - Admin authentication
-- `GET/POST /api/admin/galleries` - Gallery management
-- `GET /api/admin/galleries-stats` - All galleries summary stats
-- `GET /api/admin/galleries/{id}/stats` - Single gallery detailed stats
-- `POST /api/admin/galleries/{id}/upload` - File upload
-- `GET /api/admin/shares/{id}/qr` - Plain QR code
-- `GET /api/admin/shares/{id}/qr-frame` - Printable QR frame
-- `POST /api/admin/backup` - Incremental backup
-- `GET /api/admin/settings/compression` - Compression status
-- `GET /api/share/{token}` - Share info
-- `POST /api/share/{token}/access` - Access share
-- `GET /api/share/{token}/files` - Get share files
-- `POST /api/share/{token}/submit-favourites` - Submit favourites
-- `POST /api/share/{token}/upload` - Guest upload
-- `GET /api/share/{token}/guest-upload-count` - Guest upload count
-- `GET /api/share/{token}/print-sizes` - Print sizes for share
-- `POST /api/share/{token}/print-order` - Create print order
-
-## Database Collections
-- users, galleries, files, shares, favourites, print_products, print_orders, activity_log, activity, settings
-
-## Key Schema Fields
-- **shares:** `guest_upload_mode: boolean`
-- **settings:** `{ "key": "guest_video_compression", "enabled": boolean }`
-- **galleries:** `total_views`, `total_downloads` fields for stats
-
-## Frontend Routes
-- `/admin` - Admin login
-- `/admin/dashboard` - Admin dashboard
-- `/admin/gallery/:id` - Gallery detail
-- `/admin/settings` - Settings (Password, Compression, Print Sizes, Print Orders)
-- `/admin/activity` - Activity log
-- `/s/:token` - Share access (client-facing entry)
-- `/s/:token/view` - Share view (client gallery)
-- `/s/:token/prints` - Print shop
-
-## Backlog / Future Tasks
-- **P0:** QR Code Design Selector - 4 different QR frame designs at 8"x6"
-- **P1:** Email Notifications when clients submit album favourites
-- **P2:** Slideshow Mode for client gallery view
-- **P3:** Client Comments on favourited photos
-- **P4:** Watermark Previews (preview only, not downloads)
-- **P5:** Dark Mode for client gallery view
-
-## PayPal Integration
-MOCKED - Uses paypal.me link redirect, not full API integration
-
-## Verified Working (Mar 6, 2026)
-All features tested and verified working after fork:
-- Admin login, dashboard, gallery management
-- Gallery stats (views, visitors, downloads, album submitted)
-- Share access and client gallery view
-- Print shop with £15 minimum
-- Settings (all 5 tabs including 2FA)
-- Branded footer on client pages
-- All backend APIs responding correctly
-
-### Two-Factor Authentication (May 2026)
-- TOTP-based 2FA using Google Authenticator
-- QR code setup flow in Settings
-- 8 recovery codes (single-use, uppercase hex)
-- Rate limiting: 3 attempts / 30 minute lockout
-- Backend endpoints: `/api/admin/2fa/status`, `/api/admin/2fa/setup`, `/api/admin/2fa/enable`, `/api/admin/2fa/disable`
-
-### QR Code Design Selector (Jun 2026)
-- Frontend UI added to QR dialog with 3 design choices: Floral, Wavy, Minimal
-- Each design downloads as a print-ready 8x6" PDF at 300dpi
-- Thumbnail previews generated via `GET /api/admin/qr-design-preview/{design_num}` (cached in memory)
-- `api.js` `getShareQRFrame()` now accepts `design` parameter (1, 2, or 3)
-- All 3 backend designs and previews verified working (HTTP 200)
-- New "Allow all file types" checkbox when creating upload/full shares
-- Allows RAW files (.NEF, .CR2, .CR3, .ARW etc) and any other file type
-- Existing guest upload shares unaffected (still restricted to image/video)
-- "ALL FILES" badge shown on share cards in admin
-- Updated UI text for photographer uploads
