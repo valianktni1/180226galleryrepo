@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Heart, Download, X, ChevronLeft, ChevronRight, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText
 } from "lucide-react";
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, getErrorMessage
@@ -227,8 +227,11 @@ function ShareViewFull() {
   };
 
   const allFiles = subfolders.flatMap(sf => sf.files.map(f => ({ ...f, _subfolder: sf.name })));
-  const currentAlbumFiles = activeAlbum ? (subfolders.find(sf => sf.name === activeAlbum)?.files || []) : [];
-  const displayFiles = showFavourites ? allFiles.filter(f => f.is_favourite) : currentAlbumFiles;
+  const currentAlbumFilesRaw = activeAlbum ? (subfolders.find(sf => sf.name === activeAlbum)?.files || []) : [];
+  // Hide "other" file types from regular shares (only show in photographer shares)
+  const fileFilter = (f) => permissions.allowAllFileTypes || f.file_type === 'photo' || f.file_type === 'video';
+  const currentAlbumFiles = currentAlbumFilesRaw.filter(fileFilter);
+  const displayFiles = showFavourites ? allFiles.filter(f => f.is_favourite && fileFilter(f)) : currentAlbumFiles;
   const favCount = allFiles.filter(f => f.is_favourite).length;
 
   // Show all subfolders from the gallery (not just ones with files)
@@ -699,8 +702,10 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
         </div>
       ) : (
-        <div className="aspect-square flex items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
-          <span className="text-xs text-[#A8A29E]">{file.filename}</span>
+        <div className="aspect-square flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+          <FileText className="w-8 h-8 text-[#A8A29E] mb-1" />
+          <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+          <span className="text-[10px] text-[#C4C0B8] mt-0.5">{(file.file_size / (1024*1024)).toFixed(1)} MB</span>
         </div>
       )}
       {/* Selection checkbox - visible in select mode */}

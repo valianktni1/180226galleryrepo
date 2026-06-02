@@ -632,6 +632,15 @@ async def get_gallery_detail(gallery_id: str, admin=Depends(get_admin)):
         raise HTTPException(status_code=404, detail="Gallery not found")
     files = await db.files.find({"gallery_id": gallery_id}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
     shares = await db.shares.find({"gallery_id": gallery_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Auto-discover subfolders from files that aren't in the gallery's subfolders list
+    known_subfolders = set(gallery.get("subfolders", []))
+    file_subfolders = set(f["subfolder"] for f in files if f.get("subfolder"))
+    missing = file_subfolders - known_subfolders
+    if missing:
+        gallery["subfolders"] = gallery.get("subfolders", []) + sorted(missing)
+        await db.galleries.update_one({"id": gallery_id}, {"$set": {"subfolders": gallery["subfolders"]}})
+    
     gallery["files"] = files
     gallery["shares"] = shares
     return gallery
@@ -1738,6 +1747,12 @@ async def guest_upload(
     await db.galleries.update_one(
         {"id": gallery_id},
         {"$set": {f"file_counts.{subfolder}": count}}
+    )
+    
+    # Ensure the subfolder is in the gallery's subfolders list (auto-add if created by upload)
+    await db.galleries.update_one(
+        {"id": gallery_id, "subfolders": {"$ne": subfolder}},
+        {"$push": {"subfolders": subfolder}}
     )
     
     result = {"uploaded": uploaded, "count": len(uploaded)}

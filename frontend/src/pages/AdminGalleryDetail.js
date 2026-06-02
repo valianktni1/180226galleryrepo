@@ -22,7 +22,7 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star
+  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
@@ -513,10 +513,16 @@ export default function AdminGalleryDetail() {
                       {file.file_type === 'photo' && file.has_thumb ? (
                         <img src={thumbUrl(gallery.id, file.subfolder, file.filename)} alt={file.filename}
                           className="w-full h-full object-cover" loading="lazy" />
-                      ) : (
+                      ) : file.file_type === 'video' ? (
                         <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
                           <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
                           <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+                        </div>
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+                          <FileText className="w-8 h-8 text-[#A8A29E] mb-1" />
+                          <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+                          <span className="text-[10px] text-[#C4C0B8] mt-0.5">{(file.file_size / (1024*1024)).toFixed(1)} MB</span>
                         </div>
                       )}
                       {/* Cover indicator */}
@@ -552,9 +558,10 @@ export default function AdminGalleryDetail() {
                                   <Star className="w-3.5 h-3.5 text-amber-500" />
                                 </button>
                               )}
-                              {file.file_type === 'video' && (
-                                <button data-testid={`download-video-${file.id}`} onClick={() => handleDownloadSingleFile(file)}
-                                  className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                              {(file.file_type === 'video' || file.file_type === 'other') && (
+                                <button data-testid={`download-file-${file.id}`} onClick={() => handleDownloadSingleFile(file)}
+                                  className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}
+                                  title="Download">
                                   <Download className="w-3.5 h-3.5 text-[#1C1917]" />
                                 </button>
                               )}
