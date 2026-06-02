@@ -97,6 +97,7 @@ class ShareCreate(BaseModel):
     expires_at: Optional[str] = None  # ISO date string, None = never expires
     custom_slug: Optional[str] = None  # Custom URL slug like "ginamark301122"
     guest_upload_mode: bool = False  # If True, shows simplified guest upload UI
+    allow_all_file_types: bool = False  # If True, allows RAW/any file type (photographer upload)
 
 class FavouriteToggle(BaseModel):
     file_id: str
@@ -969,6 +970,7 @@ async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_adm
         "access_level": data.access_level,
         "allow_uploads": data.access_level in ("upload", "full"),
         "guest_upload_mode": data.guest_upload_mode,  # Simplified upload-only UI
+        "allow_all_file_types": data.allow_all_file_types,  # Photographer upload - any file type
         "label": data.label or (data.subfolder or gallery["folder_name"]),
         "expires_at": data.expires_at,  # ISO date string or None
         "is_active": True,
@@ -1190,6 +1192,7 @@ async def get_share_info(token: str):
         "access_level": share.get("access_level", "download"),
         "allow_uploads": share.get("allow_uploads", False),
         "guest_upload_mode": share.get("guest_upload_mode", False),
+        "allow_all_file_types": share.get("allow_all_file_types", False),
         "expires_at": share.get("expires_at"),
         "cover_url": cover_url,
         "file_count": file_count
@@ -1289,6 +1292,9 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
         for f in sf_data["files"]:
             f["is_favourite"] = f["id"] in fav_ids
 
+    # Get share doc for additional flags
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+
     return {
         "gallery_id": gallery_id,
         "gallery_name": gallery["folder_name"],
@@ -1297,7 +1303,8 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
         "access_level": session.get("access_level", "download"),
         "allow_uploads": session.get("allow_uploads", False),
         "allow_downloads": session.get("allow_downloads", True),
-        "allow_delete": session.get("allow_delete", False)
+        "allow_delete": session.get("allow_delete", False),
+        "allow_all_file_types": share.get("allow_all_file_types", False) if share else False
     }
 
 @api_router.post("/share/{token}/favourite")

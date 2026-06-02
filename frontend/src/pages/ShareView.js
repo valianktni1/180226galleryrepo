@@ -90,7 +90,8 @@ function ShareViewFull() {
         allowUploads: res.data.allow_uploads,
         allowDownloads: res.data.allow_downloads,
         allowDelete: res.data.allow_delete,
-        accessLevel: res.data.access_level || "download"
+        accessLevel: res.data.access_level || "download",
+        allowAllFileTypes: res.data.allow_all_file_types || false
       });
     } catch (err) {
       console.error("Failed to load share files:", err);
@@ -419,10 +420,15 @@ function ShareViewFull() {
             >
               <div className="flex items-center gap-2 mb-4">
                 <Upload className="w-5 h-5 text-[#D4AF37]" strokeWidth={1.5} />
-                <h2 className="text-xl font-semibold" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>Upload Photos & Videos</h2>
+                <h2 className="text-xl font-semibold" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                  {permissions.allowAllFileTypes ? "Upload Files" : "Upload Photos & Videos"}
+                </h2>
               </div>
               <p className="text-sm mb-4" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-                Share your photos and videos from the event
+                {permissions.allowAllFileTypes 
+                  ? "Upload RAW files, photos, videos and any other files"
+                  : "Share your photos and videos from the event"
+                }
               </p>
               <div
                 className="upload-zone p-8 flex flex-col items-center justify-center text-center cursor-pointer"
@@ -430,7 +436,7 @@ function ShareViewFull() {
                 onClick={() => guestInputRef.current?.click()}
                 data-testid="guest-upload-zone"
               >
-                <input ref={guestInputRef} type="file" multiple accept="image/*,video/*" className="hidden"
+                <input ref={guestInputRef} type="file" multiple accept={permissions.allowAllFileTypes ? undefined : "image/*,video/*"} className="hidden"
                   onChange={e => handleGuestUpload(e.target.files)} data-testid="guest-file-input" />
                 {uploading ? (
                   <div className="w-full max-w-xs">
@@ -444,7 +450,7 @@ function ShareViewFull() {
                       Click to choose files or drag & drop
                     </p>
                     <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-                      Photos and videos up to 500MB each
+                      {permissions.allowAllFileTypes ? "All file types accepted - up to 500MB each" : "Photos and videos up to 500MB each"}
                     </p>
                   </>
                 )}

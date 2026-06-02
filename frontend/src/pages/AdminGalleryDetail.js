@@ -49,7 +49,7 @@ export default function AdminGalleryDetail() {
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareForm, setShareForm] = useState({
-    subfolder: null, password: "", access_level: "download", label: "", expires_at: null, custom_slug: "", guest_upload_mode: false
+    subfolder: null, password: "", access_level: "download", label: "", expires_at: null, custom_slug: "", guest_upload_mode: false, allow_all_file_types: false
   });
   const [creatingShare, setCreatingShare] = useState(false);
 
@@ -208,7 +208,8 @@ export default function AdminGalleryDetail() {
         label: shareForm.label || null,
         expires_at: shareForm.expires_at || null,
         custom_slug: shareForm.custom_slug || null,
-        guest_upload_mode: shareForm.guest_upload_mode
+        guest_upload_mode: shareForm.guest_upload_mode,
+        allow_all_file_types: shareForm.allow_all_file_types
       };
       await createShare(id, data);
       toast.success("Share link created");
@@ -332,6 +333,11 @@ export default function AdminGalleryDetail() {
                     {s.guest_upload_mode && (
                       <span className="text-xs px-1.5 py-0.5 bg-[#0891B2]/10 text-[#0891B2] font-bold uppercase flex items-center gap-1">
                         <Upload className="w-3 h-3" /> GUEST MODE
+                      </span>
+                    )}
+                    {s.allow_all_file_types && (
+                      <span className="text-xs px-1.5 py-0.5 bg-[#7C3AED]/10 text-[#7C3AED] font-bold uppercase flex items-center gap-1">
+                        ALL FILES
                       </span>
                     )}
                     {s.subfolder && <span className="text-xs px-1.5 py-0.5 bg-[#78716C]/10 text-[#78716C]">{s.subfolder}</span>}
@@ -655,6 +661,27 @@ export default function AdminGalleryDetail() {
                     </span>
                     <span className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
                       Shows a simplified upload-only screen for wedding guests. No album browsing, no downloads - just a big upload button and a live counter.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            )}
+            {/* Photographer Upload - Allow all file types */}
+            {(shareForm.access_level === 'upload' || shareForm.access_level === 'full') && (
+              <div className="p-4 border rounded-sm" style={{ borderColor: '#8B6914', backgroundColor: 'rgba(139,105,20,0.05)' }}>
+                <label className="flex items-start gap-3 cursor-pointer" data-testid="allow-all-file-types-toggle">
+                  <input
+                    type="checkbox"
+                    checked={shareForm.allow_all_file_types}
+                    onChange={(e) => setShareForm(f => ({...f, allow_all_file_types: e.target.checked}))}
+                    className="mt-1 w-4 h-4 rounded border-[#8B6914] text-[#8B6914] focus:ring-[#8B6914]"
+                  />
+                  <div>
+                    <span className="block font-bold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                      Photographer Upload (All File Types)
+                    </span>
+                    <span className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                      Allows uploading any file type including RAW files (.NEF, .CR2, .CR3, .ARW etc). Use this for second shooters or photographers — not for wedding guests.
                     </span>
                   </div>
                 </label>

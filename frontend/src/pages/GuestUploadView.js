@@ -21,6 +21,8 @@ export default function GuestUploadView({ galleryName }) {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [dragOver, setDragOver] = useState(false);
 
+  const allowAllFileTypes = localStorage.getItem(`allow_all_file_types_${token}`) === 'true';
+
   // Extract couple name from gallery folder name (e.g., "Gina & Mark 30.11.22" -> "Gina & Mark")
   const coupleName = galleryName?.replace(/\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$/, '').trim() || galleryName || "the happy couple";
 
@@ -124,10 +126,16 @@ export default function GuestUploadView({ galleryName }) {
               style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}
               data-testid="guest-upload-title"
             >
-              Share your photos & videos from<br />{coupleName}'s wedding!
+              {allowAllFileTypes 
+                ? <>Upload files for<br />{coupleName}'s wedding</>
+                : <>Share your photos & videos from<br />{coupleName}'s wedding!</>
+              }
             </h1>
             <p className="text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-              Help capture every special moment by uploading your photos and videos
+              {allowAllFileTypes
+                ? "Upload RAW files, photos, videos and any other files"
+                : "Help capture every special moment by uploading your photos and videos"
+              }
             </p>
           </div>
 
@@ -176,7 +184,7 @@ export default function GuestUploadView({ galleryName }) {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*,video/*"
+              accept={allowAllFileTypes ? undefined : "image/*,video/*"}
               className="hidden"
               onChange={(e) => handleUpload(e.target.files)}
               data-testid="guest-file-input"
@@ -194,7 +202,7 @@ export default function GuestUploadView({ galleryName }) {
               <>
                 <Upload className="w-14 h-14 mx-auto mb-4 text-[#D4AF37]" strokeWidth={1.5} />
                 <p className="text-xl font-medium mb-2" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
-                  Tap here to choose photos & videos
+                  {allowAllFileTypes ? "Tap here to choose files" : "Tap here to choose photos & videos"}
                 </p>
                 <p className="text-sm mb-4" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
                   or drag & drop your files
@@ -204,14 +212,14 @@ export default function GuestUploadView({ galleryName }) {
                   style={{ fontFamily: 'Manrope, sans-serif' }}
                   data-testid="upload-button"
                 >
-                  <Upload className="w-4 h-4 mr-2" /> Upload Photos
+                  <Upload className="w-4 h-4 mr-2" /> {allowAllFileTypes ? "Upload Files" : "Upload Photos"}
                 </Button>
               </>
             )}
           </div>
 
           <p className="mt-4 text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-            Photos and videos up to 500MB each
+            {allowAllFileTypes ? "All file types accepted - up to 500MB each" : "Photos and videos up to 500MB each"}
           </p>
         </motion.div>
       </main>

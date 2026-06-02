@@ -151,3 +151,10 @@ All features tested and verified working after fork:
 - 8 recovery codes (single-use, uppercase hex)
 - Rate limiting: 3 attempts / 30 minute lockout
 - Backend endpoints: `/api/admin/2fa/status`, `/api/admin/2fa/setup`, `/api/admin/2fa/enable`, `/api/admin/2fa/disable`
+
+### Photographer Upload Mode (Jun 2026)
+- New "Allow all file types" checkbox when creating upload/full shares
+- Allows RAW files (.NEF, .CR2, .CR3, .ARW etc) and any other file type
+- Existing guest upload shares unaffected (still restricted to image/video)
+- "ALL FILES" badge shown on share cards in admin
+- Updated UI text for photographer uploads

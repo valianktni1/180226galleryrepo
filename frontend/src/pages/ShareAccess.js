@@ -32,6 +32,12 @@ export default function ShareAccess() {
         } else {
           localStorage.removeItem(`guest_upload_mode_${token}`);
         }
+        // Store allow_all_file_types for upload views
+        if (r.data.allow_all_file_types) {
+          localStorage.setItem(`allow_all_file_types_${token}`, 'true');
+        } else {
+          localStorage.removeItem(`allow_all_file_types_${token}`);
+        }
         // Store gallery name for guest upload view
         if (r.data.gallery_name) {
           localStorage.setItem(`gallery_name_${token}`, r.data.gallery_name);
