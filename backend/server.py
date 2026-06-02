@@ -1121,89 +1121,84 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
     SX = FW / 1264.0
     SY = FH / 848.0
 
-    def draw_text_centered_with_bg(draw, img, text, font, y, fill, bg_color=None, min_width=1200, pad_y=25):
-        """Draw centered text with an opaque background rectangle that covers old text too."""
+    def cover_and_draw(draw, text, font, y, fill, bg, min_w=1800, pad_y=50):
+        """Cover a wide area with bg color, then draw centered text."""
         bbox = draw.textbbox((0, 0), text, font=font)
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
         text_x = (FW - tw) // 2
-        # Rectangle is at least min_width wide to cover any old text
-        rect_w = max(tw + 80, min_width)
-        rect_x1 = (FW - rect_w) // 2
-        rect_x2 = rect_x1 + rect_w
-        # If no bg_color provided, sample from the image above the text at center
-        if bg_color is None:
-            try:
-                sample_y = max(0, y - pad_y - 15)
-                bg_color = img.getpixel((FW // 2, sample_y))[:3]
-            except Exception:
-                bg_color = (255, 255, 255)
-        draw.rectangle([rect_x1, y - pad_y, rect_x2, y + th + pad_y], fill=bg_color)
+        rect_w = max(tw + 100, min_w)
+        rx1 = (FW - rect_w) // 2
+        rx2 = rx1 + rect_w
+        draw.rectangle([rx1, y - pad_y, rx2, y + th + pad_y], fill=bg)
         draw.text((text_x, y), text, fill=fill, font=font)
 
     if design == 1:
-        # Floral: full template as background
+        # Floral: full template as background  
         img = Image.open(str(TEMPLATES_DIR / "design_1_floral.png")).convert('RGB').resize((FW, FH), Image.LANCZOS)
         draw = ImageDraw.Draw(img)
-        # Cover and replace QR code area (original center ~y=398, x centered)
+        # The floral template bg is cream/off-white in the center area
+        BG = (250, 249, 249)
+        # Replace the template QR placeholder with the real QR
         qr_size = int(185 * SX)
         qr_x = (FW - qr_size) // 2
         qr_y = int(398 * SY) - qr_size // 2
-        # White rect behind QR with gentle border
-        draw.rectangle([qr_x - 8, qr_y - 8, qr_x + qr_size + 8, qr_y + qr_size + 8], fill=(255, 255, 255))
+        draw.rectangle([qr_x - 12, qr_y - 12, qr_x + qr_size + 12, qr_y + qr_size + 12], fill=BG)
         qr_img = make_qr_img(share_url, qr_size)
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
-        # Golden "Sophie & Daniel" text is at y=1400-1510 in resized template
-        # Cover it and draw the real couple name centered in the same area
-        name_y = 1420
-        draw_text_centered_with_bg(draw, img, couple_name, script_f(int(38 * SX)), name_y, fill='#8B6914', min_width=1600, pad_y=60)
-        # Date "04.07.26" is at approximately y=1630-1665 in resized template
+        # Cover the entire name+date zone (y=1350-1700) with bg, then redraw
+        # This covers all of: golden "Sophie & Daniel", template date, any stray text
+        draw.rectangle([300, 1350, FW - 300, 1700], fill=BG)
+        # Draw couple name in gold script
+        tc(draw, couple_name, script_f(int(38 * SX)), 1420, fill='#8B6914')
+        # Draw date below
         if date_str:
-            date_y = 1640
-            draw_text_centered_with_bg(draw, img, date_str, serif_f(int(20 * SX)), date_y, fill='#666666', min_width=600, pad_y=20)
+            tc(draw, date_str, serif_f(int(20 * SX)), 1530, fill='#666666')
 
     elif design == 2:
-        # Wavy: full template as background (white interior, easy to cover)
+        # Wavy: full template as background (white interior)
         img = Image.open(str(TEMPLATES_DIR / "design_2_wavy.png")).convert('RGB').resize((FW, FH), Image.LANCZOS)
         draw = ImageDraw.Draw(img)
-        # Cover and replace QR code
+        BG = (255, 255, 255)
+        # Replace QR placeholder
         qr_size = int(240 * SX)
         qr_x = (FW - qr_size) // 2
         qr_y = int(455 * SY) - qr_size // 2
-        draw.rectangle([qr_x - 8, qr_y - 8, qr_x + qr_size + 8, qr_y + qr_size + 8], fill=(255, 255, 255))
+        draw.rectangle([qr_x - 12, qr_y - 12, qr_x + qr_size + 12, qr_y + qr_size + 12], fill=BG)
         qr_img = make_qr_img(share_url, qr_size)
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
-        # "SOPHIE & DANIEL" text is at y=1280-1335 in resized template
-        name_y = 1275
-        draw_text_centered_with_bg(draw, img, couple_name.upper(), serif_bf(int(32 * SX)), name_y, fill='#1C1917', bg_color=(255, 255, 255), min_width=1600, pad_y=45)
-        # Date text at y=1475-1550, stale template date at y=1590-1615
+        # Cover the entire name+date zone — wavy template has name at ~y=1280 and date at ~y=1480
+        # Cover generously from y=1230 to y=1580 (preserving brand text below ~y=1650)
+        draw.rectangle([200, 1230, FW - 200, 1580], fill=BG)
+        # Draw couple name in bold uppercase
+        tc(draw, couple_name.upper(), serif_bf(int(32 * SX)), 1310, fill='#1C1917')
+        # Draw date
         if date_str:
-            date_y = 1480
-            draw_text_centered_with_bg(draw, img, date_str, serif_f(int(20 * SX)), date_y, fill='#666666', bg_color=(255, 255, 255), min_width=800, pad_y=45)
-            # Also cover stale template date below
-            draw.rectangle([(FW - 800) // 2, 1575, (FW + 800) // 2, 1620], fill=(255, 255, 255))
+            tc(draw, date_str, serif_f(int(20 * SX)), 1420, fill='#666666')
 
     else:
-        # Minimal: full template as background (grey QR placeholder)
+        # Minimal: full template as background
         img = Image.open(str(TEMPLATES_DIR / "design_3_minimal.png")).convert('RGB').resize((FW, FH), Image.LANCZOS)
         draw = ImageDraw.Draw(img)
-        # Cover grey QR placeholder with white and place real QR
+        BG = (255, 255, 255)
+        # Replace grey QR placeholder
         qr_size = int(230 * SX)
         qr_x = (FW - qr_size) // 2
         qr_y = int(420 * SY) - qr_size // 2
-        draw.rectangle([qr_x - 20, qr_y - 20, qr_x + qr_size + 20, qr_y + qr_size + 20], fill=(254, 255, 254))
+        draw.rectangle([qr_x - 20, qr_y - 20, qr_x + qr_size + 20, qr_y + qr_size + 20], fill=BG)
         qr_img = make_qr_img(share_url, qr_size)
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
-        # "Sophie & Daniel" script text at y=1400-1560 in resized template
-        name_y = 1410
-        draw_text_centered_with_bg(draw, img, couple_name, script_f(int(45 * SX)), name_y, fill='#1C1917', min_width=1600, pad_y=95)
-        # Date below (no prominent date in minimal, but add if available)
+        # Cover the entire name+date zone (y=1380 to y=1620)
+        # Avoids the instruction text above (~y=1250-1340) and brand text below (~y=1650+)
+        draw.rectangle([200, 1380, FW - 200, 1620], fill=BG)
+        # Draw couple name in script
+        tc(draw, couple_name, script_f(int(45 * SX)), 1400, fill='#1C1917')
+        # Draw date
         if date_str:
-            date_y = 1575
-            draw_text_centered_with_bg(draw, img, date_str, serif_f(int(20 * SX)), date_y, fill='#666666', min_width=600, pad_y=15)
+            tc(draw, date_str, serif_f(int(20 * SX)), 1530, fill='#666666')
     
     # Save as PDF
     buf = io.BytesIO()
