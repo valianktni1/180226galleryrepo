@@ -74,7 +74,12 @@ export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/sta
 export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats');
 
 // Admin Activity Log
-export const getAdminActivity = (limit = 50) => apiClient.get(`/admin/activity?limit=${limit}`);
+export const getAdminActivity = (limit = 50, galleryId = null, action = null) => {
+  let url = `/admin/activity?limit=${limit}`;
+  if (galleryId) url += `&gallery_id=${galleryId}`;
+  if (action) url += `&action=${action}`;
+  return apiClient.get(url);
+};
 
 // File Upload
 export const uploadFiles = (galleryId, subfolder, files, onProgress) => {

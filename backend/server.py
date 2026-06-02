@@ -1553,8 +1553,57 @@ async def submit_favourites_to_album(token: str, request: Request, session=Depen
     
     return {"copied": copied, "already_existed": already_exists, "total_favourites": len(favs)}
 
+
+async def _log_download(gallery_id, gallery_name, share_label, client_ip,
+                        download_type, filenames, subfolder, downloaded_count, total_in_scope):
+    """Log a detailed download event to activity_log.
+    download_type: 'single', 'selection', 'album', 'favourites'
+    """
+    if downloaded_count >= total_in_scope and total_in_scope > 1:
+        completeness = "full"
+    elif downloaded_count == 1:
+        completeness = "single"
+    else:
+        completeness = "partial"
+
+    if download_type == "single":
+        details = f"Downloaded 1 file: {filenames[0]}"
+    elif download_type == "favourites":
+        details = f"Downloaded {downloaded_count} favourites as ZIP"
+    else:
+        scope = f" from {subfolder}" if subfolder else " (full gallery)"
+        details = f"Downloaded {downloaded_count}/{total_in_scope} files{scope}"
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    await db.activity.update_one(
+        {"gallery_id": gallery_id, "date": today},
+        {"$inc": {"downloads": 1}},
+        upsert=True
+    )
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$inc": {"total_downloads": 1}}
+    )
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "gallery_name": gallery_name,
+        "share_label": share_label,
+        "action": "download",
+        "download_type": download_type,
+        "completeness": completeness,
+        "details": details,
+        "files_downloaded": filenames[:50],  # Cap at 50 to avoid huge docs
+        "files_count": downloaded_count,
+        "total_available": total_in_scope,
+        "subfolder": subfolder,
+        "ip_address": client_ip,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
 @api_router.get("/share/{token}/download/{file_id}")
-async def download_share_file(token: str, file_id: str, session=Depends(get_share_session)):
+async def download_share_file(token: str, file_id: str, request: Request, session=Depends(get_share_session)):
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
     # Enforce download permission
@@ -1567,10 +1616,20 @@ async def download_share_file(token: str, file_id: str, session=Depends(get_shar
     file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    # Log detailed download
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    await _log_download(session["gallery_id"], gallery.get("folder_name", "Unknown"),
+                        share.get("label", token) if share else token, client_ip,
+                        "single", [f["filename"]], f["subfolder"], 1, 1)
+    
     return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
 
 @api_router.post("/share/{token}/download-zip")
-async def download_share_zip(token: str, file_ids: List[str] = [], session=Depends(get_share_session)):
+async def download_share_zip(token: str, request: Request, file_ids: List[str] = [], session=Depends(get_share_session)):
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
     if not session.get("allow_downloads", False):
@@ -1580,14 +1639,35 @@ async def download_share_zip(token: str, file_ids: List[str] = [], session=Depen
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
 
+    subfolder = session.get("subfolder")
     if file_ids:
         query = {"gallery_id": gallery_id, "id": {"$in": file_ids}}
     else:
-        subfolder = session.get("subfolder")
         query = {"gallery_id": gallery_id}
         if subfolder:
             query["subfolder"] = subfolder
     files = await db.files.find(query, {"_id": 0}).to_list(50000)
+    
+    if not files:
+        raise HTTPException(status_code=404, detail="No files to download")
+
+    # Count total available files for completeness tracking
+    total_query = {"gallery_id": gallery_id}
+    if subfolder:
+        total_query["subfolder"] = subfolder
+    total_available = await db.files.count_documents(total_query)
+
+    # Log detailed download
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    dl_type = "selection" if file_ids else "album"
+    sub = files[0]["subfolder"] if files else subfolder
+    await _log_download(gallery_id, gallery.get("folder_name", "Unknown"),
+                        share.get("label", token) if share else token, client_ip,
+                        dl_type, [f["filename"] for f in files], sub,
+                        len(files), total_available)
     
     if not files:
         raise HTTPException(status_code=404, detail="No files to download")
@@ -1620,7 +1700,7 @@ async def download_share_zip(token: str, file_ids: List[str] = [], session=Depen
 
 # Direct GET endpoint for share ZIP download (better browser support)
 @api_router.get("/share/{token}/download-album")
-async def download_share_album_direct(token: str, subfolder: str = Query(None), jwt_token: str = Query(..., alias="t")):
+async def download_share_album_direct(token: str, request: Request, subfolder: str = Query(None), jwt_token: str = Query(..., alias="t")):
     # Verify JWT from query param
     payload = verify_jwt(jwt_token)
     if not payload or payload.get("role") != "share" or payload.get("token") != token:
@@ -1640,6 +1720,17 @@ async def download_share_album_direct(token: str, subfolder: str = Query(None), 
     
     if not files:
         raise HTTPException(status_code=404, detail="No files to download")
+
+    # Log detailed download
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    total_available = len(files)
+    await _log_download(gallery_id, gallery.get("folder_name", "Unknown"),
+                        share.get("label", token) if share else token, client_ip,
+                        "album", [f["filename"] for f in files], subfolder,
+                        len(files), total_available)
 
     def iter_zip():
         buf = io.BytesIO()
@@ -1669,7 +1760,7 @@ async def download_share_album_direct(token: str, subfolder: str = Query(None), 
 
 # Direct GET endpoint for downloading favourites
 @api_router.get("/share/{token}/download-favourites")
-async def download_share_favourites_direct(token: str, jwt_token: str = Query(..., alias="t")):
+async def download_share_favourites_direct(token: str, request: Request, jwt_token: str = Query(..., alias="t")):
     # Verify JWT from query param
     payload = verify_jwt(jwt_token)
     if not payload or payload.get("role") != "share" or payload.get("token") != token:
@@ -1698,6 +1789,16 @@ async def download_share_favourites_direct(token: str, jwt_token: str = Query(..
     
     if not files:
         raise HTTPException(status_code=404, detail="No files found")
+
+    # Log detailed download
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    await _log_download(gallery_id, gallery.get("folder_name", "Unknown"),
+                        share.get("label", token) if share else token, client_ip,
+                        "favourites", [f["filename"] for f in files], "Favourites",
+                        len(files), len(files))
 
     def iter_zip():
         buf = io.BytesIO()
@@ -2164,50 +2265,19 @@ async def track_gallery_view(token: str, request: Request):
 
 @api_router.post("/share/{token}/track-download")
 async def track_download(token: str, request: Request, session=Depends(get_share_session)):
-    """Track when files are downloaded."""
-    if session.get("token") != token:
-        return {"ok": False}
-    
-    # Get client IP
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
-    
-    gallery_id = session["gallery_id"]
-    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
-    gallery_name = gallery.get("folder_name", "Unknown") if gallery else "Unknown"
-    share = await db.shares.find_one({"token": token}, {"_id": 0})
-    
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    await db.activity.update_one(
-        {"gallery_id": gallery_id, "date": today},
-        {"$inc": {"downloads": 1}},
-        upsert=True
-    )
-    await db.galleries.update_one(
-        {"id": gallery_id},
-        {"$inc": {"total_downloads": 1}}
-    )
-    
-    # Add to detailed activity log
-    await db.activity_log.insert_one({
-        "id": str(uuid.uuid4()),
-        "gallery_id": gallery_id,
-        "gallery_name": gallery_name,
-        "share_label": share.get("label", token) if share else token,
-        "action": "download",
-        "details": "Files downloaded",
-        "ip_address": client_ip,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
-    
+    """Legacy tracking endpoint — downloads are now logged directly in the download handlers."""
     return {"ok": True}
 
 @api_router.get("/admin/activity")
-async def get_admin_activity(limit: int = Query(50, le=200), admin=Depends(get_admin)):
-    """Get recent activity across all galleries."""
+async def get_admin_activity(limit: int = Query(50, le=200), gallery_id: str = Query(None), action: str = Query(None), admin=Depends(get_admin)):
+    """Get recent activity across all galleries, optionally filtered."""
+    query = {}
+    if gallery_id:
+        query["gallery_id"] = gallery_id
+    if action:
+        query["action"] = action
     activities = await db.activity_log.find(
-        {}, {"_id": 0}
+        query, {"_id": 0}
     ).sort("timestamp", -1).limit(limit).to_list(limit)
     return {"activities": activities}
 

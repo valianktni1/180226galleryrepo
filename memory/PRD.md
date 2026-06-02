@@ -38,6 +38,13 @@ Self-hosted wedding photography client gallery management system. Full-featured 
 - Endpoint: `GET /api/admin/shares/{share_id}/qr-frame?design=1|2|3`
 - Preview: `GET /api/admin/qr-design-preview/{design_num}`
 
+### Activity Log (Enhanced Downloads)
+- Detailed download tracking in all download endpoints (single, zip, album, favourites)
+- Logs: exact filenames, download count, completeness (full/partial/single), IP, share label
+- Frontend: expandable file lists, colour-coded badges, action filter dropdown
+- All existing view/favourites logs preserved backwards-compatible
+- Endpoint: `GET /api/admin/activity?limit=&gallery_id=&action=`
+
 ### Bug Fixes
 - TrueNAS disaster recovery
 - Hidden RAW files in admin UI
