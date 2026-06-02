@@ -54,28 +54,60 @@ export default function GuestUploadView({ galleryName }) {
     
     try {
       const files = Array.from(fileList);
-      const res = await guestUpload(token, files, (e) => {
-        setUploadProgress(Math.round((e.loaded * 100) / e.total));
-      });
       
-      setUploadedFiles(res.data.uploaded || []);
-      
-      // Show warning if some files were skipped due to size
-      if (res.data.skipped && res.data.skipped.length > 0) {
-        toast.warning(`${res.data.skipped.length} file(s) exceeded 500MB limit and were not uploaded`);
-      }
-      
-      if (res.data.uploaded && res.data.uploaded.length > 0) {
-        setShowSuccess(true);
-        fetchUploadCount(); // Refresh count
+      if (allowAllFileTypes) {
+        // PHOTOGRAPHER MODE: Upload files one at a time for reliability with large files
+        const allUploaded = [];
+        for (let i = 0; i < files.length; i++) {
+          setUploadProgress(Math.round(((i) / files.length) * 100));
+          try {
+            const res = await guestUpload(token, [files[i]], (e) => {
+              const fileProgress = Math.round((e.loaded * 100) / e.total);
+              const overallProgress = Math.round(((i + fileProgress / 100) / files.length) * 100);
+              setUploadProgress(overallProgress);
+            });
+            if (res.data.uploaded) {
+              allUploaded.push(...res.data.uploaded);
+            }
+          } catch (err) {
+            toast.error(`Failed to upload ${files[i].name}: ${getErrorMessage(err, "Upload error")}`);
+          }
+        }
         
-        // Auto-hide success after 5 seconds
-        setTimeout(() => {
-          setShowSuccess(false);
-          setUploadedFiles([]);
-        }, 5000);
-      } else if (!res.data.skipped || res.data.skipped.length === 0) {
-        toast.error("No files were uploaded");
+        setUploadedFiles(allUploaded);
+        setUploadProgress(100);
+        
+        if (allUploaded.length > 0) {
+          toast.success(`${allUploaded.length} file(s) uploaded successfully`);
+          setShowSuccess(true);
+          fetchUploadCount();
+          setTimeout(() => {
+            setShowSuccess(false);
+            setUploadedFiles([]);
+          }, 5000);
+        }
+      } else {
+        // GUEST MODE: Upload all at once (smaller files)
+        const res = await guestUpload(token, files, (e) => {
+          setUploadProgress(Math.round((e.loaded * 100) / e.total));
+        });
+        
+        setUploadedFiles(res.data.uploaded || []);
+        
+        if (res.data.skipped && res.data.skipped.length > 0) {
+          toast.warning(`${res.data.skipped.length} file(s) exceeded 500MB limit and were not uploaded`);
+        }
+        
+        if (res.data.uploaded && res.data.uploaded.length > 0) {
+          setShowSuccess(true);
+          fetchUploadCount();
+          setTimeout(() => {
+            setShowSuccess(false);
+            setUploadedFiles([]);
+          }, 5000);
+        } else if (!res.data.skipped || res.data.skipped.length === 0) {
+          toast.error("No files were uploaded");
+        }
       }
       
     } catch (err) {

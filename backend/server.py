@@ -1623,59 +1623,116 @@ async def guest_upload(
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
 
+    # Check if this share allows all file types (photographer mode)
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    is_photographer_mode = share.get("allow_all_file_types", False) if share else False
+
     subfolder = session.get("subfolder") or "Guest Uploads"
     target_dir = get_gallery_path(gallery["folder_name"]) / subfolder
     target_dir.mkdir(parents=True, exist_ok=True)
     
-    # Check if compression is enabled
-    compression_enabled = await get_compression_setting()
+    # Only check compression setting for non-photographer uploads
+    compression_enabled = False if is_photographer_mode else await get_compression_setting()
 
     uploaded = []
     skipped_too_large = []
     for file in files:
-        content = await file.read()
-        # Enforce 500MB limit for guest uploads
-        if len(content) > MAX_GUEST_UPLOAD_SIZE:
-            skipped_too_large.append(file.filename)
-            continue
+        if is_photographer_mode:
+            # PHOTOGRAPHER MODE: Stream directly to disk, preserve original filename, no size limit
+            original_name = file.filename or "unnamed_file"
+            # Preserve original filename but handle duplicates
+            final_name = original_name
+            file_path = target_dir / final_name
+            counter = 1
+            while file_path.exists():
+                stem = Path(original_name).stem
+                suffix = Path(original_name).suffix
+                final_name = f"{stem}_{counter}{suffix}"
+                file_path = target_dir / final_name
+                counter += 1
 
-        final_name = safe_filename(file.filename, target_dir)
-        file_path = target_dir / final_name
-        async with aiofiles.open(file_path, 'wb') as f_out:
-            await f_out.write(content)
+            # Stream directly to disk in chunks - no memory buffering
+            file_size = 0
+            async with aiofiles.open(file_path, 'wb') as f_out:
+                while True:
+                    chunk = await file.read(1024 * 1024)  # 1MB chunks
+                    if not chunk:
+                        break
+                    await f_out.write(chunk)
+                    file_size += len(chunk)
 
-        file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
-        has_thumb = False
-        has_preview = False
-        if file_type == "photo":
-            has_thumb = make_thumbnail(file_path, get_thumb_path(gallery_id, subfolder, final_name))
-            has_preview = make_preview(file_path, get_preview_path(gallery_id, subfolder, final_name))
+            file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
+            
+            # Generate thumbnails in background for photos (non-blocking)
+            has_thumb = False
+            has_preview = False
+            file_doc = {
+                "id": str(uuid.uuid4()),
+                "gallery_id": gallery_id,
+                "subfolder": subfolder,
+                "filename": final_name,
+                "original_filename": file.filename,
+                "file_type": file_type,
+                "file_size": file_size,
+                "has_thumb": has_thumb,
+                "has_preview": has_preview,
+                "uploaded_by": "photographer",
+                "uploaded_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.files.insert_one(file_doc)
+            
+            # Queue thumbnail generation in background (non-blocking)
+            if file_type == "photo":
+                thumbnail_executor.submit(
+                    generate_thumbnails_background,
+                    file_path, gallery_id, subfolder, final_name, file_type, file_doc["id"]
+                )
+            
+            uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
+        else:
+            # GUEST MODE: Original behaviour with memory read, size limit, compression
+            content = await file.read()
+            # Enforce 500MB limit for guest uploads
+            if len(content) > MAX_GUEST_UPLOAD_SIZE:
+                skipped_too_large.append(file.filename)
+                continue
 
-        file_doc = {
-            "id": str(uuid.uuid4()),
-            "gallery_id": gallery_id,
-            "subfolder": subfolder,
-            "filename": final_name,
-            "original_filename": file.filename,
-            "file_type": file_type,
-            "file_size": len(content),
-            "has_thumb": has_thumb,
-            "has_preview": has_preview,
-            "uploaded_by": "guest",
-            "uploaded_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.files.insert_one(file_doc)
-        uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
-        
-        # Schedule background compression for large guest videos if enabled
-        if compression_enabled and file_type == "video" and len(content) > VIDEO_COMPRESSION_SIZE_THRESHOLD:
-            # Run compression in background thread
-            thumbnail_executor.submit(
-                compress_guest_video_background,
-                file_path,
-                file_doc["id"],
-                gallery_id
-            )
+            final_name = safe_filename(file.filename, target_dir)
+            file_path = target_dir / final_name
+            async with aiofiles.open(file_path, 'wb') as f_out:
+                await f_out.write(content)
+
+            file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
+            has_thumb = False
+            has_preview = False
+            if file_type == "photo":
+                has_thumb = make_thumbnail(file_path, get_thumb_path(gallery_id, subfolder, final_name))
+                has_preview = make_preview(file_path, get_preview_path(gallery_id, subfolder, final_name))
+
+            file_doc = {
+                "id": str(uuid.uuid4()),
+                "gallery_id": gallery_id,
+                "subfolder": subfolder,
+                "filename": final_name,
+                "original_filename": file.filename,
+                "file_type": file_type,
+                "file_size": len(content),
+                "has_thumb": has_thumb,
+                "has_preview": has_preview,
+                "uploaded_by": "guest",
+                "uploaded_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.files.insert_one(file_doc)
+            uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
+            
+            # Schedule background compression for large guest videos if enabled
+            if compression_enabled and file_type == "video" and len(content) > VIDEO_COMPRESSION_SIZE_THRESHOLD:
+                thumbnail_executor.submit(
+                    compress_guest_video_background,
+                    file_path,
+                    file_doc["id"],
+                    gallery_id
+                )
 
     count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": subfolder})
     await db.galleries.update_one(

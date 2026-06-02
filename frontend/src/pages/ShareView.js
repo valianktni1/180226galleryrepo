@@ -198,10 +198,25 @@ function ShareViewFull() {
     setUploading(true);
     setUploadProgress(0);
     try {
-      await guestUpload(token, Array.from(fileList), (e) => {
-        setUploadProgress(Math.round((e.loaded * 100) / e.total));
-      });
-      toast.success("Photos uploaded! Thank you!");
+      const files = Array.from(fileList);
+      if (permissions.allowAllFileTypes) {
+        // Photographer mode: upload one at a time
+        for (let i = 0; i < files.length; i++) {
+          setUploadProgress(Math.round(((i) / files.length) * 100));
+          await guestUpload(token, [files[i]], (e) => {
+            const fileProgress = Math.round((e.loaded * 100) / e.total);
+            setUploadProgress(Math.round(((i + fileProgress / 100) / files.length) * 100));
+          });
+        }
+        setUploadProgress(100);
+        toast.success(`${files.length} file(s) uploaded successfully!`);
+      } else {
+        // Guest mode: upload all at once
+        await guestUpload(token, files, (e) => {
+          setUploadProgress(Math.round((e.loaded * 100) / e.total));
+        });
+        toast.success("Photos uploaded! Thank you!");
+      }
       loadFiles();
     } catch (err) {
       toast.error(getErrorMessage(err, "Upload failed"));
