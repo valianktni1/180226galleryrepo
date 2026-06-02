@@ -1050,8 +1050,8 @@ async def get_share_qr(share_id: str, base_url: str = Query(...), token: Optiona
     return StreamingResponse(buf, media_type="image/png")
 
 @api_router.get("/admin/shares/{share_id}/qr-frame")
-async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: Optional[str] = Query(None)):
-    """Generate elegant QR code frame with couple name and branding."""
+async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: Optional[str] = Query(None), design: int = Query(1)):
+    """Generate elegant QR code frame with couple name. Designs: 1=Floral, 2=Wavy Border, 3=Elegant Minimal."""
     # Verify admin token
     if token:
         try:
@@ -1073,75 +1073,131 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
     
-    # Extract couple name from folder (e.g., "Gina & Mark 30.11.22" -> "GINA & MARK")
     import re
     folder_name = gallery["folder_name"]
-    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip().upper()
+    # Extract couple name (remove date from end)
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip()
     if not couple_name:
-        couple_name = folder_name.upper()
+        couple_name = folder_name
+    
+    # Extract date from folder name
+    date_match = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{2,4})$', folder_name.strip())
+    date_str = f"{date_match.group(1)}.{date_match.group(2)}.{date_match.group(3)}" if date_match else ""
     
     share_url = f"{base_url}/s/{share['token']}"
     
-    # Generate QR code
-    qr = qrcode.QRCode(version=1, box_size=12, border=2, error_correction=qrcode.constants.ERROR_CORRECT_H)
-    qr.add_data(share_url)
-    qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="#1C1917", back_color="white").convert('RGBA')
-    
-    # Load the template
-    template_path = ROOT_DIR / "assets" / "qr_frame_template.png"
-    if not template_path.exists():
-        raise HTTPException(status_code=500, detail="QR frame template not found")
-    
     from PIL import ImageDraw, ImageFont
-    template = Image.open(template_path).convert('RGBA')
     
-    # Calculate QR code position (center of template)
-    template_width, template_height = template.size
+    # Constants
+    FW, FH = 2400, 1800  # 8x6 at 300dpi
+    FONTS_DIR = ROOT_DIR / "assets" / "fonts"
+    TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
     
-    # The QR code should be placed centered in the golden frame area
-    qr_target_size = int(min(template_width, template_height) * 0.30)
-    qr_img = qr_img.resize((qr_target_size, qr_target_size), Image.LANCZOS)
+    script_f = lambda s: ImageFont.truetype(str(FONTS_DIR / "GreatVibes-Regular.ttf"), s)
+    serif_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", s)
+    serif_bf = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf", s)
+    serif_if = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf", s)
+    sans_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", s)
     
-    # Center position for QR code - centered both horizontally and vertically in the frame
-    qr_x = (template_width - qr_target_size) // 2
-    qr_y = (template_height - qr_target_size) // 2  # True center
+    def make_qr_img(url, size=550):
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=2)
+        qr.add_data(url)
+        qr.make(fit=True)
+        qi = qr.make_image(fill_color="black", back_color="white").convert('RGB')
+        return qi.resize((size, size), Image.LANCZOS)
     
-    # Paste QR code onto template
-    template.paste(qr_img, (qr_x, qr_y), qr_img)
+    def tc(draw, text, font, y, fill='black'):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((FW - tw) // 2, y), text, fill=fill, font=font)
     
-    # Add couple name text at top
-    draw = ImageDraw.Draw(template)
+    def add_brand(draw):
+        b = "Designed and hosted by Weddings By Mark"
+        bf = sans_f(22)
+        bbox = draw.textbbox((0, 0), b, font=bf)
+        draw.text((FW - (bbox[2] - bbox[0]) - 60, FH - 60), b, fill='#AAAAAA', font=bf)
     
-    # Try to load a nice font, fall back to default
-    try:
-        # Try system fonts
-        font_size = int(template_width * 0.045)
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", font_size)
-    except:
-        font = ImageFont.load_default()
+    if design == 1:
+        # Floral design
+        img = Image.new('RGB', (FW, FH), 'white')
+        tmpl = Image.open(str(TEMPLATES_DIR / "design_1_floral.png")).resize((FW, FH), Image.LANCZOS)
+        img.paste(tmpl.crop((FW-750, 0, FW, 550)), (FW-750, 0))
+        img.paste(tmpl.crop((0, FH-550, 750, FH)), (0, FH-550))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "CAPTURE", serif_bf(110), 170, fill='#2C2C2C')
+        tc(draw, "the love", script_f(130), 290, fill='#2C2C2C')
+        qr_img = make_qr_img(share_url, 550)
+        qr_x, qr_y = (FW - 550) // 2, 480
+        img.paste(qr_img, (qr_x, qr_y))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([qr_x-4, qr_y-4, qr_x+554, qr_y+554], outline='#E0DCD4', width=3)
+        tc(draw, "Please share your photos with us!", sans_f(36), 1090, fill='#666666')
+        tc(draw, "Simply scan the QR code & upload.", sans_f(30), 1140, fill='#888888')
+        tc(draw, couple_name, script_f(90), 1220, fill='#2C2C2C')
+        if date_str:
+            tc(draw, date_str, serif_f(42), 1340, fill='#666666')
+        add_brand(draw)
+    elif design == 2:
+        # Wavy border design
+        img = Image.new('RGB', (FW, FH), 'white')
+        tmpl = Image.open(str(TEMPLATES_DIR / "design_2_wavy.png")).resize((FW, FH), Image.LANCZOS)
+        img.paste(tmpl.crop((0, 0, FW, 100)), (0, 0))
+        img.paste(tmpl.crop((0, FH-100, FW, FH)), (0, FH-100))
+        img.paste(tmpl.crop((0, 100, 100, FH-100)), (0, 100))
+        img.paste(tmpl.crop((FW-100, 100, FW, FH-100)), (FW-100, 100))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "Capture", script_f(140), 150, fill='#1C1917')
+        tc(draw, "THE LOVE", serif_bf(80), 310, fill='#1C1917')
+        qr_img = make_qr_img(share_url, 500)
+        qr_x, qr_y = (FW - 500) // 2, 470
+        img.paste(qr_img, (qr_x, qr_y))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(34), 1030, fill='#444444')
+        tc(draw, "JUST SCAN THE QR CODE", sans_f(28), 1075, fill='#666666')
+        tc(draw, couple_name.upper(), serif_bf(70), 1150, fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(42), 1240, fill='#666666')
+        add_brand(draw)
+    else:
+        # Elegant minimal design
+        img = Image.new('RGB', (FW, FH), 'white')
+        draw = ImageDraw.Draw(img)
+        sf = script_f(160)
+        tf = serif_if(50)
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw, tw2, lw = sb[2]-sb[0], tb[2]-tb[0], lb[2]-lb[0]
+        total = sw + tw2 + lw + 80
+        sx = (FW - total) // 2
+        ty = 180
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + 40, ty + 80), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + 40 + tw2 + 40, ty), "Love", fill='#1C1917', font=sf)
+        qr_img = make_qr_img(share_url, 550)
+        qr_x, qr_y = (FW - 550) // 2, 500
+        img.paste(qr_img, (qr_x, qr_y))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(30), 1110, fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(30), 1150, fill='#888888')
+        tc(draw, couple_name, script_f(100), 1260, fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(42), 1400, fill='#666666')
+        add_brand(draw)
     
-    # Draw couple name centered near top
-    text_bbox = draw.textbbox((0, 0), couple_name, font=font)
-    text_width = text_bbox[2] - text_bbox[0]
-    text_x = (template_width - text_width) // 2
-    text_y = int(template_height * 0.08)  # Position above the flowers
-    draw.text((text_x, text_y), couple_name, fill="#1C1917", font=font)
-    
-    # Convert to RGB and save as PNG
-    output = template.convert('RGB')
+    # Save as PDF
     buf = io.BytesIO()
-    output.save(buf, format="PNG")
+    img.save(buf, format="PDF", resolution=300.0)
     buf.seek(0)
     
-    # Set filename for download
     safe_name = couple_name.replace(' ', '_').replace('&', 'and')
+    design_names = {1: "Floral", 2: "Wavy", 3: "Minimal"}
     
     return StreamingResponse(
-        buf, 
-        media_type="image/png",
+        buf,
+        media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_name}_QR_Code.png"'
+            "Content-Disposition": f'attachment; filename="{safe_name}_QR_{design_names.get(design, "Frame")}.pdf"'
         }
     )
 

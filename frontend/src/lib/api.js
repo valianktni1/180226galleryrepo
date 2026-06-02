@@ -141,10 +141,10 @@ export const getShareQR = (shareId) => {
   return `${API}/admin/shares/${shareId}/qr?base_url=${encodeURIComponent(baseUrl)}`;
 };
 
-export const getShareQRFrame = (shareId) => {
+export const getShareQRFrame = (shareId, design = 1) => {
   const baseUrl = window.location.origin;
   const token = localStorage.getItem('admin_token');
-  return `${API}/admin/shares/${shareId}/qr-frame?base_url=${encodeURIComponent(baseUrl)}&token=${encodeURIComponent(token)}`;
+  return `${API}/admin/shares/${shareId}/qr-frame?base_url=${encodeURIComponent(baseUrl)}&token=${encodeURIComponent(token)}&design=${design}`;
 };
 
 // Public Share

@@ -58,9 +58,11 @@ docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml up -d
 - Backend endpoints: `/api/admin/galleries-stats` and `/api/admin/galleries/{id}/stats`
 
 ### QR Code Frame Generator
-- Elegant printable QR code frame with design
+- Elegant printable QR code frame with 3 branded designs (Floral, Wavy, Minimal)
 - Dynamic couple name extraction from gallery folder name
-- Endpoint: `GET /api/admin/shares/{share_id}/qr-frame`
+- Branded footer: "Designed and hosted by Weddings By Mark"
+- Frontend design selector UI in QR dialog
+- Endpoint: `GET /api/admin/shares/{share_id}/qr-frame?design=1|2|3`
 
 ### Guest Upload Mode
 - Simplified upload-only UI for wedding guests
@@ -152,7 +154,11 @@ All features tested and verified working after fork:
 - Rate limiting: 3 attempts / 30 minute lockout
 - Backend endpoints: `/api/admin/2fa/status`, `/api/admin/2fa/setup`, `/api/admin/2fa/enable`, `/api/admin/2fa/disable`
 
-### Photographer Upload Mode (Jun 2026)
+### QR Code Design Selector (Jun 2026)
+- Frontend UI added to QR dialog with 3 design choices: Floral, Wavy, Minimal
+- Each design downloads as a print-ready 8x6" PDF at 300dpi
+- `api.js` `getShareQRFrame()` now accepts `design` parameter (1, 2, or 3)
+- All 3 backend designs verified working (HTTP 200)
 - New "Allow all file types" checkbox when creating upload/full shares
 - Allows RAW files (.NEF, .CR2, .CR3, .ARW etc) and any other file type
 - Existing guest upload shares unaffected (still restricted to image/video)

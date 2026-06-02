@@ -741,29 +741,49 @@ export default function AdminGalleryDetail() {
 
       {/* QR Code Dialog */}
       <Dialog open={!!showQR} onOpenChange={() => setShowQR(null)}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-sm text-center" style={{ backgroundColor: '#FDFCF8' }}>
-          <DialogHeader>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader className="text-center">
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>QR Code</DialogTitle>
             <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>{showQR?.label}</DialogDescription>
           </DialogHeader>
           {showQR && (
             <div className="flex flex-col items-center gap-4 py-4">
               <img src={`${getShareQR(showQR.id)}&token=${localStorage.getItem('admin_token')}`}
-                alt="QR Code" className="w-64 h-64" data-testid="qr-code-image" />
-              <p className="text-sm font-medium break-all" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
+                alt="QR Code" className="w-48 h-48" data-testid="qr-code-image" />
+              <p className="text-sm font-medium break-all text-center" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
                 {window.location.origin}/s/{showQR.token}
               </p>
-              <div className="flex flex-col gap-2 w-full">
-                <Button onClick={() => copyShareLink(showQR.token)} className="w-full bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2">
-                  <Copy className="w-3.5 h-3.5" /> Copy Link
-                </Button>
-                <Button 
-                  data-testid="download-qr-frame-btn"
-                  onClick={() => window.open(getShareQRFrame(showQR.id), '_blank')} 
-                  variant="outline"
-                  className="w-full rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37]/10">
-                  <Download className="w-3.5 h-3.5" /> Download Printable QR Frame
-                </Button>
+              <Button onClick={() => copyShareLink(showQR.token)} className="w-full bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2">
+                <Copy className="w-3.5 h-3.5" /> Copy Link
+              </Button>
+
+              {/* QR Frame Design Selector */}
+              <div className="w-full pt-2 border-t" style={{ borderColor: '#F5F2EB' }}>
+                <p className="text-xs tracking-wider uppercase font-bold mb-3 text-center" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                  Download Printable QR Frame
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 1, name: 'Floral', desc: 'Botanical corners' },
+                    { id: 2, name: 'Wavy', desc: 'Decorative border' },
+                    { id: 3, name: 'Minimal', desc: 'Clean & elegant' },
+                  ].map(d => (
+                    <button
+                      key={d.id}
+                      data-testid={`qr-design-${d.id}`}
+                      onClick={() => window.open(getShareQRFrame(showQR.id, d.id), '_blank')}
+                      className="group flex flex-col items-center gap-1.5 p-3 border text-center transition-all hover:border-[#D4AF37] hover:bg-[#D4AF37]/5"
+                      style={{ borderColor: '#F5F2EB', fontFamily: 'Manrope, sans-serif' }}
+                    >
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center border group-hover:border-[#D4AF37] group-hover:text-[#D4AF37] transition-colors"
+                        style={{ borderColor: '#D4D4D8', color: '#78716C' }}>
+                        <Download className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-bold" style={{ color: '#1C1917' }}>{d.name}</span>
+                      <span className="text-[10px]" style={{ color: '#A8A29E' }}>{d.desc}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
