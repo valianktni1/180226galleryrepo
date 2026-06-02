@@ -157,8 +157,9 @@ All features tested and verified working after fork:
 ### QR Code Design Selector (Jun 2026)
 - Frontend UI added to QR dialog with 3 design choices: Floral, Wavy, Minimal
 - Each design downloads as a print-ready 8x6" PDF at 300dpi
+- Thumbnail previews generated via `GET /api/admin/qr-design-preview/{design_num}` (cached in memory)
 - `api.js` `getShareQRFrame()` now accepts `design` parameter (1, 2, or 3)
-- All 3 backend designs verified working (HTTP 200)
+- All 3 backend designs and previews verified working (HTTP 200)
 - New "Allow all file types" checkbox when creating upload/full shares
 - Allows RAW files (.NEF, .CR2, .CR3, .ARW etc) and any other file type
 - Existing guest upload shares unaffected (still restricted to image/video)

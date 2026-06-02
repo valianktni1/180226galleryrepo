@@ -147,6 +147,11 @@ export const getShareQRFrame = (shareId, design = 1) => {
   return `${API}/admin/shares/${shareId}/qr-frame?base_url=${encodeURIComponent(baseUrl)}&token=${encodeURIComponent(token)}&design=${design}`;
 };
 
+export const getQRDesignPreview = (designNum) => {
+  const token = localStorage.getItem('admin_token');
+  return `${API}/admin/qr-design-preview/${designNum}?token=${encodeURIComponent(token)}`;
+};
+
 // Public Share
 export const getShareInfo = (token) => apiClient.get(`/share/${token}`);
 export const accessShare = (token, password) => {

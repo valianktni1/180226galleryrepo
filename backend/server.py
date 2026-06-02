@@ -1201,6 +1201,118 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
         }
     )
 
+_qr_preview_cache = {}
+
+@api_router.get("/admin/qr-design-preview/{design_num}")
+async def get_qr_design_preview(design_num: int, token: Optional[str] = Query(None)):
+    """Return a small PNG thumbnail preview of a QR frame design."""
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            if payload.get("role") != "admin":
+                raise HTTPException(status_code=403)
+        except Exception:
+            raise HTTPException(status_code=401)
+    else:
+        raise HTTPException(status_code=401)
+
+    if design_num not in (1, 2, 3):
+        design_num = 1
+
+    if design_num in _qr_preview_cache:
+        buf = io.BytesIO(_qr_preview_cache[design_num])
+        return StreamingResponse(buf, media_type="image/png")
+
+    from PIL import ImageDraw, ImageFont
+
+    FW, FH = 2400, 1800
+    FONTS_DIR = ROOT_DIR / "assets" / "fonts"
+    TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
+
+    script_f = lambda s: ImageFont.truetype(str(FONTS_DIR / "GreatVibes-Regular.ttf"), s)
+    serif_bf = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf", s)
+    serif_if = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf", s)
+    serif_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", s)
+    sans_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", s)
+
+    def tc(draw, text, font, y, fill='black'):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((FW - tw) // 2, y), text, fill=fill, font=font)
+
+    # Placeholder QR
+    qr_img = Image.new('RGB', (550, 550), 'white')
+    qd = ImageDraw.Draw(qr_img)
+    for r in range(11):
+        for c in range(11):
+            if (r + c) % 2 == 0 or (r < 3 and c < 3) or (r < 3 and c > 7) or (r > 7 and c < 3):
+                qd.rectangle([c*50, r*50, c*50+50, r*50+50], fill='black')
+
+    if design_num == 1:
+        img = Image.new('RGB', (FW, FH), 'white')
+        tmpl = Image.open(str(TEMPLATES_DIR / "design_1_floral.png")).resize((FW, FH), Image.LANCZOS)
+        img.paste(tmpl.crop((FW-750, 0, FW, 550)), (FW-750, 0))
+        img.paste(tmpl.crop((0, FH-550, 750, FH)), (0, FH-550))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "CAPTURE", serif_bf(110), 170, fill='#2C2C2C')
+        tc(draw, "the love", script_f(130), 290, fill='#2C2C2C')
+        qr_x, qr_y = (FW - 550) // 2, 480
+        img.paste(qr_img, (qr_x, qr_y))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([qr_x-4, qr_y-4, qr_x+554, qr_y+554], outline='#E0DCD4', width=3)
+        tc(draw, "Please share your photos with us!", sans_f(36), 1090, fill='#666666')
+        tc(draw, "Simply scan the QR code & upload.", sans_f(30), 1140, fill='#888888')
+        tc(draw, "Sarah & James", script_f(90), 1220, fill='#2C2C2C')
+        tc(draw, "01.06.2025", serif_f(42), 1340, fill='#666666')
+    elif design_num == 2:
+        img = Image.new('RGB', (FW, FH), 'white')
+        tmpl = Image.open(str(TEMPLATES_DIR / "design_2_wavy.png")).resize((FW, FH), Image.LANCZOS)
+        img.paste(tmpl.crop((0, 0, FW, 100)), (0, 0))
+        img.paste(tmpl.crop((0, FH-100, FW, FH)), (0, FH-100))
+        img.paste(tmpl.crop((0, 100, 100, FH-100)), (0, 100))
+        img.paste(tmpl.crop((FW-100, 100, FW, FH-100)), (FW-100, 100))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "Capture", script_f(140), 150, fill='#1C1917')
+        tc(draw, "THE LOVE", serif_bf(80), 310, fill='#1C1917')
+        qr_x, qr_y = (FW - 500) // 2, 470
+        qr_small = qr_img.resize((500, 500), Image.LANCZOS)
+        img.paste(qr_small, (qr_x, qr_y))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(34), 1030, fill='#444444')
+        tc(draw, "JUST SCAN THE QR CODE", sans_f(28), 1075, fill='#666666')
+        tc(draw, "SARAH & JAMES", serif_bf(70), 1150, fill='#1C1917')
+        tc(draw, "01.06.2025", serif_f(42), 1240, fill='#666666')
+    else:
+        img = Image.new('RGB', (FW, FH), 'white')
+        draw = ImageDraw.Draw(img)
+        sf = script_f(160)
+        tf = serif_if(50)
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw, tw2, lw = sb[2]-sb[0], tb[2]-tb[0], lb[2]-lb[0]
+        total = sw + tw2 + lw + 80
+        sx = (FW - total) // 2
+        ty = 180
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + 40, ty + 80), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + 40 + tw2 + 40, ty), "Love", fill='#1C1917', font=sf)
+        qr_x, qr_y = (FW - 550) // 2, 500
+        img.paste(qr_img, (qr_x, qr_y))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(30), 1110, fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(30), 1150, fill='#888888')
+        tc(draw, "Sarah & James", script_f(100), 1260, fill='#1C1917')
+        tc(draw, "01.06.2025", serif_f(42), 1400, fill='#666666')
+
+    # Downscale to thumbnail
+    thumb = img.resize((480, 360), Image.LANCZOS)
+    buf = io.BytesIO()
+    thumb.save(buf, format="PNG", optimize=True)
+    _qr_preview_cache[design_num] = buf.getvalue()
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
+
 # ─── Media Serving ───
 @api_router.get("/media/thumb/{gallery_id}/{subfolder_slug}/{filename}")
 async def serve_thumb(gallery_id: str, subfolder_slug: str, filename: str):

@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
-  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, getShareQRFrame, thumbUrl, setSubfolderCover
+  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover
 } from "@/lib/api";
 
 export default function AdminGalleryDetail() {
@@ -772,15 +772,22 @@ export default function AdminGalleryDetail() {
                       key={d.id}
                       data-testid={`qr-design-${d.id}`}
                       onClick={() => window.open(getShareQRFrame(showQR.id, d.id), '_blank')}
-                      className="group flex flex-col items-center gap-1.5 p-3 border text-center transition-all hover:border-[#D4AF37] hover:bg-[#D4AF37]/5"
+                      className="group flex flex-col items-center gap-1.5 p-2 border text-center transition-all hover:border-[#D4AF37] hover:bg-[#D4AF37]/5 overflow-hidden"
                       style={{ borderColor: '#F5F2EB', fontFamily: 'Manrope, sans-serif' }}
                     >
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center border group-hover:border-[#D4AF37] group-hover:text-[#D4AF37] transition-colors"
-                        style={{ borderColor: '#D4D4D8', color: '#78716C' }}>
-                        <Download className="w-4 h-4" />
+                      <div className="w-full aspect-[4/3] rounded-sm overflow-hidden bg-[#F5F2EB] mb-1">
+                        <img
+                          src={getQRDesignPreview(d.id)}
+                          alt={`${d.name} design preview`}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
                       </div>
                       <span className="text-xs font-bold" style={{ color: '#1C1917' }}>{d.name}</span>
-                      <span className="text-[10px]" style={{ color: '#A8A29E' }}>{d.desc}</span>
+                      <span className="text-[10px] leading-tight" style={{ color: '#A8A29E' }}>{d.desc}</span>
+                      <div className="flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase text-[#D4AF37] opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Download className="w-3 h-3" /> PDF
+                      </div>
                     </button>
                   ))}
                 </div>
