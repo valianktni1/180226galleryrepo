@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 import time
 import jwt
+import numpy as np
 import bcrypt
 from PIL import Image
 import aiofiles
@@ -1122,8 +1123,8 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
     SY = FH / 848.0
 
     if design == 1:
-        # ── FLORAL ── Fresh canvas + flower decorations from corners only
-        BG = (248, 246, 242)
+        # ── FLORAL ── Fresh canvas + bold flower decorations from corners
+        BG = (250, 248, 244)
         img = Image.new('RGB', (FW, FH), BG)
         draw = ImageDraw.Draw(img)
         
@@ -1136,7 +1137,6 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
         qr_img = make_qr_img(share_url, qr_size)
         qr_x = (FW - qr_size) // 2
         qr_y = int(FH * 0.47) - qr_size // 2
-        # Thin border around QR area
         draw.rectangle([qr_x - 4, qr_y - 4, qr_x + qr_size + 4, qr_y + qr_size + 4], outline='#D0CCC4', width=2)
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
@@ -1152,20 +1152,37 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
         if date_str:
             tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.85), fill='#555555')
         
-        # Brand text
         add_brand(draw)
         
-        # NOW paste flower decorations ON TOP of everything (corners only, avoiding text)
-        tmpl = Image.open(str(TEMPLATES_DIR / "original_floral_white.png")).convert('RGBA').resize((FW, FH), Image.LANCZOS)
-        # Top-right corner roses only: x>70%, y<40%
-        tr = tmpl.crop((int(FW * 0.70), 0, FW, int(FH * 0.40)))
-        img.paste(tr, (int(FW * 0.70), 0), tr)
-        # Bottom-left corner roses only: x<30%, y>65%
-        bl = tmpl.crop((0, int(FH * 0.65), int(FW * 0.30), FH))
-        img.paste(bl, (0, int(FH * 0.65)), bl)
-        # Camera icon from template: small crop at top center
-        cam = tmpl.crop((int(FW * 0.46), int(FH * 0.11), int(FW * 0.54), int(FH * 0.19)))
-        img.paste(cam, (int(FW * 0.46), int(FH * 0.11)), cam)
+        # Paste LARGE flower decorations from cream template (richer colours)
+        tmpl = Image.open(str(TEMPLATES_DIR / "original_floral_cream.png")).convert('RGB')
+        tw, th = tmpl.size
+        
+        # Top-right flowers: crop the entire top-right quadrant from original
+        # then upscale just that piece to be bigger and bolder
+        tr_crop = tmpl.crop((int(tw * 0.50), 0, tw, int(th * 0.50)))
+        # Scale up to fill ~50% width, ~50% height of output
+        tr_w = int(FW * 0.50)
+        tr_h = int(FH * 0.50)
+        tr_scaled = tr_crop.resize((tr_w, tr_h), Image.LANCZOS).convert('RGBA')
+        # Make the background transparent so flowers overlay cleanly
+        tr_arr = np.array(tr_scaled)
+        # The template bg is cream (~235-255). Make those pixels transparent
+        bg_mask = np.all(tr_arr[:,:,:3] > 225, axis=2)
+        tr_arr[bg_mask, 3] = 0
+        tr_final = Image.fromarray(tr_arr)
+        img.paste(tr_final, (FW - tr_w, 0), tr_final)
+        
+        # Bottom-left flowers: crop entire bottom-left quadrant
+        bl_crop = tmpl.crop((0, int(th * 0.50), int(tw * 0.50), th))
+        bl_w = int(FW * 0.50)
+        bl_h = int(FH * 0.50)
+        bl_scaled = bl_crop.resize((bl_w, bl_h), Image.LANCZOS).convert('RGBA')
+        bl_arr = np.array(bl_scaled)
+        bg_mask = np.all(bl_arr[:,:,:3] > 225, axis=2)
+        bl_arr[bg_mask, 3] = 0
+        bl_final = Image.fromarray(bl_arr)
+        img.paste(bl_final, (0, FH - bl_h), bl_final)
 
     elif design == 2:
         # ── WAVY ── Fresh canvas + wavy border from original
