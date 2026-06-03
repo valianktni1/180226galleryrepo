@@ -18,7 +18,6 @@ from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 import time
 import jwt
-import numpy as np
 import bcrypt
 from PIL import Image
 import aiofiles

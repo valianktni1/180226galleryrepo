@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Heart, Download, X, ChevronLeft, ChevronRight, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText, Play
 } from "lucide-react";
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, getErrorMessage

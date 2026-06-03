@@ -514,10 +514,23 @@ export default function AdminGalleryDetail() {
                         <img src={thumbUrl(gallery.id, file.subfolder, file.filename)} alt={file.filename}
                           className="w-full h-full object-cover" loading="lazy" />
                       ) : file.file_type === 'video' ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
-                          <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
-                          <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
-                        </div>
+                        file.has_thumb ? (
+                          <div className="relative w-full h-full">
+                            <img src={thumbUrl(gallery.id, file.subfolder, file.filename)} alt={file.filename}
+                              className="w-full h-full object-cover" loading="lazy" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+                                <Film className="w-4 h-4 text-white" />
+                              </div>
+                            </div>
+                            <span className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 rounded truncate max-w-[90%]" style={{ backgroundColor: 'rgba(0,0,0,0.6)', color: 'white' }}>{file.filename}</span>
+                          </div>
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+                            <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
+                            <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+                          </div>
+                        )
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
                           <FileText className="w-8 h-8 text-[#A8A29E] mb-1" />
