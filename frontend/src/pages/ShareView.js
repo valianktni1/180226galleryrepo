@@ -697,10 +697,22 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           </div>
         )
       ) : file.file_type === 'video' ? (
-        <div className="aspect-video flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
-          <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
-          <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
-        </div>
+        file.has_thumb ? (
+          <div className="relative">
+            <img src={thumbUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <Play className="w-5 h-5 text-white ml-0.5" fill="white" />
+              </div>
+            </div>
+            <span className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,0,0,0.6)', color: 'white' }}>{file.filename}</span>
+          </div>
+        ) : (
+          <div className="aspect-video flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+            <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
+            <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+          </div>
+        )
       ) : (
         <div className="aspect-square flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
           <FileText className="w-8 h-8 text-[#A8A29E] mb-1" />
