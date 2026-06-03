@@ -10,12 +10,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Heart, Download, X, ChevronLeft, ChevronRight, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText, Play
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText, Play, PlayCircle
 } from "lucide-react";
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, getErrorMessage, videoStreamUrl
 } from "@/lib/api";
 import GuestUploadView from "@/pages/GuestUploadView";
+import Slideshow from "@/pages/Slideshow";
 
 export default function ShareView() {
   const { token } = useParams();
@@ -62,6 +63,7 @@ function ShareViewFull() {
   const [submittingFavourites, setSubmittingFavourites] = useState(false);
   const [showThankYou, setShowThankYou] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
+  const [showSlideshow, setShowSlideshow] = useState(false);
 
   const handleSubmitFavourites = async () => {
     if (favCount === 0) return;
@@ -595,6 +597,13 @@ function ShareViewFull() {
                 <Heart className="w-3.5 h-3.5" fill="#D4AF37" stroke="#D4AF37" /> ({favCount})
               </Button>
             )}
+            {activeAlbum && activeAlbum.toLowerCase().includes('wedding') && !selectMode && currentAlbumFiles.filter(f => f.file_type === 'photo').length > 0 && (
+              <Button data-testid="slideshow-btn" variant="ghost" onClick={() => setShowSlideshow(true)}
+                className="rounded-sm gap-2 text-xs tracking-wider"
+                style={{ color: '#D4AF37', fontFamily: 'Manrope, sans-serif' }}>
+                <PlayCircle className="w-3.5 h-3.5" /> Slideshow
+              </Button>
+            )}
             {permissions.allowDownloads && !selectMode && (
               <Button data-testid="download-album-btn" variant="ghost" onClick={handleDownloadAlbum} disabled={downloading}
                 className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
@@ -672,6 +681,16 @@ function ShareViewFull() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Slideshow */}
+      {showSlideshow && (
+        <Slideshow
+          photos={currentAlbumFiles.filter(f => f.file_type === 'photo' && (f.has_preview || f.has_thumb))}
+          galleryId={galleryId}
+          coupleName={coupleName}
+          onClose={() => setShowSlideshow(false)}
+        />
+      )}
     </div>
   );
 }
