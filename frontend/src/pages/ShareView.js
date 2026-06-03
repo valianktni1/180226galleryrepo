@@ -285,24 +285,35 @@ function ShareViewFull() {
   // Extract couple name from gallery folder name (e.g. "Gina & Mark 30.11.22" → "Gina & Mark")
   const coupleName = galleryName.replace(/\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$/, '').trim() || galleryName;
 
+  // ─── Compute hero image from Wedding Images cover ───
+  const heroImageUrl = (() => {
+    const weddingSf = subfolders.find(sf => sf.name.toLowerCase().includes('wedding') && sf.name.toLowerCase().includes('image'));
+    if (!weddingSf || weddingSf.files.length === 0) return null;
+    const coverId = covers[weddingSf.name];
+    const coverFile = coverId ? weddingSf.files.find(f => f.id === coverId) : null;
+    const heroFile = coverFile || weddingSf.files[0];
+    if (!heroFile || !heroFile.has_preview) return null;
+    return previewUrl(galleryId, weddingSf.name, heroFile.filename);
+  })();
+
   // ─── LANDING PAGE (Album cards view) ───
   if (!activeAlbum && !showFavourites) {
     return (
       <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
-        {/* Header */}
-        <header className="border-b" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+        {/* Header — floats over hero when hero image exists */}
+        <header className={heroImageUrl ? 'absolute top-0 left-0 right-0 z-20' : 'border-b'} style={heroImageUrl ? {} : { borderColor: 'rgba(212,175,55,0.15)' }}>
           <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Weddings By Mark" className="h-8" style={{ filter: 'invert(1)' }} />
+              <img src="/logo.png" alt="Weddings By Mark" className="h-8" style={{ filter: heroImageUrl ? 'brightness(0) invert(1)' : 'invert(1)' }} />
             </div>
             <div className="flex items-center gap-3">
               <Button data-testid="order-prints-btn" onClick={() => navigate(`/s/${token}/prints`)}
-                className="bg-[#D4AF37] hover:bg-[#B8962E] text-white rounded-sm gap-2 text-xs tracking-wider uppercase font-bold px-4 py-2 shadow-md">
+                className={`rounded-sm gap-2 text-xs tracking-wider uppercase font-bold px-4 py-2 shadow-md ${heroImageUrl ? 'bg-white/20 backdrop-blur-md hover:bg-white/30 text-white border border-white/20' : 'bg-[#D4AF37] hover:bg-[#B8962E] text-white'}`}>
                 <Printer className="w-4 h-4" /> Order Prints
               </Button>
               {favCount > 0 && (
                 <Button data-testid="show-favourites-landing" variant="ghost" onClick={() => setShowFavourites(true)}
-                  className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+                  className={`rounded-sm gap-2 text-xs tracking-wider ${heroImageUrl ? 'text-white/90 hover:text-white' : 'text-[#57534E]'}`}>
                   <Heart className="w-3.5 h-3.5" fill="#D4AF37" stroke="#D4AF37" /> Favourites ({favCount})
                 </Button>
               )}
@@ -314,45 +325,80 @@ function ShareViewFull() {
         <motion.section
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.8 }}
-          className="text-center py-16 md:py-24 px-6"
-          style={{ backgroundColor: '#F5F2EB' }}
+          transition={{ duration: 1 }}
+          className="relative text-center overflow-hidden"
+          style={heroImageUrl ? { minHeight: '70vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' } : { padding: '4rem 1.5rem 4rem', backgroundColor: '#F5F2EB' }}
         >
-          <motion.p
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="text-sm tracking-[0.2em] uppercase mb-4"
-            style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}
-          >
-            Welcome
-          </motion.p>
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="text-5xl md:text-7xl font-light italic mb-4"
-            style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}
-            data-testid="couple-name-heading"
-          >
-            {coupleName}
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="text-base md:text-lg"
-            style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}
-          >
-            Your special memories, beautifully captured
-          </motion.p>
-          
-          {/* Album Instructions */}
+          {/* Hero background image */}
+          {heroImageUrl && (
+            <>
+              <div className="absolute inset-0 z-0"
+                style={{
+                  backgroundImage: `url(${heroImageUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  filter: 'blur(2px) brightness(0.55)',
+                  transform: 'scale(1.05)',
+                }} />
+              <div className="absolute inset-0 z-[1]" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.4) 100%)' }} />
+            </>
+          )}
+
+          <div className={`relative ${heroImageUrl ? 'z-10 px-6 py-20 md:py-28' : ''}`}>
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-sm tracking-[0.3em] uppercase mb-2"
+              style={{ color: heroImageUrl ? 'rgba(255,255,255,0.7)' : '#A8A29E', fontFamily: 'Manrope, sans-serif' }}
+            >
+              Welcome
+            </motion.p>
+            {heroImageUrl && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+                className="flex items-center justify-center gap-4 mb-4">
+                <div className="h-px w-12 md:w-20" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
+                <span className="text-[#D4AF37] text-sm" style={{ lineHeight: 1 }}>&#10022;</span>
+                <div className="h-px w-12 md:w-20" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
+              </motion.div>
+            )}
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="text-5xl md:text-7xl lg:text-8xl font-light italic mb-3"
+              style={{ fontFamily: 'Cormorant Garamond, serif', color: heroImageUrl ? 'white' : '#1C1917', textShadow: heroImageUrl ? '0 2px 30px rgba(0,0,0,0.4)' : 'none' }}
+              data-testid="couple-name-heading"
+            >
+              {coupleName}
+            </motion.h1>
+            {heroImageUrl && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+                className="flex items-center justify-center gap-4 mb-4">
+                <div className="h-px w-12 md:w-20" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
+                <span className="text-[#D4AF37] text-sm" style={{ lineHeight: 1 }}>&#10022;</span>
+                <div className="h-px w-12 md:w-20" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
+              </motion.div>
+            )}
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              className="text-base md:text-lg"
+              style={{ color: heroImageUrl ? 'rgba(255,255,255,0.8)' : '#57534E', fontFamily: 'Manrope, sans-serif' }}
+            >
+              Your special memories, beautifully captured
+            </motion.p>
+          </div>
+        </motion.section>
+
+        {/* Album Instructions */}
+        <section className="max-w-screen-xl mx-auto px-6 pt-10 md:pt-14">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="mt-10 mx-auto max-w-2xl text-left p-6 rounded-lg border-2"
+            transition={{ delay: 0.9 }}
+            className="mx-auto max-w-2xl text-left p-6 rounded-lg border-2"
             style={{ backgroundColor: 'white', borderColor: '#D4AF37' }}
           >
             <h3 className="text-xl font-medium mb-4 flex items-center gap-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
@@ -378,16 +424,17 @@ function ShareViewFull() {
               <p className="text-center pt-2">Thank you 😊</p>
             </div>
           </motion.div>
-        </motion.section>
+        </section>
 
         {/* Albums Section */}
         <section className="max-w-screen-xl mx-auto px-6 py-12 md:py-16">
-          <div className="flex items-center gap-2 mb-8">
-            <FolderOpen className="w-5 h-5 text-[#78716C]" strokeWidth={1.5} />
-            <h2 className="text-xl font-semibold" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>Albums</h2>
+          <div className="flex items-center justify-center gap-4 mb-10">
+            <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
+            <h2 className="text-xl font-light tracking-wide" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>Your Albums</h2>
+            <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-12">
             {visibleAlbums.map((sf, i) => (
               <motion.button
                 key={sf.name}
@@ -395,11 +442,13 @@ function ShareViewFull() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 + i * 0.08 }}
                 onClick={() => { setActiveAlbum(sf.name); setShowFavourites(false); }}
-                className="group p-6 text-left border bg-white hover:shadow-md"
-                style={{ borderColor: '#F5F2EB', transition: 'box-shadow 0.3s ease' }}
+                className="group text-left rounded-lg overflow-hidden"
+                style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06)', transition: 'box-shadow 0.4s ease, transform 0.4s ease' }}
+                onMouseOver={e => { e.currentTarget.style.boxShadow = '0 8px 30px rgba(0,0,0,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                onMouseOut={e => { e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.06)'; e.currentTarget.style.transform = 'translateY(0)'; }}
                 data-testid={`album-card-${sf.name.replace(/\s/g, '-')}`}
               >
-                {/* Show cover thumbnail - use custom cover if set, otherwise first image */}
+                {/* Album cover image */}
                 {(() => {
                   const coverId = covers[sf.name];
                   const coverFile = coverId ? sf.files.find(f => f.id === coverId) : null;
@@ -407,26 +456,32 @@ function ShareViewFull() {
                   
                   if (displayFile && displayFile.has_thumb) {
                     return (
-                      <div className="w-full aspect-[4/3] mb-4 overflow-hidden" style={{ backgroundColor: '#F5F2EB' }}>
+                      <div className="w-full aspect-[4/3] overflow-hidden relative" style={{ backgroundColor: '#F5F2EB' }}>
                         <img
                           src={thumbUrl(galleryId, sf.name, displayFile.filename)}
                           alt={sf.name}
                           className="w-full h-full object-cover"
-                          style={{ transition: 'transform 0.5s ease' }}
-                          onMouseOver={e => e.target.style.transform = 'scale(1.05)'}
+                          style={{ transition: 'transform 0.6s ease' }}
+                          onMouseOver={e => e.target.style.transform = 'scale(1.06)'}
                           onMouseOut={e => e.target.style.transform = 'scale(1)'}
                         />
+                        {/* Gradient overlay at bottom of image */}
+                        <div className="absolute inset-x-0 bottom-0 h-20" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5), transparent)' }} />
+                        <div className="absolute bottom-3 left-4 right-4">
+                          <p className="font-medium text-sm text-white" style={{ fontFamily: 'Manrope, sans-serif', textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{sf.name}</p>
+                          <p className="text-xs text-white/70" style={{ fontFamily: 'Manrope, sans-serif' }}>{sf.files.length} {sf.files.length === 1 ? 'file' : 'files'}</p>
+                        </div>
                       </div>
                     );
                   }
                   return (
-                    <div className="w-12 h-12 mb-4 flex items-center justify-center">
-                      <FolderOpen className="w-8 h-8 text-[#A8A29E]" strokeWidth={1.5} />
+                    <div className="w-full aspect-[4/3] flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+                      <FolderOpen className="w-10 h-10 text-[#C4C0B8] mb-3" strokeWidth={1.5} />
+                      <p className="font-medium text-sm mb-0.5" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>{sf.name}</p>
+                      <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{sf.files.length} {sf.files.length === 1 ? 'file' : 'files'}</p>
                     </div>
                   );
                 })()}
-                <p className="font-medium text-sm mb-1" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>{sf.name}</p>
-                <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{sf.files.length} files</p>
               </motion.button>
             ))}
           </div>
