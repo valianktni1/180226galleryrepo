@@ -1123,16 +1123,47 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
     SY = FH / 848.0
 
     if design == 1:
-        # ── FLORAL ── Fresh canvas + bold flower decorations from corners
+        # ── FLORAL ── Fresh canvas, flowers FIRST, then text/QR on top
         BG = (250, 248, 244)
         img = Image.new('RGB', (FW, FH), BG)
+        
+        # Step 1: Paste flower decorations FIRST (so text renders on top)
+        tmpl = Image.open(str(TEMPLATES_DIR / "original_floral_cream.png")).convert('RGB')
+        tw, th = tmpl.size
+        
+        # Top-right flowers: crop the densest flower area from template corner
+        tr_crop = tmpl.crop((int(tw * 0.55), 0, tw, int(th * 0.45)))
+        # Scale to ~25% of output — compact corner placement
+        tr_w = int(FW * 0.25)
+        tr_h = int(FH * 0.25)
+        tr_scaled = tr_crop.resize((tr_w, tr_h), Image.LANCZOS).convert('RGBA')
+        tr_arr = np.array(tr_scaled)
+        # Targeted cream removal: only remove pixels where R>235 AND G>230 AND B>220
+        # This preserves pinks (high R, low B) and greens (low R, high G)
+        bg_mask = (tr_arr[:,:,0] > 235) & (tr_arr[:,:,1] > 230) & (tr_arr[:,:,2] > 220)
+        tr_arr[bg_mask, 3] = 0
+        tr_final = Image.fromarray(tr_arr)
+        img.paste(tr_final, (FW - tr_w, 0), tr_final)
+        
+        # Bottom-left flowers: crop the densest flower area
+        bl_crop = tmpl.crop((0, int(th * 0.55), int(tw * 0.45), th))
+        bl_w = int(FW * 0.25)
+        bl_h = int(FH * 0.25)
+        bl_scaled = bl_crop.resize((bl_w, bl_h), Image.LANCZOS).convert('RGBA')
+        bl_arr = np.array(bl_scaled)
+        bg_mask = (bl_arr[:,:,0] > 235) & (bl_arr[:,:,1] > 230) & (bl_arr[:,:,2] > 220)
+        bl_arr[bg_mask, 3] = 0
+        bl_final = Image.fromarray(bl_arr)
+        img.paste(bl_final, (0, FH - bl_h), bl_final)
+        
+        # Step 2: Draw all text and QR ON TOP of flowers
         draw = ImageDraw.Draw(img)
         
-        # Heading: "CAPTURE" at ~20%, "the love" at ~28%
+        # Heading
         tc(draw, "CAPTURE", serif_bf(int(55 * SX)), int(FH * 0.20), fill='#2C2C2C')
         tc(draw, "the love", script_f(int(65 * SX)), int(FH * 0.28), fill='#2C2C2C')
         
-        # QR code: center at ~47%, size ~27% of width
+        # QR code
         qr_size = int(FW * 0.27)
         qr_img = make_qr_img(share_url, qr_size)
         qr_x = (FW - qr_size) // 2
@@ -1141,48 +1172,18 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
         
-        # Instructions at ~67%
+        # Instructions
         tc(draw, "Please share your photos with us!", sans_f(int(18 * SX)), int(FH * 0.67), fill='#555555')
         tc(draw, "Simply scan the QR code & upload.", sans_f(int(15 * SX)), int(FH * 0.70), fill='#777777')
         
-        # Couple name at ~77% (gold script)
+        # Couple name (gold script)
         tc(draw, couple_name, script_f(int(48 * SX)), int(FH * 0.77), fill='#8B7536')
         
-        # Date at ~85%
+        # Date
         if date_str:
             tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.85), fill='#555555')
         
         add_brand(draw)
-        
-        # Paste LARGE flower decorations from cream template (richer colours)
-        tmpl = Image.open(str(TEMPLATES_DIR / "original_floral_cream.png")).convert('RGB')
-        tw, th = tmpl.size
-        
-        # Top-right flowers: crop the entire top-right quadrant from original
-        # then upscale just that piece to be bigger and bolder
-        tr_crop = tmpl.crop((int(tw * 0.50), 0, tw, int(th * 0.50)))
-        # Scale up to fill ~50% width, ~50% height of output
-        tr_w = int(FW * 0.50)
-        tr_h = int(FH * 0.50)
-        tr_scaled = tr_crop.resize((tr_w, tr_h), Image.LANCZOS).convert('RGBA')
-        # Make the background transparent so flowers overlay cleanly
-        tr_arr = np.array(tr_scaled)
-        # The template bg is cream (~235-255). Make those pixels transparent
-        bg_mask = np.all(tr_arr[:,:,:3] > 225, axis=2)
-        tr_arr[bg_mask, 3] = 0
-        tr_final = Image.fromarray(tr_arr)
-        img.paste(tr_final, (FW - tr_w, 0), tr_final)
-        
-        # Bottom-left flowers: crop entire bottom-left quadrant
-        bl_crop = tmpl.crop((0, int(th * 0.50), int(tw * 0.50), th))
-        bl_w = int(FW * 0.50)
-        bl_h = int(FH * 0.50)
-        bl_scaled = bl_crop.resize((bl_w, bl_h), Image.LANCZOS).convert('RGBA')
-        bl_arr = np.array(bl_scaled)
-        bg_mask = np.all(bl_arr[:,:,:3] > 225, axis=2)
-        bl_arr[bg_mask, 3] = 0
-        bl_final = Image.fromarray(bl_arr)
-        img.paste(bl_final, (0, FH - bl_h), bl_final)
 
     elif design == 2:
         # ── WAVY ── Fresh canvas + wavy border from original
