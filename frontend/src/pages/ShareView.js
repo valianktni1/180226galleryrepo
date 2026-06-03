@@ -13,7 +13,7 @@ import {
   ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText, Play
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, getErrorMessage
+  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, getErrorMessage, videoStreamUrl
 } from "@/lib/api";
 import GuestUploadView from "@/pages/GuestUploadView";
 
@@ -554,7 +554,7 @@ function ShareViewFull() {
         </main>
         <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
           setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
-          galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} />
+          galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token} />
         <ThankYouModal show={showThankYou} onClose={() => setShowThankYou(false)} count={submittedCount} galleryName={galleryName} />
       </div>
     );
@@ -646,7 +646,7 @@ function ShareViewFull() {
 
       <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
         setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
-        galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} />
+        galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token} />
       
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -754,7 +754,8 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
   );
 }
 
-function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload, permissions = {} }) {
+function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload, permissions = {}, shareToken }) {
+  const isVideo = currentPhoto && currentPhoto.file_type === 'video';
   return (
     <AnimatePresence>
       {currentPhoto && (
@@ -790,9 +791,17 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
               <ChevronRight className="w-6 h-6" />
             </button>
           )}
-          <motion.img key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-            src={galleryId && currentPhoto.has_preview ? previewUrl(galleryId, currentPhoto.subfolder || currentPhoto._subfolder, currentPhoto.filename) : ''}
-            alt={currentPhoto.filename} className="max-w-[90vw] max-h-[85vh] object-contain" onClick={e => e.stopPropagation()} />
+          {isVideo && shareToken ? (
+            <motion.video key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              src={videoStreamUrl(shareToken, currentPhoto.id)}
+              controls autoPlay playsInline
+              className="max-w-[90vw] max-h-[85vh]" style={{ backgroundColor: 'black' }}
+              onClick={e => e.stopPropagation()} />
+          ) : (
+            <motion.img key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              src={galleryId && currentPhoto.has_preview ? previewUrl(galleryId, currentPhoto.subfolder || currentPhoto._subfolder, currentPhoto.filename) : ''}
+              alt={currentPhoto.filename} className="max-w-[90vw] max-h-[85vh] object-contain" onClick={e => e.stopPropagation()} />
+          )}
         </motion.div>
       )}
     </AnimatePresence>

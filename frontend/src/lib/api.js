@@ -256,4 +256,9 @@ export const previewUrl = (galleryId, subfolder, filename) => {
   return `${API}/media/preview/${galleryId}/${sfSlug}/${stem}.preview.jpg`;
 };
 
+export const videoStreamUrl = (token, fileId) => {
+  const jwt = localStorage.getItem('share_token');
+  return `${BACKEND_URL}/api/share/${token}/stream/${fileId}?t=${encodeURIComponent(jwt)}`;
+};
+
 export default apiClient;
