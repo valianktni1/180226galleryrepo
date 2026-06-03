@@ -2,114 +2,116 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { previewUrl } from "@/lib/api";
 import { X, Play, Pause, Volume2, VolumeX } from "lucide-react";
 
-// ─── AMBIENT MUSIC ENGINE ───
+// ─── AMBIENT MUSIC ENGINE (Bright Romantic Arpeggios) ───
 class AmbientMusicEngine {
   constructor() {
     this.ctx = null;
     this.masterGain = null;
-    this.reverbGain = null;
     this.playing = false;
-    this.intervalId = null;
+    this.schedulerId = null;
+    this.nextNoteTime = 0;
     this.chordIndex = 0;
-    // Romantic piano chord progression (frequencies in Hz)
-    // Cmaj7 → Am7 → Fmaj7 → Gsus4 → Em7 → Am → Dm7 → G7
+    this.noteInChord = 0;
     this.progression = [
-      [130.81, 164.81, 196.00, 246.94, 329.63],  // Cmaj7
-      [110.00, 164.81, 196.00, 261.63, 329.63],  // Am7
-      [130.81, 174.61, 220.00, 261.63, 349.23],  // Fmaj7
-      [98.00, 146.83, 196.00, 261.63, 392.00],   // Gsus4
-      [123.47, 164.81, 196.00, 246.94, 329.63],  // Em7
-      [110.00, 130.81, 164.81, 220.00, 329.63],  // Am
-      [116.54, 146.83, 174.61, 261.63, 349.23],  // Dm7
-      [98.00, 123.47, 146.83, 196.00, 293.66],   // G7
+      [261.63, 329.63, 392.00, 493.88, 523.25, 659.25],
+      [220.00, 329.63, 440.00, 493.88, 554.37, 659.25],
+      [174.61, 261.63, 349.23, 440.00, 523.25, 698.46],
+      [196.00, 293.66, 392.00, 493.88, 587.33, 783.99],
+      [164.81, 246.94, 329.63, 415.30, 493.88, 659.25],
+      [174.61, 220.00, 261.63, 349.23, 440.00, 523.25],
+      [146.83, 220.00, 293.66, 349.23, 440.00, 587.33],
+      [196.00, 246.94, 293.66, 392.00, 493.88, 587.33],
     ];
+    this.tempo = 130;
   }
 
   init() {
     if (this.ctx) return;
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-    // Master volume
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 0;
 
-    // Simple delay-based reverb
     const delay1 = this.ctx.createDelay(1.0);
-    delay1.delayTime.value = 0.3;
+    delay1.delayTime.value = 0.25;
+    const fb1 = this.ctx.createGain();
+    fb1.gain.value = 0.18;
     const delay2 = this.ctx.createDelay(1.0);
-    delay2.delayTime.value = 0.5;
-    const feedback1 = this.ctx.createGain();
-    feedback1.gain.value = 0.2;
-    const feedback2 = this.ctx.createGain();
-    feedback2.gain.value = 0.15;
-    this.reverbGain = this.ctx.createGain();
-    this.reverbGain.gain.value = 0.4;
+    delay2.delayTime.value = 0.4;
+    const fb2 = this.ctx.createGain();
+    fb2.gain.value = 0.12;
+    const reverbMix = this.ctx.createGain();
+    reverbMix.gain.value = 0.35;
 
-    // Reverb chain
     this.masterGain.connect(delay1);
-    delay1.connect(feedback1);
-    feedback1.connect(delay1);
-    delay1.connect(this.reverbGain);
-
+    delay1.connect(fb1);
+    fb1.connect(delay1);
+    delay1.connect(reverbMix);
     this.masterGain.connect(delay2);
-    delay2.connect(feedback2);
-    feedback2.connect(delay2);
-    delay2.connect(this.reverbGain);
-
-    this.reverbGain.connect(this.ctx.destination);
+    delay2.connect(fb2);
+    fb2.connect(delay2);
+    delay2.connect(reverbMix);
+    reverbMix.connect(this.ctx.destination);
     this.masterGain.connect(this.ctx.destination);
   }
 
-  playNote(freq, startTime, duration, velocity = 0.06) {
-    if (!this.ctx) return;
-    // Two slightly detuned oscillators for richness
-    [0, 1.5].forEach(detune => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
+  playNote(freq, startTime, duration, velocity = 0.045) {
+    if (!this.ctx || !this.playing) return;
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const filter = this.ctx.createBiquadFilter();
 
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      osc.detune.value = detune;
+    osc1.type = 'triangle';
+    osc1.frequency.value = freq;
+    osc2.type = 'sine';
+    osc2.frequency.value = freq * 2;
+    osc2.detune.value = 3;
 
-      filter.type = 'lowpass';
-      filter.frequency.value = 800 + Math.random() * 400;
-      filter.Q.value = 0.5;
+    filter.type = 'lowpass';
+    filter.frequency.value = 2500 + Math.random() * 1500;
+    filter.Q.value = 0.7;
 
-      // ADSR envelope - soft piano-like
-      gain.gain.setValueAtTime(0, startTime);
-      gain.gain.linearRampToValueAtTime(velocity, startTime + 0.08);
-      gain.gain.exponentialRampToValueAtTime(velocity * 0.6, startTime + 0.4);
-      gain.gain.setValueAtTime(velocity * 0.6, startTime + duration - 1.2);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    const t = startTime;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(velocity, t + 0.015);
+    gain.gain.exponentialRampToValueAtTime(velocity * 0.5, t + 0.12);
+    gain.gain.setValueAtTime(velocity * 0.5, t + duration * 0.6);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
 
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.masterGain);
+    const shimmerGain = this.ctx.createGain();
+    shimmerGain.gain.value = 0.15;
 
-      osc.start(startTime);
-      osc.stop(startTime + duration + 0.1);
-    });
+    osc1.connect(filter);
+    osc2.connect(shimmerGain);
+    shimmerGain.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc1.start(t);
+    osc1.stop(t + duration + 0.05);
+    osc2.start(t);
+    osc2.stop(t + duration + 0.05);
   }
 
-  playChord(chord, startTime, duration) {
-    // Arpeggiate slightly for natural feel
-    chord.forEach((freq, i) => {
-      const noteDelay = i * (0.06 + Math.random() * 0.08);
-      const vel = i < 2 ? 0.04 : 0.055; // bass notes quieter
-      this.playNote(freq, startTime + noteDelay, duration - noteDelay, vel);
-    });
-  }
-
-  scheduleChords() {
+  scheduleNotes() {
     if (!this.playing || !this.ctx) return;
-    const now = this.ctx.currentTime;
-    // Schedule next 2 chords ahead
-    for (let i = 0; i < 2; i++) {
+    const beatDuration = 60.0 / this.tempo;
+    while (this.nextNoteTime < this.ctx.currentTime + 0.2) {
       const chord = this.progression[this.chordIndex % this.progression.length];
-      const chordDuration = 4.5 + Math.random() * 1.5; // 4.5-6s per chord
-      this.playChord(chord, now + i * chordDuration, chordDuration);
-      this.chordIndex++;
+      const noteIdx = this.noteInChord % chord.length;
+      const freq = chord[noteIdx];
+      const vel = noteIdx === 0 ? 0.05 : (noteIdx % 3 === 0 ? 0.04 : 0.032);
+      const noteDur = beatDuration * (1.2 + Math.random() * 0.6);
+      this.playNote(freq, this.nextNoteTime, noteDur, vel);
+      if (Math.random() < 0.15) {
+        this.playNote(freq * 2, this.nextNoteTime + beatDuration * 0.25, noteDur * 0.5, 0.015);
+      }
+      this.noteInChord++;
+      if (this.noteInChord >= chord.length) {
+        this.noteInChord = 0;
+        this.chordIndex++;
+      }
+      this.nextNoteTime += beatDuration * 0.5;
     }
   }
 
@@ -118,29 +120,21 @@ class AmbientMusicEngine {
     if (this.ctx.state === 'suspended') this.ctx.resume();
     this.playing = true;
     this.chordIndex = 0;
-    // Fade in
+    this.noteInChord = 0;
+    this.nextNoteTime = this.ctx.currentTime + 0.1;
     this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
-    this.masterGain.gain.linearRampToValueAtTime(0.7, this.ctx.currentTime + 3);
-    this.scheduleChords();
-    this.intervalId = setInterval(() => this.scheduleChords(), 8000);
+    this.masterGain.gain.linearRampToValueAtTime(0.6, this.ctx.currentTime + 3);
+    this.schedulerId = setInterval(() => this.scheduleNotes(), 100);
   }
 
   stop() {
     this.playing = false;
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
+    if (this.schedulerId) { clearInterval(this.schedulerId); this.schedulerId = null; }
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.5);
     }
     setTimeout(() => {
-      if (this.ctx) {
-        this.ctx.close();
-        this.ctx = null;
-        this.masterGain = null;
-        this.reverbGain = null;
-      }
+      if (this.ctx) { this.ctx.close().catch(() => {}); this.ctx = null; this.masterGain = null; }
     }, 2000);
   }
 
@@ -151,51 +145,45 @@ class AmbientMusicEngine {
   }
 }
 
-// ─── KEN BURNS PRESETS ───
-const kenBurnsVariants = [
-  { from: { scale: 1.0, x: 0, y: 0 },    to: { scale: 1.25, x: -3, y: -2 } },
-  { from: { scale: 1.2, x: -3, y: -2 },   to: { scale: 1.0, x: 0, y: 0 } },
-  { from: { scale: 1.0, x: 0, y: 0 },    to: { scale: 1.2, x: 3, y: -2 } },
-  { from: { scale: 1.15, x: 2, y: 2 },    to: { scale: 1.0, x: -1, y: 0 } },
-  { from: { scale: 1.0, x: -2, y: 1 },    to: { scale: 1.3, x: 2, y: -1 } },
-  { from: { scale: 1.25, x: 0, y: -3 },   to: { scale: 1.05, x: 0, y: 1 } },
-  { from: { scale: 1.0, x: 3, y: 0 },    to: { scale: 1.2, x: -2, y: -2 } },
-  { from: { scale: 1.1, x: -1, y: -1 },   to: { scale: 1.0, x: 2, y: 2 } },
+// ─── KEN BURNS ───
+// All start at scale 1.0 (full image visible) and gently drift/zoom in
+// The movement is subtle so you appreciate the photo first
+const kenBurnsPresets = [
+  { toScale: 1.12, toX: -2,  toY: -1.5 },  // gentle zoom toward top-left
+  { toScale: 1.10, toX: 2,   toY: -1   },  // drift toward top-right
+  { toScale: 1.14, toX: -1,  toY: 1.5  },  // zoom toward bottom-left
+  { toScale: 1.11, toX: 1.5, toY: 1    },  // drift toward bottom-right
+  { toScale: 1.13, toX: 0,   toY: -2   },  // slow zoom upward
+  { toScale: 1.10, toX: 0,   toY: 1.5  },  // slow zoom downward
+  { toScale: 1.15, toX: 0,   toY: 0    },  // pure center zoom
+  { toScale: 1.08, toX: -2,  toY: 0    },  // gentle pan left
 ];
 
-// ─── TRANSITION TYPES ───
-const TRANSITIONS = ['crossfade', 'softSlide'];
-
-function getRandomDuration() {
-  return 2000 + Math.random() * 2000; // 2-4 seconds
+function randomKB() {
+  return kenBurnsPresets[Math.floor(Math.random() * kenBurnsPresets.length)];
 }
 
-function getRandomKenBurns() {
-  return kenBurnsVariants[Math.floor(Math.random() * kenBurnsVariants.length)];
-}
-
-function getRandomTransition() {
-  return TRANSITIONS[Math.floor(Math.random() * TRANSITIONS.length)];
-}
+// ─── TIMING CONSTANTS ───
+const SLIDE_DISPLAY_MS = 6000;    // 6 seconds each photo is displayed
+const CROSSFADE_MS = 2000;        // 2 second smooth crossfade between images
+const KB_DURATION_S = 9;          // Ken Burns runs over 9 seconds (covers display + crossfade)
+const INTRO_DURATION_MS = 4000;   // 4 second intro card
 
 // ─── SLIDESHOW COMPONENT ───
 export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [nextIndex, setNextIndex] = useState(1);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [activeLayer, setActiveLayer] = useState('A');
+  const [layerA, setLayerA] = useState({ index: 0, kb: randomKB(), animating: false });
+  const [layerB, setLayerB] = useState({ index: 1 % Math.max(photos.length, 1), kb: randomKB(), animating: false });
   const [isPaused, setIsPaused] = useState(false);
   const [musicOn, setMusicOn] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  const [currentKB, setCurrentKB] = useState(getRandomKenBurns);
-  const [nextKB, setNextKB] = useState(getRandomKenBurns);
-  const [transition, setTransition] = useState(getRandomTransition);
   const [introVisible, setIntroVisible] = useState(true);
   const [started, setStarted] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const musicRef = useRef(null);
   const timerRef = useRef(null);
   const controlsTimerRef = useRef(null);
-  const containerRef = useRef(null);
 
   const photoUrls = useMemo(() =>
     photos.map(p => previewUrl(galleryId, p.subfolder || p._subfolder, p.filename)),
@@ -204,10 +192,7 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
 
   // Preload images
   useEffect(() => {
-    photoUrls.forEach(url => {
-      const img = new Image();
-      img.src = url;
-    });
+    photoUrls.forEach(url => { const img = new Image(); img.src = url; });
   }, [photoUrls]);
 
   // Auto-hide controls
@@ -216,16 +201,22 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     controlsTimerRef.current = setTimeout(() => {
       if (!isPaused) setShowControls(false);
-    }, 3000);
+    }, 4000);
   }, [isPaused]);
 
-  // Start the slideshow after intro
+  // Intro -> Start
   useEffect(() => {
-    const introTimer = setTimeout(() => {
+    const t = setTimeout(() => {
       setIntroVisible(false);
-      setTimeout(() => setStarted(true), 800);
-    }, 3500);
-    return () => clearTimeout(introTimer);
+      setTimeout(() => {
+        setStarted(true);
+        // Kick off the Ken Burns on the first slide
+        setTimeout(() => {
+          setLayerA(prev => ({ ...prev, animating: true }));
+        }, 100);
+      }, 1000);
+    }, INTRO_DURATION_MS);
+    return () => clearTimeout(t);
   }, []);
 
   // Music
@@ -233,100 +224,123 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
     if (!started) return;
     musicRef.current = new AmbientMusicEngine();
     if (musicOn) musicRef.current.start();
-    return () => {
-      if (musicRef.current) musicRef.current.stop();
-    };
+    return () => { if (musicRef.current) musicRef.current.stop(); };
   }, [started]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!musicRef.current) return;
-    if (musicOn && !isPaused) {
-      musicRef.current.setVolume(0.7);
-    } else if (!musicOn || isPaused) {
-      musicRef.current.setVolume(0);
-    }
+    musicRef.current.setVolume(musicOn && !isPaused ? 0.6 : 0);
   }, [musicOn, isPaused]);
 
-  // Advance slides
+  // Advance slide
   const advanceSlide = useCallback(() => {
     if (photos.length <= 1) return;
-    const next = (currentIndex + 1) % photos.length;
-    setNextIndex(next);
-    setNextKB(getRandomKenBurns());
-    setTransition(getRandomTransition());
-    setIsTransitioning(true);
+    const nextIdx = (currentIndex + 1) % photos.length;
+    const nextKB = randomKB();
 
-    setTimeout(() => {
-      setCurrentIndex(next);
-      setCurrentKB(getRandomKenBurns());
-      setIsTransitioning(false);
-    }, 700); // 0.7s transition
-  }, [currentIndex, photos.length]);
+    if (activeLayer === 'A') {
+      // Load next image into Layer B at starting position (no animation yet)
+      setLayerB({ index: nextIdx, kb: nextKB, animating: false });
+      // Small delay then fade in Layer B and start its Ken Burns
+      setTimeout(() => {
+        setActiveLayer('B');
+        setTimeout(() => {
+          setLayerB(prev => ({ ...prev, animating: true }));
+        }, 100);
+      }, 80);
+    } else {
+      setLayerA({ index: nextIdx, kb: nextKB, animating: false });
+      setTimeout(() => {
+        setActiveLayer('A');
+        setTimeout(() => {
+          setLayerA(prev => ({ ...prev, animating: true }));
+        }, 100);
+      }, 80);
+    }
 
+    setCurrentIndex(nextIdx);
+  }, [currentIndex, photos.length, activeLayer]);
+
+  // Auto-advance timer
   useEffect(() => {
     if (!started || isPaused || photos.length <= 1) return;
-    const duration = getRandomDuration();
-    timerRef.current = setTimeout(advanceSlide, duration + 700);
+    timerRef.current = setTimeout(advanceSlide, SLIDE_DISPLAY_MS);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [started, isPaused, currentIndex, advanceSlide, photos.length]);
 
-  // Keyboard controls
+  // Keyboard
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') onClose();
       if (e.key === ' ') { e.preventDefault(); setIsPaused(p => !p); }
-      if (e.key === 'm') setMusicOn(m => !m);
+      if (e.key === 'm' || e.key === 'M') setMusicOn(m => !m);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const kbStyle = (kb, progress = 1) => ({
-    transform: `scale(${kb.from.scale + (kb.to.scale - kb.from.scale) * progress}) translate(${kb.from.x + (kb.to.x - kb.from.x) * progress}%, ${kb.from.y + (kb.to.y - kb.from.y) * progress}%)`,
-  });
+  // Build the style for an image layer
+  const buildLayerImageStyle = (layer) => {
+    const kb = layer.kb;
+    const isAnimating = layer.animating && !isPaused;
+    // Start: scale 1.0, centered (full image visible via contain)
+    // End: gently zoomed in with subtle drift
+    const scale = isAnimating ? kb.toScale : 1.0;
+    const tx = isAnimating ? kb.toX : 0;
+    const ty = isAnimating ? kb.toY : 0;
+
+    return {
+      backgroundImage: `url(${photoUrls[layer.index] || ''})`,
+      backgroundSize: 'contain',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      transform: `scale(${scale}) translate(${tx}%, ${ty}%)`,
+      transition: isAnimating
+        ? `transform ${KB_DURATION_S}s cubic-bezier(0.25, 0.1, 0.25, 1.0)`
+        : 'transform 0s',
+      willChange: 'transform',
+    };
+  };
 
   if (photos.length === 0) return null;
 
+  const layerAOnTop = activeLayer === 'A';
+
   return (
     <div
-      ref={containerRef}
-      className="fixed inset-0 z-[9999] bg-black cursor-none"
+      className="fixed inset-0 z-[9999] bg-black"
+      style={{ cursor: showControls ? 'default' : 'none' }}
       onMouseMove={resetControlsTimer}
       onClick={resetControlsTimer}
       data-testid="slideshow-overlay"
     >
-      {/* ─── INTRO CARD ─── */}
+      {/* ─── INTRO ─── */}
       <div
-        className="absolute inset-0 z-50 flex items-center justify-center"
+        className="absolute inset-0 z-50 flex items-center justify-center bg-black"
         style={{
           opacity: introVisible ? 1 : 0,
-          transition: 'opacity 0.8s ease',
+          transition: 'opacity 1.2s ease',
           pointerEvents: introVisible ? 'auto' : 'none',
         }}
       >
-        <div className="text-center">
+        <div className="text-center px-8">
           <div className="flex items-center justify-center gap-4 mb-6">
             <div className="h-px w-16" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
-            <span className="text-[#D4AF37] text-lg">&#10022;</span>
+            <span className="text-[#D4AF37] text-lg" style={{ lineHeight: 1 }}>&#10022;</span>
             <div className="h-px w-16" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
           </div>
-          <p className="text-white/40 text-xs tracking-[0.35em] uppercase mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          <p className="text-white/40 text-xs tracking-[0.35em] uppercase mb-5" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Your Wedding Gallery
           </p>
           <h1
-            className="text-white text-5xl md:text-7xl font-light mb-4"
-            style={{
-              fontFamily: 'Cormorant Garamond, serif',
-              opacity: introVisible ? 1 : 0,
-              transform: introVisible ? 'translateY(0)' : 'translateY(20px)',
-              transition: 'all 1.2s ease 0.5s',
-            }}
+            className="text-white text-5xl md:text-7xl font-light"
+            style={{ fontFamily: 'Cormorant Garamond, serif' }}
           >
             {coupleName}
           </h1>
           <div className="flex items-center justify-center gap-4 mt-6">
             <div className="h-px w-16" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
-            <span className="text-[#D4AF37] text-lg">&#10022;</span>
+            <span className="text-[#D4AF37] text-lg" style={{ lineHeight: 1 }}>&#10022;</span>
             <div className="h-px w-16" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
           </div>
           <p className="text-white/30 text-xs tracking-wider mt-8" style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -335,93 +349,68 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
         </div>
       </div>
 
-      {/* ─── CURRENT SLIDE ─── */}
+      {/* ─── IMAGE LAYERS ─── */}
       {started && (
         <>
+          {/* Layer A */}
           <div
             className="absolute inset-0 overflow-hidden"
             style={{
-              opacity: isTransitioning ? (transition === 'crossfade' ? 0 : 1) : 1,
-              transform: isTransitioning && transition === 'softSlide' ? 'translateX(-3%)' : 'translateX(0)',
-              transition: `opacity 0.7s ease, transform 0.7s ease`,
+              opacity: layerAOnTop ? 1 : 0,
+              transition: `opacity ${CROSSFADE_MS}ms ease-in-out`,
+              zIndex: layerAOnTop ? 2 : 1,
             }}
           >
-            <div
-              className="absolute inset-0 bg-center bg-cover"
-              style={{
-                backgroundImage: `url(${photoUrls[currentIndex]})`,
-                animation: isPaused ? 'none' : `kenburns ${4 + Math.random() * 2}s ease-in-out infinite alternate`,
-                ...kbStyle(currentKB, 0.5),
-                transition: 'transform 4s ease-in-out',
-              }}
-            />
+            <div className="absolute inset-0" style={buildLayerImageStyle(layerA)} />
           </div>
 
-          {/* ─── NEXT SLIDE (visible during transition) ─── */}
+          {/* Layer B */}
           <div
             className="absolute inset-0 overflow-hidden"
             style={{
-              opacity: isTransitioning ? 1 : 0,
-              transform: isTransitioning
-                ? 'translateX(0)'
-                : transition === 'softSlide' ? 'translateX(3%)' : 'translateX(0)',
-              transition: `opacity 0.7s ease, transform 0.7s ease`,
+              opacity: layerAOnTop ? 0 : 1,
+              transition: `opacity ${CROSSFADE_MS}ms ease-in-out`,
+              zIndex: layerAOnTop ? 1 : 2,
             }}
           >
-            <div
-              className="absolute inset-0 bg-center bg-cover"
-              style={{
-                backgroundImage: `url(${photoUrls[nextIndex]})`,
-                ...kbStyle(nextKB, 0),
-              }}
-            />
+            <div className="absolute inset-0" style={buildLayerImageStyle(layerB)} />
           </div>
 
-          {/* ─── CINEMATIC OVERLAYS ─── */}
-          {/* Top gradient */}
-          <div className="absolute inset-x-0 top-0 h-32 z-10" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.4), transparent)' }} />
-          {/* Bottom gradient */}
-          <div className="absolute inset-x-0 bottom-0 h-40 z-10" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5), transparent)' }} />
-          {/* Subtle vignette */}
-          <div className="absolute inset-0 z-10" style={{ boxShadow: 'inset 0 0 200px rgba(0,0,0,0.3)' }} />
+          {/* ─── OVERLAYS ─── */}
+          <div className="absolute inset-x-0 top-0 h-32 z-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.3), transparent)' }} />
+          <div className="absolute inset-x-0 bottom-0 h-40 z-10 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4), transparent)' }} />
 
-          {/* ─── COUPLE NAME WATERMARK ─── */}
+          {/* ─── COUPLE NAME ─── */}
           <div
-            className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 text-center"
-            style={{
-              opacity: showControls ? 1 : 0.4,
-              transition: 'opacity 0.5s ease',
-            }}
+            className="absolute bottom-7 left-1/2 -translate-x-1/2 z-20 text-center pointer-events-none"
+            style={{ opacity: showControls ? 0.7 : 0.25, transition: 'opacity 1s ease' }}
           >
             <p
               className="text-white/70 text-2xl md:text-3xl font-light italic"
-              style={{ fontFamily: 'Cormorant Garamond, serif', textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}
+              style={{ fontFamily: 'Cormorant Garamond, serif', textShadow: '0 2px 20px rgba(0,0,0,0.7)' }}
             >
               {coupleName}
             </p>
           </div>
 
-          {/* ─── PROGRESS DOTS ─── */}
+          {/* ─── PROGRESS ─── */}
           <div
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1"
-            style={{
-              opacity: showControls ? 1 : 0,
-              transition: 'opacity 0.5s ease',
-            }}
+            className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 pointer-events-none"
+            style={{ opacity: showControls ? 1 : 0, transition: 'opacity 1s ease' }}
           >
-            {photos.length <= 30 && photos.map((_, i) => (
+            {photos.length <= 30 ? photos.map((_, i) => (
               <div
                 key={i}
-                className="rounded-full transition-all duration-300"
+                className="rounded-full"
                 style={{
-                  width: i === currentIndex ? 16 : 4,
-                  height: 4,
-                  backgroundColor: i === currentIndex ? '#D4AF37' : 'rgba(255,255,255,0.3)',
+                  width: i === currentIndex ? 20 : 5,
+                  height: 5,
+                  backgroundColor: i === currentIndex ? '#D4AF37' : 'rgba(255,255,255,0.2)',
+                  transition: 'all 0.6s ease',
                 }}
               />
-            ))}
-            {photos.length > 30 && (
-              <p className="text-white/50 text-xs" style={{ fontFamily: 'Manrope, sans-serif' }}>
+            )) : (
+              <p className="text-white/45 text-xs tracking-wide" style={{ fontFamily: 'Manrope, sans-serif' }}>
                 {currentIndex + 1} / {photos.length}
               </p>
             )}
@@ -430,46 +419,47 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
           {/* ─── CONTROLS ─── */}
           <div
             className="absolute top-6 right-6 z-30 flex items-center gap-3"
-            style={{
-              opacity: showControls ? 1 : 0,
-              transition: 'opacity 0.5s ease',
-              cursor: 'default',
-            }}
+            style={{ opacity: showControls ? 1 : 0, transition: 'opacity 1s ease' }}
           >
             <button
               data-testid="slideshow-music-toggle"
               onClick={(e) => { e.stopPropagation(); setMusicOn(m => !m); }}
-              className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md"
-              style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer' }}
-              title={musicOn ? "Mute music (M)" : "Play music (M)"}
+              className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
+              style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
+              title={musicOn ? "Mute (M)" : "Music (M)"}
             >
-              {musicOn ? <Volume2 className="w-4 h-4 text-white/80" /> : <VolumeX className="w-4 h-4 text-white/40" />}
+              {musicOn ? <Volume2 className="w-4 h-4 text-white/70" /> : <VolumeX className="w-4 h-4 text-white/35" />}
             </button>
             <button
               data-testid="slideshow-playpause"
               onClick={(e) => { e.stopPropagation(); setIsPaused(p => !p); }}
-              className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md"
-              style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer' }}
+              className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
+              style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
               title={isPaused ? "Play (Space)" : "Pause (Space)"}
             >
-              {isPaused ? <Play className="w-4 h-4 text-white/80 ml-0.5" /> : <Pause className="w-4 h-4 text-white/80" />}
+              {isPaused ? <Play className="w-4 h-4 text-white/70 ml-0.5" /> : <Pause className="w-4 h-4 text-white/70" />}
             </button>
             <button
               data-testid="slideshow-close"
               onClick={(e) => { e.stopPropagation(); onClose(); }}
-              className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md"
-              style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer' }}
+              className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
+              style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
               title="Close (Esc)"
             >
-              <X className="w-4 h-4 text-white/80" />
+              <X className="w-4 h-4 text-white/70" />
             </button>
           </div>
 
-          {/* ─── PAUSED INDICATOR ─── */}
+          {/* ─── PAUSED ─── */}
           {isPaused && (
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-              <div className="px-6 py-3 rounded-full backdrop-blur-xl" style={{ backgroundColor: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <p className="text-white/60 text-sm tracking-widest uppercase" style={{ fontFamily: 'Manrope, sans-serif' }}>Paused</p>
+              <div
+                className="px-7 py-3 rounded-full backdrop-blur-xl"
+                style={{ backgroundColor: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                <p className="text-white/50 text-sm tracking-widest uppercase" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                  Paused
+                </p>
               </div>
             </div>
           )}
@@ -478,24 +468,13 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
 
       {/* ─── BRANDING ─── */}
       <div
-        className="absolute top-6 left-6 z-30"
-        style={{
-          opacity: showControls ? 0.6 : 0,
-          transition: 'opacity 0.5s ease',
-        }}
+        className="absolute top-6 left-6 z-30 pointer-events-none"
+        style={{ opacity: showControls ? 0.45 : 0, transition: 'opacity 1s ease' }}
       >
-        <p className="text-white/50 text-xs italic" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+        <p className="text-white/45 text-xs italic" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
           Weddings By Mark
         </p>
       </div>
-
-      {/* Ken Burns CSS animation */}
-      <style>{`
-        @keyframes kenburns {
-          0% { transform: scale(1) translate(0, 0); }
-          100% { transform: scale(1.15) translate(-1%, -1%); }
-        }
-      `}</style>
     </div>
   );
 }
