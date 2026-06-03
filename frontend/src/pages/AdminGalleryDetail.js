@@ -764,7 +764,7 @@ export default function AdminGalleryDetail() {
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { id: 1, name: 'Floral', desc: 'Botanical corners' },
+                    { id: 1, name: 'Botanical', desc: 'Gold leaf corners' },
                     { id: 2, name: 'Wavy', desc: 'Decorative border' },
                     { id: 3, name: 'Minimal', desc: 'Clean & elegant' },
                   ].map(d => (

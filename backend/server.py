@@ -1123,65 +1123,47 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
     SY = FH / 848.0
 
     if design == 1:
-        # ── FLORAL ── Fresh canvas, flowers FIRST, then text/QR on top
-        BG = (250, 248, 244)
-        img = Image.new('RGB', (FW, FH), BG)
-        
-        # Step 1: Paste flower decorations FIRST (so text renders on top)
-        tmpl = Image.open(str(TEMPLATES_DIR / "original_floral_cream.png")).convert('RGB')
-        tw, th = tmpl.size
-        
-        # Top-right flowers: crop the densest flower area from template corner
-        tr_crop = tmpl.crop((int(tw * 0.55), 0, tw, int(th * 0.45)))
-        # Scale to ~25% of output — compact corner placement
-        tr_w = int(FW * 0.25)
-        tr_h = int(FH * 0.25)
-        tr_scaled = tr_crop.resize((tr_w, tr_h), Image.LANCZOS).convert('RGBA')
-        tr_arr = np.array(tr_scaled)
-        # Targeted cream removal: only remove pixels where R>235 AND G>230 AND B>220
-        # This preserves pinks (high R, low B) and greens (low R, high G)
-        bg_mask = (tr_arr[:,:,0] > 235) & (tr_arr[:,:,1] > 230) & (tr_arr[:,:,2] > 220)
-        tr_arr[bg_mask, 3] = 0
-        tr_final = Image.fromarray(tr_arr)
-        img.paste(tr_final, (FW - tr_w, 0), tr_final)
-        
-        # Bottom-left flowers: crop the densest flower area
-        bl_crop = tmpl.crop((0, int(th * 0.55), int(tw * 0.45), th))
-        bl_w = int(FW * 0.25)
-        bl_h = int(FH * 0.25)
-        bl_scaled = bl_crop.resize((bl_w, bl_h), Image.LANCZOS).convert('RGBA')
-        bl_arr = np.array(bl_scaled)
-        bg_mask = (bl_arr[:,:,0] > 235) & (bl_arr[:,:,1] > 230) & (bl_arr[:,:,2] > 220)
-        bl_arr[bg_mask, 3] = 0
-        bl_final = Image.fromarray(bl_arr)
-        img.paste(bl_final, (0, FH - bl_h), bl_final)
-        
-        # Step 2: Draw all text and QR ON TOP of flowers
+        # ── BOTANICAL GOLD ── Minimal layout + gold botanical corner frame
+        # Use the AI-generated gold botanical frame as the full background
+        frame = Image.open(str(TEMPLATES_DIR / "design_1_botanical_gold.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
         draw = ImageDraw.Draw(img)
         
-        # Heading
-        tc(draw, "CAPTURE", serif_bf(int(55 * SX)), int(FH * 0.20), fill='#2C2C2C')
-        tc(draw, "the love", script_f(int(65 * SX)), int(FH * 0.28), fill='#2C2C2C')
+        # Same layout as Minimal but on the botanical background
+        # "Share the Love" heading at y=15%
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        lw = lb[2] - lb[0]
+        total_w = sw + tw2 + lw + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
         
-        # QR code
-        qr_size = int(FW * 0.27)
+        # QR code at y=48%, ~28% width
+        qr_size = int(FW * 0.28)
         qr_img = make_qr_img(share_url, qr_size)
         qr_x = (FW - qr_size) // 2
-        qr_y = int(FH * 0.47) - qr_size // 2
-        draw.rectangle([qr_x - 4, qr_y - 4, qr_x + qr_size + 4, qr_y + qr_size + 4], outline='#D0CCC4', width=2)
+        qr_y = int(FH * 0.48) - qr_size // 2
         img.paste(qr_img, (qr_x, qr_y))
         draw = ImageDraw.Draw(img)
         
-        # Instructions
-        tc(draw, "Please share your photos with us!", sans_f(int(18 * SX)), int(FH * 0.67), fill='#555555')
-        tc(draw, "Simply scan the QR code & upload.", sans_f(int(15 * SX)), int(FH * 0.70), fill='#777777')
+        # Instructions at y=68%
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#888888')
         
-        # Couple name (gold script)
-        tc(draw, couple_name, script_f(int(48 * SX)), int(FH * 0.77), fill='#8B7536')
+        # Couple name at y=78%
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
         
-        # Date
+        # Date at y=87%
         if date_str:
-            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.85), fill='#555555')
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
         
         add_brand(draw)
 
@@ -1331,7 +1313,7 @@ async def get_qr_design_preview(design_num: int, token: Optional[str] = Query(No
         return StreamingResponse(buf, media_type="image/png")
 
     TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
-    names = {1: "design_1_floral.png", 2: "design_2_wavy.png", 3: "design_3_minimal.png"}
+    names = {1: "design_1_botanical_gold.png", 2: "design_2_wavy.png", 3: "design_3_minimal.png"}
     img = Image.open(str(TEMPLATES_DIR / names[design_num])).convert('RGB')
     thumb = img.resize((480, 360), Image.LANCZOS)
     buf = io.BytesIO()
