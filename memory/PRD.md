@@ -34,6 +34,12 @@ Self-hosted wedding photography client gallery management system. Full-featured 
 - Works for both admin uploads and guest uploads
 - Background processing via ThreadPoolExecutor (non-blocking)
 
+### Video Playback in Share View (June 2026)
+- Inline video player in lightbox (replaces black screen)
+- Streaming endpoint with HTTP Range request support for seeking
+- Native browser video controls (play, pause, volume, fullscreen, scrub)
+- Endpoint: `GET /api/share/{token}/stream/{file_id}?t={jwt}`
+
 ### QR Code Frame Generator (3 Designs)
 - **Design 1 - Botanical:** Gold botanical corners background, Minimal text layout
 - **Design 2 - Hearts:** Decorative hearts border, Wavy text layout
@@ -41,7 +47,6 @@ Self-hosted wedding photography client gallery management system. Full-featured 
 - Dynamic QR code, couple name, and date overlay
 - Branded footer: "Designed and hosted by Weddings By Mark"
 - Frontend design selector with thumbnail previews
-- Endpoint: `GET /api/admin/shares/{share_id}/qr-frame?design=1|2|3`
 
 ### Activity Log (Enhanced Downloads)
 - Detailed download tracking in all download endpoints (single, zip, album, favourites)
@@ -53,47 +58,19 @@ Self-hosted wedding photography client gallery management system. Full-featured 
 - Hidden RAW files in admin UI
 - Dockerfile: Added `fonts-liberation` for QR PDF generation in Docker
 - Removed unused numpy dependency (was crashing Docker builds on TrueNAS)
+- Fixed missing Play icon import in ShareView.js
 
 ## Key API Endpoints
-- `POST /api/admin/login` — Admin login (returns `requires_2fa` if enabled)
+- `POST /api/admin/login` — Admin login
 - `GET /api/admin/galleries` — List all galleries
 - `POST /api/admin/galleries/{gallery_id}/upload` — Upload files (with video thumbnail gen)
-- `POST /api/share/{token}/upload` — Streaming chunk upload (guest)
 - `GET /api/admin/shares/{share_id}/qr-frame` — Generate printable QR frame PDF
-- `GET /api/admin/qr-design-preview/{design_num}` — Thumbnail preview of QR design
+- `GET /api/share/{token}/stream/{file_id}` — Stream video with range support
 - `GET /api/media/thumb/{gallery_id}/{subfolder}/{filename}` — Serve thumbnail
 - `GET /api/media/preview/{gallery_id}/{subfolder}/{filename}` — Serve preview
 
-## Key DB Schema
-- `files`: `id, gallery_id, subfolder, filename, file_type, file_size, has_thumb, has_preview, uploaded_by, uploaded_at`
-- `shares`: `allow_all_file_types: boolean, guest_upload_mode: boolean`
-- `admins`: `username, password (bcrypt hash), display_name`
-- `activity_log`: `details, type, files_count, total_files, subfolder, download_type`
-
-## File Structure
-```
-/app
-├── backend/
-│   ├── assets/
-│   │   ├── qr_templates/ (3 AI-generated design PNGs)
-│   │   └── fonts/ (GreatVibes-Regular.ttf)
-│   ├── Dockerfile (includes fonts-liberation, ffmpeg)
-│   ├── server.py
-│   └── requirements.txt
-├── frontend/src/
-│   ├── lib/api.js
-│   └── pages/
-│       ├── AdminSettings.js (2FA)
-│       ├── AdminLogin.js (2FA flow)
-│       ├── AdminGalleryDetail.js (QR design selector, video thumbnails)
-│       ├── AdminActivity.js (enhanced download logs)
-│       ├── GuestUploadView.js (sequential uploads)
-│       └── ShareView.js (video thumbnails with Play overlay)
-└── memory/PRD.md
-```
-
 ## Backlog / Future Tasks
-- **P1:** New decorated QR code design (replace Botanical/Floral with Pillow-drawn elegant design)
+- **P1:** New decorated QR code design (replace Botanical with Pillow-drawn elegant design)
 - **P1:** Email Notifications when clients submit album favourites
 - **P2:** Slideshow Mode for client gallery view
 - **P3:** Client Comments on favourited photos
