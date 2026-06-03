@@ -765,7 +765,7 @@ export default function AdminGalleryDetail() {
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { id: 1, name: 'Botanical', desc: 'Gold leaf corners' },
-                    { id: 2, name: 'Wavy', desc: 'Decorative border' },
+                    { id: 2, name: 'Hearts', desc: 'Romantic love theme' },
                     { id: 3, name: 'Minimal', desc: 'Clean & elegant' },
                   ].map(d => (
                     <button

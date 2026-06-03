@@ -1168,10 +1168,12 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
         add_brand(draw)
 
     elif design == 2:
-        # ── WAVY ── Fresh canvas + wavy border from original
-        img = Image.new('RGB', (FW, FH), (255, 255, 255))
+        # ── HEARTS ── Wavy text layout + rose gold hearts frame
+        frame = Image.open(str(TEMPLATES_DIR / "design_2_hearts.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
         draw = ImageDraw.Draw(img)
         
+        # Same layout as Wavy design
         # Heading: "Capture" script + "THE LOVE" bold side by side at ~22%
         cap_font = script_f(int(60 * SX))
         love_font = serif_bf(int(40 * SX))
@@ -1205,32 +1207,6 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
             tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
         
         add_brand(draw)
-        
-        # NOW overlay wavy border + decorations from original (edges only)
-        tmpl = Image.open(str(TEMPLATES_DIR / "original_wavy.png")).convert('RGBA').resize((FW, FH), Image.LANCZOS)
-        bw = int(FW * 0.06)  # border strip width
-        bh = int(FH * 0.06)
-        # Top
-        top = tmpl.crop((0, 0, FW, bh))
-        img.paste(top, (0, 0), top)
-        # Bottom
-        bot = tmpl.crop((0, FH - bh, FW, FH))
-        img.paste(bot, (0, FH - bh), bot)
-        # Left
-        left = tmpl.crop((0, bh, bw, FH - bh))
-        img.paste(left, (0, bh), left)
-        # Right
-        right = tmpl.crop((FW - bw, bh, FW, FH - bh))
-        img.paste(right, (FW - bw, bh), right)
-        # Top-left hearts decoration
-        tl = tmpl.crop((0, 0, int(FW * 0.18), int(FH * 0.22)))
-        img.paste(tl, (0, 0), tl)
-        # Bottom-right heart decoration
-        br = tmpl.crop((int(FW * 0.82), int(FH * 0.85), FW, FH))
-        img.paste(br, (int(FW * 0.82), int(FH * 0.85)), br)
-        # Camera icon from template
-        cam = tmpl.crop((int(FW * 0.44), int(FH * 0.10), int(FW * 0.56), int(FH * 0.20)))
-        img.paste(cam, (int(FW * 0.44), int(FH * 0.10)), cam)
 
     else:
         # ── MINIMAL ── Clean white, built entirely from scratch
@@ -1313,7 +1289,7 @@ async def get_qr_design_preview(design_num: int, token: Optional[str] = Query(No
         return StreamingResponse(buf, media_type="image/png")
 
     TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
-    names = {1: "design_1_botanical_gold.png", 2: "design_2_wavy.png", 3: "design_3_minimal.png"}
+    names = {1: "design_1_botanical_gold.png", 2: "design_2_hearts.png", 3: "design_3_minimal.png"}
     img = Image.open(str(TEMPLATES_DIR / names[design_num])).convert('RGB')
     thumb = img.resize((480, 360), Image.LANCZOS)
     buf = io.BytesIO()
