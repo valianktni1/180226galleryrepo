@@ -744,6 +744,7 @@ function ShareViewFull() {
           galleryId={galleryId}
           coupleName={coupleName}
           onClose={() => setShowSlideshow(false)}
+          shareToken={token}
         />
       )}
     </div>

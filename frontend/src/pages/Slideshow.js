@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { previewUrl, slideshowMusicUrl } from "@/lib/api";
-import { X, Play, Pause, Volume2, VolumeX, Music } from "lucide-react";
+import { X, Play, Pause, Volume2, VolumeX, Music, Share2 } from "lucide-react";
 
 // ─── MUSIC TRACKS ───
 const TRACKS = [
@@ -182,9 +182,10 @@ function MusicPicker({ coupleName, photoCount, onStart, onClose }) {
 }
 
 // ─── SLIDESHOW COMPONENT ───
-export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
+export default function Slideshow({ photos, galleryId, coupleName, onClose, shareToken }) {
   const [phase, setPhase] = useState('picking'); // 'picking' | 'intro' | 'playing'
   const [chosenTrack, setChosenTrack] = useState(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [activeLayer, setActiveLayer] = useState('A');
   const [layerA, setLayerA] = useState({ index: 0, kb: randomKB(), animating: false });
   const [layerB, setLayerB] = useState({ index: 1 % Math.max(photos.length, 1), kb: randomKB(), animating: false });
@@ -465,6 +466,26 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
               title={isPaused ? "Play (Space)" : "Pause (Space)"}>
               {isPaused ? <Play className="w-4 h-4 text-white/70 ml-0.5" /> : <Pause className="w-4 h-4 text-white/70" />}
             </button>
+            {shareToken && (
+              <button data-testid="slideshow-share"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const url = `${window.location.origin}/s/${shareToken}/slideshow`;
+                  navigator.clipboard.writeText(url).then(() => {
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 2500);
+                  }).catch(() => {});
+                }}
+                className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
+                style={{
+                  backgroundColor: linkCopied ? 'rgba(212,175,55,0.25)' : 'rgba(255,255,255,0.1)',
+                  border: `1px solid ${linkCopied ? 'rgba(212,175,55,0.5)' : 'rgba(255,255,255,0.12)'}`,
+                  transition: 'all 0.3s ease',
+                }}
+                title="Copy slideshow link">
+                <Share2 className="w-4 h-4" style={{ color: linkCopied ? '#D4AF37' : 'rgba(255,255,255,0.7)' }} />
+              </button>
+            )}
             <button data-testid="slideshow-close"
               onClick={(e) => { e.stopPropagation(); handleClose(); }}
               className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
@@ -473,6 +494,19 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
               <X className="w-4 h-4 text-white/70" />
             </button>
           </div>
+
+          {/* Link copied toast */}
+          {linkCopied && (
+            <div className="absolute top-[72px] right-6 z-30 pointer-events-none"
+              style={{ animation: 'fadeInOut 2.5s ease forwards' }}>
+              <div className="px-4 py-2 rounded-full backdrop-blur-xl"
+                style={{ backgroundColor: 'rgba(0,0,0,0.5)', border: '1px solid rgba(212,175,55,0.3)' }}>
+                <p className="text-xs tracking-wide" style={{ color: '#D4AF37', fontFamily: 'Manrope, sans-serif' }}>
+                  Slideshow link copied
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Paused */}
           {isPaused && (
@@ -491,6 +525,15 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
         style={{ opacity: showControls && phase !== 'picking' ? 0.45 : 0, transition: 'opacity 1s ease' }}>
         <p className="text-white/45 text-xs italic" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Weddings By Mark</p>
       </div>
+
+      <style>{`
+        @keyframes fadeInOut {
+          0% { opacity: 0; transform: translateY(-4px); }
+          15% { opacity: 1; transform: translateY(0); }
+          75% { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-4px); }
+        }
+      `}</style>
     </div>
   );
 }

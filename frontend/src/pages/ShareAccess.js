@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,10 @@ import { getShareInfo, accessShare, openAccessShare, getErrorMessage } from "@/l
 export default function ShareAccess() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const nextDest = searchParams.get('next');
+
+  const redirectPath = nextDest === 'slideshow' ? `/s/${token}/slideshow` : `/s/${token}/view`;
   const [shareInfo, setShareInfo] = useState(null);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,7 +24,7 @@ export default function ShareAccess() {
     const existing = localStorage.getItem("share_token");
     const existingShareToken = localStorage.getItem("share_url_token");
     if (existing && existingShareToken === token) {
-      navigate(`/s/${token}/view`);
+      navigate(redirectPath);
       return;
     }
     getShareInfo(token)
@@ -51,7 +55,7 @@ export default function ShareAccess() {
             if (res.data.viewer_id) {
               localStorage.setItem(`viewer_id_${token}`, res.data.viewer_id);
             }
-            navigate(`/s/${token}/view`);
+            navigate(redirectPath);
           }).catch((err) => {
             if (err.response?.status === 410) {
               setExpired(true);
@@ -66,7 +70,7 @@ export default function ShareAccess() {
           setNotFound(true);
         }
       });
-  }, [token, navigate]);
+  }, [token, navigate, redirectPath]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -79,7 +83,7 @@ export default function ShareAccess() {
       if (res.data.viewer_id) {
         localStorage.setItem(`viewer_id_${token}`, res.data.viewer_id);
       }
-      navigate(`/s/${token}/view`);
+      navigate(redirectPath);
     } catch (err) {
       if (err.response?.status === 410) {
         setExpired(true);

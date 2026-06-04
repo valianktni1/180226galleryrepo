@@ -8,6 +8,7 @@ import AdminSettings from "@/pages/AdminSettings";
 import AdminActivity from "@/pages/AdminActivity";
 import ShareAccess from "@/pages/ShareAccess";
 import ShareView from "@/pages/ShareView";
+import SlideshowDirect from "@/pages/SlideshowDirect";
 import PrintShop from "@/pages/PrintShop";
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
           <Route path="/admin/activity" element={<AdminActivity />} />
           <Route path="/s/:token" element={<ShareAccess />} />
           <Route path="/s/:token/view" element={<ShareView />} />
+          <Route path="/s/:token/slideshow" element={<SlideshowDirect />} />
           <Route path="/s/:token/prints" element={<PrintShop />} />
           <Route path="/" element={<AdminLogin />} />
         </Routes>
