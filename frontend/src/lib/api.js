@@ -261,4 +261,6 @@ export const videoStreamUrl = (token, fileId) => {
   return `${BACKEND_URL}/api/share/${token}/stream/${fileId}?t=${encodeURIComponent(jwt)}`;
 };
 
+export const slideshowMusicUrl = (filename) => `${API}/slideshow/music/${filename}`;
+
 export default apiClient;

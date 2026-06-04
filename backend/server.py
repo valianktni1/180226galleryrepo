@@ -1297,6 +1297,40 @@ async def get_qr_design_preview(design_num: int, token: Optional[str] = Query(No
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
+# ─── Slideshow Music ───
+MUSIC_DIR = Path(__file__).parent / "assets" / "slideshow_music"
+
+@api_router.get("/slideshow/music/{filename}")
+async def serve_slideshow_music(filename: str, request: Request):
+    safe_name = Path(filename).name  # prevent path traversal
+    file_path = MUSIC_DIR / safe_name
+    if not file_path.exists() or not safe_name.endswith('.mp3'):
+        raise HTTPException(status_code=404, detail="Track not found")
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get("range")
+    if range_header:
+        range_val = range_header.strip().split("=")[-1]
+        parts = range_val.split("-")
+        start = int(parts[0])
+        end = int(parts[1]) if parts[1] else min(start + 1024 * 1024, file_size - 1)
+        end = min(end, file_size - 1)
+        length = end - start + 1
+        def iter_range():
+            with open(file_path, "rb") as fh:
+                fh.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = fh.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+        return StreamingResponse(iter_range(), status_code=206, media_type="audio/mpeg", headers={
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes", "Content-Length": str(length),
+        })
+    return FileResponse(file_path, media_type="audio/mpeg", headers={"Accept-Ranges": "bytes"})
+
 # ─── Media Serving ───
 @api_router.get("/media/thumb/{gallery_id}/{subfolder_slug}/{filename}")
 async def serve_thumb(gallery_id: str, subfolder_slug: str, filename: str):

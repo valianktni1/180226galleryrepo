@@ -1,187 +1,199 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { previewUrl } from "@/lib/api";
-import { X, Play, Pause, Volume2, VolumeX } from "lucide-react";
+import { previewUrl, slideshowMusicUrl } from "@/lib/api";
+import { X, Play, Pause, Volume2, VolumeX, Music } from "lucide-react";
 
-// ─── AMBIENT MUSIC ENGINE (Bright Romantic Arpeggios) ───
-class AmbientMusicEngine {
-  constructor() {
-    this.ctx = null;
-    this.masterGain = null;
-    this.playing = false;
-    this.schedulerId = null;
-    this.nextNoteTime = 0;
-    this.chordIndex = 0;
-    this.noteInChord = 0;
-    this.progression = [
-      [261.63, 329.63, 392.00, 493.88, 523.25, 659.25],
-      [220.00, 329.63, 440.00, 493.88, 554.37, 659.25],
-      [174.61, 261.63, 349.23, 440.00, 523.25, 698.46],
-      [196.00, 293.66, 392.00, 493.88, 587.33, 783.99],
-      [164.81, 246.94, 329.63, 415.30, 493.88, 659.25],
-      [174.61, 220.00, 261.63, 349.23, 440.00, 523.25],
-      [146.83, 220.00, 293.66, 349.23, 440.00, 587.33],
-      [196.00, 246.94, 293.66, 392.00, 493.88, 587.33],
-    ];
-    this.tempo = 130;
-  }
-
-  init() {
-    if (this.ctx) return;
-    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = 0;
-
-    const delay1 = this.ctx.createDelay(1.0);
-    delay1.delayTime.value = 0.25;
-    const fb1 = this.ctx.createGain();
-    fb1.gain.value = 0.18;
-    const delay2 = this.ctx.createDelay(1.0);
-    delay2.delayTime.value = 0.4;
-    const fb2 = this.ctx.createGain();
-    fb2.gain.value = 0.12;
-    const reverbMix = this.ctx.createGain();
-    reverbMix.gain.value = 0.35;
-
-    this.masterGain.connect(delay1);
-    delay1.connect(fb1);
-    fb1.connect(delay1);
-    delay1.connect(reverbMix);
-    this.masterGain.connect(delay2);
-    delay2.connect(fb2);
-    fb2.connect(delay2);
-    delay2.connect(reverbMix);
-    reverbMix.connect(this.ctx.destination);
-    this.masterGain.connect(this.ctx.destination);
-  }
-
-  playNote(freq, startTime, duration, velocity = 0.045) {
-    if (!this.ctx || !this.playing) return;
-    const osc1 = this.ctx.createOscillator();
-    const osc2 = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
-
-    osc1.type = 'triangle';
-    osc1.frequency.value = freq;
-    osc2.type = 'sine';
-    osc2.frequency.value = freq * 2;
-    osc2.detune.value = 3;
-
-    filter.type = 'lowpass';
-    filter.frequency.value = 2500 + Math.random() * 1500;
-    filter.Q.value = 0.7;
-
-    const t = startTime;
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(velocity, t + 0.015);
-    gain.gain.exponentialRampToValueAtTime(velocity * 0.5, t + 0.12);
-    gain.gain.setValueAtTime(velocity * 0.5, t + duration * 0.6);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-
-    const shimmerGain = this.ctx.createGain();
-    shimmerGain.gain.value = 0.15;
-
-    osc1.connect(filter);
-    osc2.connect(shimmerGain);
-    shimmerGain.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
-
-    osc1.start(t);
-    osc1.stop(t + duration + 0.05);
-    osc2.start(t);
-    osc2.stop(t + duration + 0.05);
-  }
-
-  scheduleNotes() {
-    if (!this.playing || !this.ctx) return;
-    const beatDuration = 60.0 / this.tempo;
-    while (this.nextNoteTime < this.ctx.currentTime + 0.2) {
-      const chord = this.progression[this.chordIndex % this.progression.length];
-      const noteIdx = this.noteInChord % chord.length;
-      const freq = chord[noteIdx];
-      const vel = noteIdx === 0 ? 0.05 : (noteIdx % 3 === 0 ? 0.04 : 0.032);
-      const noteDur = beatDuration * (1.2 + Math.random() * 0.6);
-      this.playNote(freq, this.nextNoteTime, noteDur, vel);
-      if (Math.random() < 0.15) {
-        this.playNote(freq * 2, this.nextNoteTime + beatDuration * 0.25, noteDur * 0.5, 0.015);
-      }
-      this.noteInChord++;
-      if (this.noteInChord >= chord.length) {
-        this.noteInChord = 0;
-        this.chordIndex++;
-      }
-      this.nextNoteTime += beatDuration * 0.5;
-    }
-  }
-
-  start() {
-    this.init();
-    if (this.ctx.state === 'suspended') this.ctx.resume();
-    this.playing = true;
-    this.chordIndex = 0;
-    this.noteInChord = 0;
-    this.nextNoteTime = this.ctx.currentTime + 0.1;
-    this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
-    this.masterGain.gain.linearRampToValueAtTime(0.6, this.ctx.currentTime + 3);
-    this.schedulerId = setInterval(() => this.scheduleNotes(), 100);
-  }
-
-  stop() {
-    this.playing = false;
-    if (this.schedulerId) { clearInterval(this.schedulerId); this.schedulerId = null; }
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.5);
-    }
-    setTimeout(() => {
-      if (this.ctx) { this.ctx.close().catch(() => {}); this.ctx = null; this.masterGain = null; }
-    }, 2000);
-  }
-
-  setVolume(vol) {
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + 0.3);
-    }
-  }
-}
+// ─── MUSIC TRACKS ───
+const TRACKS = [
+  { id: 'romantic', file: 'romantic.mp3', name: 'Romantic', desc: 'Soft & tender' },
+  { id: 'cinematic', file: 'cinematic.mp3', name: 'Cinematic', desc: 'Grand & sweeping' },
+  { id: 'eternity', file: 'eternity.mp3', name: 'Eternity', desc: 'Dreamy & gentle' },
+];
 
 // ─── KEN BURNS ───
-// All start at scale 1.0 (full image visible) and gently drift/zoom in
-// The movement is subtle so you appreciate the photo first
 const kenBurnsPresets = [
-  { toScale: 1.12, toX: -2,  toY: -1.5 },  // gentle zoom toward top-left
-  { toScale: 1.10, toX: 2,   toY: -1   },  // drift toward top-right
-  { toScale: 1.14, toX: -1,  toY: 1.5  },  // zoom toward bottom-left
-  { toScale: 1.11, toX: 1.5, toY: 1    },  // drift toward bottom-right
-  { toScale: 1.13, toX: 0,   toY: -2   },  // slow zoom upward
-  { toScale: 1.10, toX: 0,   toY: 1.5  },  // slow zoom downward
-  { toScale: 1.15, toX: 0,   toY: 0    },  // pure center zoom
-  { toScale: 1.08, toX: -2,  toY: 0    },  // gentle pan left
+  { toScale: 1.12, toX: -2,  toY: -1.5 },
+  { toScale: 1.10, toX: 2,   toY: -1   },
+  { toScale: 1.14, toX: -1,  toY: 1.5  },
+  { toScale: 1.11, toX: 1.5, toY: 1    },
+  { toScale: 1.13, toX: 0,   toY: -2   },
+  { toScale: 1.10, toX: 0,   toY: 1.5  },
+  { toScale: 1.15, toX: 0,   toY: 0    },
+  { toScale: 1.08, toX: -2,  toY: 0    },
 ];
 
 function randomKB() {
   return kenBurnsPresets[Math.floor(Math.random() * kenBurnsPresets.length)];
 }
 
-// ─── TIMING CONSTANTS ───
-const SLIDE_DISPLAY_MS = 6000;    // 6 seconds each photo is displayed
-const CROSSFADE_MS = 2000;        // 2 second smooth crossfade between images
-const KB_DURATION_S = 9;          // Ken Burns runs over 9 seconds (covers display + crossfade)
-const INTRO_DURATION_MS = 4000;   // 4 second intro card
+const SLIDE_DISPLAY_MS = 6000;
+const CROSSFADE_MS = 2000;
+const KB_DURATION_S = 9;
+const INTRO_DURATION_MS = 4000;
+
+// ─── MUSIC PICKER SCREEN ───
+function MusicPicker({ coupleName, photoCount, onStart, onClose }) {
+  const [previewingId, setPreviewingId] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const audioRef = useRef(null);
+
+  const togglePreview = (track) => {
+    if (previewingId === track.id) {
+      // Stop preview
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      setPreviewingId(null);
+    } else {
+      // Stop any current preview
+      if (audioRef.current) { audioRef.current.pause(); }
+      const audio = new Audio(slideshowMusicUrl(track.file));
+      audio.volume = 0.4;
+      audio.play().catch(() => {});
+      // Play just 12 seconds as preview
+      setTimeout(() => {
+        if (audioRef.current === audio) {
+          audio.pause();
+          setPreviewingId(null);
+        }
+      }, 12000);
+      audioRef.current = audio;
+      setPreviewingId(track.id);
+      setSelectedId(track.id);
+    }
+  };
+
+  const handleStart = () => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    onStart(selectedId);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { if (audioRef.current) { audioRef.current.pause(); } };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center" data-testid="music-picker">
+      <button
+        onClick={onClose}
+        className="absolute top-6 right-6 w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer z-10"
+        style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
+        data-testid="music-picker-close"
+      >
+        <X className="w-4 h-4 text-white/70" />
+      </button>
+
+      <div className="text-center px-6 max-w-lg w-full">
+        {/* Header */}
+        <div className="flex items-center justify-center gap-4 mb-3">
+          <div className="h-px w-12" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
+          <Music className="w-5 h-5 text-[#D4AF37]" />
+          <div className="h-px w-12" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
+        </div>
+        <p className="text-white/40 text-xs tracking-[0.3em] uppercase mb-3" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          Choose Your Soundtrack
+        </p>
+        <h2
+          className="text-white text-3xl md:text-4xl font-light italic mb-2"
+          style={{ fontFamily: 'Cormorant Garamond, serif' }}
+        >
+          {coupleName}
+        </h2>
+        <p className="text-white/30 text-xs mb-10" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          {photoCount} moments
+        </p>
+
+        {/* Track List */}
+        <div className="space-y-3 mb-10">
+          {TRACKS.map((track) => (
+            <button
+              key={track.id}
+              onClick={() => togglePreview(track)}
+              data-testid={`track-${track.id}`}
+              className="w-full flex items-center gap-4 px-5 py-4 rounded-lg transition-all duration-300 cursor-pointer group"
+              style={{
+                backgroundColor: selectedId === track.id ? 'rgba(212,175,55,0.12)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${selectedId === track.id ? 'rgba(212,175,55,0.4)' : 'rgba(255,255,255,0.08)'}`,
+              }}
+            >
+              {/* Play/Pause indicator */}
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300"
+                style={{
+                  backgroundColor: previewingId === track.id ? 'rgba(212,175,55,0.3)' : 'rgba(255,255,255,0.08)',
+                  border: `1px solid ${previewingId === track.id ? '#D4AF37' : 'rgba(255,255,255,0.1)'}`,
+                }}
+              >
+                {previewingId === track.id ? (
+                  <Pause className="w-4 h-4 text-[#D4AF37]" />
+                ) : (
+                  <Play className="w-4 h-4 text-white/50 group-hover:text-white/80 ml-0.5" />
+                )}
+              </div>
+              <div className="text-left flex-1">
+                <p className="text-sm font-medium" style={{
+                  fontFamily: 'Manrope, sans-serif',
+                  color: selectedId === track.id ? '#D4AF37' : 'rgba(255,255,255,0.8)',
+                }}>{track.name}</p>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)', fontFamily: 'Manrope, sans-serif' }}>
+                  {track.desc}
+                </p>
+              </div>
+              {/* Selection check */}
+              {selectedId === track.id && (
+                <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: '#D4AF37' }}>
+                  <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Start buttons */}
+        <div className="flex flex-col items-center gap-3">
+          <button
+            onClick={handleStart}
+            disabled={!selectedId}
+            data-testid="start-slideshow-btn"
+            className="px-8 py-3 rounded-full text-sm tracking-wider uppercase transition-all duration-300 cursor-pointer"
+            style={{
+              fontFamily: 'Manrope, sans-serif',
+              fontWeight: 600,
+              backgroundColor: selectedId ? '#D4AF37' : 'rgba(255,255,255,0.06)',
+              color: selectedId ? '#1C1917' : 'rgba(255,255,255,0.25)',
+              border: `1px solid ${selectedId ? '#D4AF37' : 'rgba(255,255,255,0.08)'}`,
+              opacity: selectedId ? 1 : 0.5,
+            }}
+          >
+            Start Slideshow
+          </button>
+          <button
+            onClick={() => onStart(null)}
+            data-testid="start-no-music-btn"
+            className="text-xs tracking-wide cursor-pointer transition-colors duration-200 hover:text-white/50"
+            style={{ color: 'rgba(255,255,255,0.25)', fontFamily: 'Manrope, sans-serif' }}
+          >
+            or continue without music
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── SLIDESHOW COMPONENT ───
 export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
+  const [phase, setPhase] = useState('picking'); // 'picking' | 'intro' | 'playing'
+  const [chosenTrack, setChosenTrack] = useState(null);
   const [activeLayer, setActiveLayer] = useState('A');
   const [layerA, setLayerA] = useState({ index: 0, kb: randomKB(), animating: false });
   const [layerB, setLayerB] = useState({ index: 1 % Math.max(photos.length, 1), kb: randomKB(), animating: false });
   const [isPaused, setIsPaused] = useState(false);
   const [musicOn, setMusicOn] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  const [introVisible, setIntroVisible] = useState(true);
-  const [started, setStarted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const musicRef = useRef(null);
+  const audioRef = useRef(null);
   const timerRef = useRef(null);
   const controlsTimerRef = useRef(null);
 
@@ -195,7 +207,85 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
     photoUrls.forEach(url => { const img = new Image(); img.src = url; });
   }, [photoUrls]);
 
-  // Auto-hide controls
+  // ─── MUSIC PICK → INTRO → PLAYING ───
+  const handleMusicPick = useCallback((trackId) => {
+    setChosenTrack(trackId);
+    setPhase('intro');
+
+    // Start music during intro
+    if (trackId) {
+      const track = TRACKS.find(t => t.id === trackId);
+      if (track) {
+        const audio = new Audio(slideshowMusicUrl(track.file));
+        audio.loop = true;
+        audio.volume = 0;
+        audio.play().catch(() => {});
+        // Fade in over 3 seconds
+        let vol = 0;
+        const fadeIn = setInterval(() => {
+          vol = Math.min(vol + 0.02, 0.5);
+          audio.volume = vol;
+          if (vol >= 0.5) clearInterval(fadeIn);
+        }, 60);
+        audioRef.current = audio;
+      }
+    }
+
+    // Intro → Playing
+    setTimeout(() => {
+      setPhase('playing');
+      // Kick off Ken Burns on first slide
+      setTimeout(() => {
+        setLayerA(prev => ({ ...prev, animating: true }));
+      }, 100);
+    }, INTRO_DURATION_MS);
+  }, []);
+
+  // ─── CLEANUP MUSIC ON UNMOUNT ───
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  // ─── MUSIC VOLUME CONTROL ───
+  useEffect(() => {
+    if (!audioRef.current) return;
+    const target = (musicOn && !isPaused) ? 0.5 : 0;
+    const audio = audioRef.current;
+    // Smooth volume transition
+    const start = audio.volume;
+    const diff = target - start;
+    const steps = 15;
+    let step = 0;
+    const interval = setInterval(() => {
+      step++;
+      audio.volume = Math.max(0, Math.min(1, start + (diff * step / steps)));
+      if (step >= steps) clearInterval(interval);
+    }, 30);
+  }, [musicOn, isPaused]);
+
+  // ─── CLOSE HANDLER (fade out music) ───
+  const handleClose = useCallback(() => {
+    if (audioRef.current) {
+      const audio = audioRef.current;
+      let vol = audio.volume;
+      const fadeOut = setInterval(() => {
+        vol = Math.max(0, vol - 0.03);
+        audio.volume = vol;
+        if (vol <= 0) {
+          clearInterval(fadeOut);
+          audio.pause();
+        }
+      }, 30);
+    }
+    setTimeout(() => onClose(), 300);
+  }, [onClose]);
+
+  // ─── AUTO-HIDE CONTROLS ───
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
@@ -204,107 +294,77 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
     }, 4000);
   }, [isPaused]);
 
-  // Intro -> Start
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setIntroVisible(false);
-      setTimeout(() => {
-        setStarted(true);
-        // Kick off the Ken Burns on the first slide
-        setTimeout(() => {
-          setLayerA(prev => ({ ...prev, animating: true }));
-        }, 100);
-      }, 1000);
-    }, INTRO_DURATION_MS);
-    return () => clearTimeout(t);
-  }, []);
-
-  // Music
-  useEffect(() => {
-    if (!started) return;
-    musicRef.current = new AmbientMusicEngine();
-    if (musicOn) musicRef.current.start();
-    return () => { if (musicRef.current) musicRef.current.stop(); };
-  }, [started]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!musicRef.current) return;
-    musicRef.current.setVolume(musicOn && !isPaused ? 0.6 : 0);
-  }, [musicOn, isPaused]);
-
-  // Advance slide
+  // ─── ADVANCE SLIDE ───
   const advanceSlide = useCallback(() => {
     if (photos.length <= 1) return;
     const nextIdx = (currentIndex + 1) % photos.length;
     const nextKB = randomKB();
 
     if (activeLayer === 'A') {
-      // Load next image into Layer B at starting position (no animation yet)
       setLayerB({ index: nextIdx, kb: nextKB, animating: false });
-      // Small delay then fade in Layer B and start its Ken Burns
       setTimeout(() => {
         setActiveLayer('B');
-        setTimeout(() => {
-          setLayerB(prev => ({ ...prev, animating: true }));
-        }, 100);
+        setTimeout(() => setLayerB(prev => ({ ...prev, animating: true })), 100);
       }, 80);
     } else {
       setLayerA({ index: nextIdx, kb: nextKB, animating: false });
       setTimeout(() => {
         setActiveLayer('A');
-        setTimeout(() => {
-          setLayerA(prev => ({ ...prev, animating: true }));
-        }, 100);
+        setTimeout(() => setLayerA(prev => ({ ...prev, animating: true })), 100);
       }, 80);
     }
-
     setCurrentIndex(nextIdx);
   }, [currentIndex, photos.length, activeLayer]);
 
-  // Auto-advance timer
+  // ─── AUTO-ADVANCE TIMER ───
   useEffect(() => {
-    if (!started || isPaused || photos.length <= 1) return;
+    if (phase !== 'playing' || isPaused || photos.length <= 1) return;
     timerRef.current = setTimeout(advanceSlide, SLIDE_DISPLAY_MS);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [started, isPaused, currentIndex, advanceSlide, photos.length]);
+  }, [phase, isPaused, currentIndex, advanceSlide, photos.length]);
 
-  // Keyboard
+  // ─── KEYBOARD ───
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (phase === 'picking') {
+        if (e.key === 'Escape') onClose();
+        return;
+      }
+      if (e.key === 'Escape') handleClose();
       if (e.key === ' ') { e.preventDefault(); setIsPaused(p => !p); }
       if (e.key === 'm' || e.key === 'M') setMusicOn(m => !m);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [phase, onClose, handleClose]);
 
-  // Build the style for an image layer
+  // ─── LAYER STYLE ───
   const buildLayerImageStyle = (layer) => {
     const kb = layer.kb;
     const isAnimating = layer.animating && !isPaused;
-    // Start: scale 1.0, centered (full image visible via contain)
-    // End: gently zoomed in with subtle drift
     const scale = isAnimating ? kb.toScale : 1.0;
     const tx = isAnimating ? kb.toX : 0;
     const ty = isAnimating ? kb.toY : 0;
-
     return {
       backgroundImage: `url(${photoUrls[layer.index] || ''})`,
       backgroundSize: 'contain',
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat',
       transform: `scale(${scale}) translate(${tx}%, ${ty}%)`,
-      transition: isAnimating
-        ? `transform ${KB_DURATION_S}s cubic-bezier(0.25, 0.1, 0.25, 1.0)`
-        : 'transform 0s',
+      transition: isAnimating ? `transform ${KB_DURATION_S}s cubic-bezier(0.25, 0.1, 0.25, 1.0)` : 'transform 0s',
       willChange: 'transform',
     };
   };
 
   if (photos.length === 0) return null;
 
+  // ─── MUSIC PICKER PHASE ───
+  if (phase === 'picking') {
+    return <MusicPicker coupleName={coupleName} photoCount={photos.length} onStart={handleMusicPick} onClose={onClose} />;
+  }
+
   const layerAOnTop = activeLayer === 'A';
+  const showIntro = phase === 'intro';
 
   return (
     <div
@@ -318,9 +378,9 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
       <div
         className="absolute inset-0 z-50 flex items-center justify-center bg-black"
         style={{
-          opacity: introVisible ? 1 : 0,
+          opacity: showIntro ? 1 : 0,
           transition: 'opacity 1.2s ease',
-          pointerEvents: introVisible ? 'auto' : 'none',
+          pointerEvents: showIntro ? 'auto' : 'none',
         }}
       >
         <div className="text-center px-8">
@@ -332,10 +392,7 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
           <p className="text-white/40 text-xs tracking-[0.35em] uppercase mb-5" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Your Wedding Gallery
           </p>
-          <h1
-            className="text-white text-5xl md:text-7xl font-light"
-            style={{ fontFamily: 'Cormorant Garamond, serif' }}
-          >
+          <h1 className="text-white text-5xl md:text-7xl font-light" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
             {coupleName}
           </h1>
           <div className="flex items-center justify-center gap-4 mt-6">
@@ -350,65 +407,38 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
       </div>
 
       {/* ─── IMAGE LAYERS ─── */}
-      {started && (
+      {phase === 'playing' && (
         <>
-          {/* Layer A */}
-          <div
-            className="absolute inset-0 overflow-hidden"
-            style={{
-              opacity: layerAOnTop ? 1 : 0,
-              transition: `opacity ${CROSSFADE_MS}ms ease-in-out`,
-              zIndex: layerAOnTop ? 2 : 1,
-            }}
-          >
+          <div className="absolute inset-0 overflow-hidden"
+            style={{ opacity: layerAOnTop ? 1 : 0, transition: `opacity ${CROSSFADE_MS}ms ease-in-out`, zIndex: layerAOnTop ? 2 : 1 }}>
             <div className="absolute inset-0" style={buildLayerImageStyle(layerA)} />
           </div>
-
-          {/* Layer B */}
-          <div
-            className="absolute inset-0 overflow-hidden"
-            style={{
-              opacity: layerAOnTop ? 0 : 1,
-              transition: `opacity ${CROSSFADE_MS}ms ease-in-out`,
-              zIndex: layerAOnTop ? 1 : 2,
-            }}
-          >
+          <div className="absolute inset-0 overflow-hidden"
+            style={{ opacity: layerAOnTop ? 0 : 1, transition: `opacity ${CROSSFADE_MS}ms ease-in-out`, zIndex: layerAOnTop ? 1 : 2 }}>
             <div className="absolute inset-0" style={buildLayerImageStyle(layerB)} />
           </div>
 
-          {/* ─── OVERLAYS ─── */}
+          {/* Overlays */}
           <div className="absolute inset-x-0 top-0 h-32 z-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.3), transparent)' }} />
           <div className="absolute inset-x-0 bottom-0 h-40 z-10 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.4), transparent)' }} />
 
-          {/* ─── COUPLE NAME ─── */}
-          <div
-            className="absolute bottom-7 left-1/2 -translate-x-1/2 z-20 text-center pointer-events-none"
-            style={{ opacity: showControls ? 0.7 : 0.25, transition: 'opacity 1s ease' }}
-          >
-            <p
-              className="text-white/70 text-2xl md:text-3xl font-light italic"
-              style={{ fontFamily: 'Cormorant Garamond, serif', textShadow: '0 2px 20px rgba(0,0,0,0.7)' }}
-            >
+          {/* Couple Name */}
+          <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-20 text-center pointer-events-none"
+            style={{ opacity: showControls ? 0.7 : 0.25, transition: 'opacity 1s ease' }}>
+            <p className="text-white/70 text-2xl md:text-3xl font-light italic"
+              style={{ fontFamily: 'Cormorant Garamond, serif', textShadow: '0 2px 20px rgba(0,0,0,0.7)' }}>
               {coupleName}
             </p>
           </div>
 
-          {/* ─── PROGRESS ─── */}
-          <div
-            className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 pointer-events-none"
-            style={{ opacity: showControls ? 1 : 0, transition: 'opacity 1s ease' }}
-          >
+          {/* Progress */}
+          <div className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 pointer-events-none"
+            style={{ opacity: showControls ? 1 : 0, transition: 'opacity 1s ease' }}>
             {photos.length <= 30 ? photos.map((_, i) => (
-              <div
-                key={i}
-                className="rounded-full"
-                style={{
-                  width: i === currentIndex ? 20 : 5,
-                  height: 5,
+              <div key={i} className="rounded-full"
+                style={{ width: i === currentIndex ? 20 : 5, height: 5,
                   backgroundColor: i === currentIndex ? '#D4AF37' : 'rgba(255,255,255,0.2)',
-                  transition: 'all 0.6s ease',
-                }}
-              />
+                  transition: 'all 0.6s ease' }} />
             )) : (
               <p className="text-white/45 text-xs tracking-wide" style={{ fontFamily: 'Manrope, sans-serif' }}>
                 {currentIndex + 1} / {photos.length}
@@ -416,64 +446,50 @@ export default function Slideshow({ photos, galleryId, coupleName, onClose }) {
             )}
           </div>
 
-          {/* ─── CONTROLS ─── */}
-          <div
-            className="absolute top-6 right-6 z-30 flex items-center gap-3"
-            style={{ opacity: showControls ? 1 : 0, transition: 'opacity 1s ease' }}
-          >
-            <button
-              data-testid="slideshow-music-toggle"
-              onClick={(e) => { e.stopPropagation(); setMusicOn(m => !m); }}
-              className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
-              style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
-              title={musicOn ? "Mute (M)" : "Music (M)"}
-            >
-              {musicOn ? <Volume2 className="w-4 h-4 text-white/70" /> : <VolumeX className="w-4 h-4 text-white/35" />}
-            </button>
-            <button
-              data-testid="slideshow-playpause"
+          {/* Controls */}
+          <div className="absolute top-6 right-6 z-30 flex items-center gap-3"
+            style={{ opacity: showControls ? 1 : 0, transition: 'opacity 1s ease' }}>
+            {chosenTrack && (
+              <button data-testid="slideshow-music-toggle"
+                onClick={(e) => { e.stopPropagation(); setMusicOn(m => !m); }}
+                className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
+                style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
+                title={musicOn ? "Mute (M)" : "Music (M)"}>
+                {musicOn ? <Volume2 className="w-4 h-4 text-white/70" /> : <VolumeX className="w-4 h-4 text-white/35" />}
+              </button>
+            )}
+            <button data-testid="slideshow-playpause"
               onClick={(e) => { e.stopPropagation(); setIsPaused(p => !p); }}
               className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
               style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
-              title={isPaused ? "Play (Space)" : "Pause (Space)"}
-            >
+              title={isPaused ? "Play (Space)" : "Pause (Space)"}>
               {isPaused ? <Play className="w-4 h-4 text-white/70 ml-0.5" /> : <Pause className="w-4 h-4 text-white/70" />}
             </button>
-            <button
-              data-testid="slideshow-close"
-              onClick={(e) => { e.stopPropagation(); onClose(); }}
+            <button data-testid="slideshow-close"
+              onClick={(e) => { e.stopPropagation(); handleClose(); }}
               className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md cursor-pointer"
               style={{ backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
-              title="Close (Esc)"
-            >
+              title="Close (Esc)">
               <X className="w-4 h-4 text-white/70" />
             </button>
           </div>
 
-          {/* ─── PAUSED ─── */}
+          {/* Paused */}
           {isPaused && (
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-              <div
-                className="px-7 py-3 rounded-full backdrop-blur-xl"
-                style={{ backgroundColor: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                <p className="text-white/50 text-sm tracking-widest uppercase" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                  Paused
-                </p>
+              <div className="px-7 py-3 rounded-full backdrop-blur-xl"
+                style={{ backgroundColor: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <p className="text-white/50 text-sm tracking-widest uppercase" style={{ fontFamily: 'Manrope, sans-serif' }}>Paused</p>
               </div>
             </div>
           )}
         </>
       )}
 
-      {/* ─── BRANDING ─── */}
-      <div
-        className="absolute top-6 left-6 z-30 pointer-events-none"
-        style={{ opacity: showControls ? 0.45 : 0, transition: 'opacity 1s ease' }}
-      >
-        <p className="text-white/45 text-xs italic" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
-          Weddings By Mark
-        </p>
+      {/* Branding */}
+      <div className="absolute top-6 left-6 z-30 pointer-events-none"
+        style={{ opacity: showControls && phase !== 'picking' ? 0.45 : 0, transition: 'opacity 1s ease' }}>
+        <p className="text-white/45 text-xs italic" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Weddings By Mark</p>
       </div>
     </div>
   );
