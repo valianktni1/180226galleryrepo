@@ -87,3 +87,7 @@
   background-color: rgba(212, 175, 55, 0.12);
   color: #1C1917;
 }
+
+
+/* Dark mode file card backgrounds */
+.file-card-empty { background-color: var(--card-empty-bg, #F5F2EB); }
