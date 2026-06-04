@@ -277,7 +277,7 @@ function ShareViewFull() {
   });
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#FDFCF8' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: t.bg }}>
       <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
     </div>
   );
@@ -285,9 +285,9 @@ function ShareViewFull() {
   // If no gallery name, something went wrong - show error
   if (!galleryName) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#FDFCF8' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: t.bg }}>
         <div className="text-center">
-          <p className="text-lg mb-4" style={{ color: '#57534E' }}>Unable to load gallery</p>
+          <p className="text-lg mb-4" style={{ color: t.text }}>Unable to load gallery</p>
           <button 
             onClick={() => { 
               localStorage.removeItem("share_token"); 
@@ -632,7 +632,7 @@ function ShareViewFull() {
               {displayFiles.map((file, i) => (
                 <FileCard key={file.id} file={file} index={i} galleryId={galleryId}
                   onFav={handleFavourite} onDownload={handleDownloadSingle}
-                  onClick={() => setLightboxIndex(i)} permissions={permissions} />
+                  onClick={() => setLightboxIndex(i)} permissions={permissions} theme={t} />
               ))}
             </div>
           )}
@@ -640,7 +640,7 @@ function ShareViewFull() {
         <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
           setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
           galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token} />
-        <ThankYouModal show={showThankYou} onClose={() => setShowThankYou(false)} count={submittedCount} galleryName={galleryName} />
+        <ThankYouModal show={showThankYou} onClose={() => setShowThankYou(false)} count={submittedCount} galleryName={galleryName} theme={t} />
       </div>
     );
   }
@@ -664,7 +664,7 @@ function ShareViewFull() {
             {permissions.allowDelete && (
               <Button data-testid="select-mode-btn" variant={selectMode ? "default" : "ghost"} 
                 onClick={() => { setSelectMode(m => !m); setSelectedFiles(new Set()); }}
-                className={`rounded-sm text-xs tracking-wider gap-1.5 ${selectMode ? 'bg-[#1C1917] text-[#FDFCF8]' : ''}`}
+                className={`rounded-sm text-xs tracking-wider gap-1.5 ${selectMode ? (darkMode ? 'bg-white/10 text-white' : 'bg-[#1C1917] text-[#FDFCF8]') : ''}`}
                 style={selectMode ? { fontFamily: 'Manrope, sans-serif' } : { fontFamily: 'Manrope, sans-serif', color: t.text }}>
                 <Check className="w-3.5 h-3.5" /> {selectMode ? "Cancel" : "Select"}
               </Button>
@@ -711,7 +711,7 @@ function ShareViewFull() {
                 onClick={selectMode ? () => toggleSelect(file.id) : () => setLightboxIndex(i)} 
                 permissions={permissions}
                 selectMode={selectMode}
-                isSelected={selectedFiles.has(file.id)} />
+                isSelected={selectedFiles.has(file.id)} theme={t} />
             ))}
           </div>
         )}
@@ -726,10 +726,10 @@ function ShareViewFull() {
               <span className="text-[#D4AF37] text-lg">✦</span>
               <div className="h-px w-12" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }}></div>
             </div>
-            <p className="text-sm tracking-wide" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>
+            <p className="text-sm tracking-wide" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.text }}>
               Site Designed & Maintained by
             </p>
-            <p className="text-xl font-medium italic mt-1" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+            <p className="text-xl font-medium italic mt-1" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>
               Weddings By Mark
             </p>
           </div>
@@ -742,12 +742,12 @@ function ShareViewFull() {
       
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
+        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: t.bgCard, color: t.text }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+            <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>
               Delete {selectedFiles.size} file(s)?
             </AlertDialogTitle>
-            <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <AlertDialogDescription style={{ color: t.text, fontFamily: 'Manrope, sans-serif' }}>
               This will permanently delete the selected files. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -780,7 +780,9 @@ function ShareViewFull() {
 }
 
 // ─── Reusable Components ───
-function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false }) {
+function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false, theme = {} }) {
+  const emptyColor = theme.textSub || '#A8A29E';
+  const mutedColor = theme.textMuted || '#C4C0B8';
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -795,8 +797,8 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           <img src={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
         ) : (
           <div className="aspect-square flex flex-col items-center justify-center file-card-empty">
-            <ImageIcon className="w-8 h-8 text-[#A8A29E] mb-1" />
-            <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+            <ImageIcon className="w-8 h-8 mb-1" style={{ color: emptyColor }} />
+            <span className="text-xs truncate max-w-[80%]" style={{ color: emptyColor }}>{file.filename}</span>
           </div>
         )
       ) : file.file_type === 'video' ? (
@@ -812,15 +814,15 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           </div>
         ) : (
           <div className="aspect-video flex flex-col items-center justify-center file-card-empty">
-            <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
-            <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
+            <Film className="w-8 h-8 mb-1" style={{ color: emptyColor }} />
+            <span className="text-xs truncate max-w-[80%]" style={{ color: emptyColor }}>{file.filename}</span>
           </div>
         )
       ) : (
         <div className="aspect-square flex flex-col items-center justify-center file-card-empty">
-          <FileText className="w-8 h-8 text-[#A8A29E] mb-1" />
-          <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
-          <span className="text-[10px] text-[#C4C0B8] mt-0.5">{(file.file_size / (1024*1024)).toFixed(1)} MB</span>
+          <FileText className="w-8 h-8 mb-1" style={{ color: emptyColor }} />
+          <span className="text-xs truncate max-w-[80%]" style={{ color: emptyColor }}>{file.filename}</span>
+          <span className="text-[10px] mt-0.5" style={{ color: mutedColor }}>{(file.file_size / (1024*1024)).toFixed(1)} MB</span>
         </div>
       )}
       {/* Selection checkbox - visible in select mode */}
@@ -911,8 +913,11 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
   );
 }
 
-function ThankYouModal({ show, onClose, count, galleryName }) {
+function ThankYouModal({ show, onClose, count, galleryName, theme = {} }) {
   if (!show) return null;
+  const bg = theme.bgCard || 'white';
+  const heading = theme.headingColor || '#1C1917';
+  const text = theme.text || '#57534E';
   
   return (
     <AnimatePresence>
@@ -929,19 +934,20 @@ function ThankYouModal({ show, onClose, count, galleryName }) {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
           transition={{ type: 'spring', duration: 0.5 }}
-          className="bg-white rounded-lg p-8 max-w-md w-full text-center shadow-2xl"
+          className="rounded-lg p-8 max-w-md w-full text-center shadow-2xl"
+          style={{ backgroundColor: bg }}
           onClick={e => e.stopPropagation()}
         >
           <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: '#D4AF37' }}>
             <Heart className="w-8 h-8 text-white" fill="white" />
           </div>
-          <h2 className="text-2xl font-semibold mb-3" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+          <h2 className="text-2xl font-semibold mb-3" style={{ fontFamily: 'Cormorant Garamond, serif', color: heading }}>
             Thank You!
           </h2>
-          <p className="text-base mb-4" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>
+          <p className="text-base mb-4" style={{ fontFamily: 'Manrope, sans-serif', color: text }}>
             Your {count} favourite {count === 1 ? 'photo has' : 'photos have'} been submitted for your wedding album.
           </p>
-          <p className="text-sm mb-6 p-3 rounded-lg" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E', backgroundColor: '#FEF9E7' }}>
+          <p className="text-sm mb-6 p-3 rounded-lg" style={{ fontFamily: 'Manrope, sans-serif', color: text, backgroundColor: theme.bgAlt || '#FEF9E7' }}>
             <strong>Guys... please don't forget!</strong><br />
             Email Mark your chosen image for your front cover at{' '}
             <a href="mailto:mark@perfectweddingsbymark.uk" className="underline font-medium" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a>
