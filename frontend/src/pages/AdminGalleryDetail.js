@@ -45,6 +45,7 @@ export default function AdminGalleryDetail() {
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [copying, setCopying] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -282,6 +283,22 @@ export default function AdminGalleryDetail() {
       <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
     </div>
   );
+  const handleReprocessVideos = async () => {
+    try {
+      setReprocessing(true);
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${id}/reprocess-videos`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('admin_token')}` }
+      });
+      const data = await res.json();
+      toast.success(`${data.queued} video(s) queued for optimisation. This runs in the background.`);
+    } catch (err) {
+      toast.error('Failed to start video optimisation');
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
   if (!gallery) return null;
 
   const currentFiles = files.filter(f => f.subfolder === activeTab);
@@ -486,6 +503,13 @@ export default function AdminGalleryDetail() {
                   )}
 
                   <div className="ml-auto flex items-center gap-2">
+                    {videoFiles.length > 0 && (
+                      <Button data-testid="optimise-videos-btn" variant="outline" onClick={handleReprocessVideos} disabled={reprocessing}
+                        className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
+                        style={{ fontFamily: 'Manrope, sans-serif' }}>
+                        <Film className="w-3.5 h-3.5" /> {reprocessing ? "Optimising..." : "Optimise Videos"}
+                      </Button>
+                    )}
                     <Button data-testid="download-all-btn" variant="outline" onClick={handleDownloadAll}
                       className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
                       style={{ fontFamily: 'Manrope, sans-serif' }}>
