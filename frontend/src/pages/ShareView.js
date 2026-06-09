@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import GuestUploadView from "@/pages/GuestUploadView";
 import Slideshow from "@/pages/Slideshow";
+import VideoPlayer from "@/components/VideoPlayer";
 
 export default function ShareView() {
   const { token } = useParams();
@@ -897,11 +898,10 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
             </button>
           )}
           {isVideo && shareToken ? (
-            <motion.video key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-              src={videoStreamUrl(shareToken, currentPhoto.id)}
-              controls autoPlay playsInline
-              className="max-w-[90vw] max-h-[85vh]" style={{ backgroundColor: 'black' }}
-              onClick={e => e.stopPropagation()} />
+            <motion.div key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              onClick={e => e.stopPropagation()}>
+              <VideoPlayer src={videoStreamUrl(shareToken, currentPhoto.id)} filename={currentPhoto.filename} />
+            </motion.div>
           ) : (
             <motion.img key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
               src={galleryId && currentPhoto.has_preview ? previewUrl(galleryId, currentPhoto.subfolder || currentPhoto._subfolder, currentPhoto.filename) : ''}

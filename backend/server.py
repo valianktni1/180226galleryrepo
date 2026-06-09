@@ -1682,7 +1682,7 @@ async def _log_download(gallery_id, gallery_name, share_label, client_ip,
 
 @api_router.get("/share/{token}/stream/{file_id}")
 async def stream_share_video(token: str, file_id: str, request: Request, t: str = Query(None)):
-    """Stream a video file with range request support for in-browser playback."""
+    """Stream a video file with async range request support for smooth in-browser playback."""
     if not t:
         raise HTTPException(status_code=401, detail="Not authenticated")
     payload = verify_jwt(t)
@@ -1701,34 +1701,39 @@ async def stream_share_video(token: str, file_id: str, request: Request, t: str 
     content_types = {'.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
                      '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska', '.mts': 'video/mp2t'}
     content_type = content_types.get(ext, 'video/mp4')
+    CHUNK_SIZE = 512 * 1024  # 512KB chunks for smooth streaming
 
     range_header = request.headers.get("range")
     if range_header:
         range_val = range_header.strip().split("=")[-1]
         range_parts = range_val.split("-")
         start = int(range_parts[0])
-        end = int(range_parts[1]) if range_parts[1] else min(start + 5 * 1024 * 1024, file_size - 1)
+        end = int(range_parts[1]) if range_parts[1] else min(start + 10 * 1024 * 1024, file_size - 1)
         end = min(end, file_size - 1)
         length = end - start + 1
 
-        def iter_range():
-            with open(file_path, "rb") as fh:
-                fh.seek(start)
+        async def async_iter_range():
+            async with aiofiles.open(file_path, "rb") as fh:
+                await fh.seek(start)
                 remaining = length
                 while remaining > 0:
-                    chunk = fh.read(min(65536, remaining))
+                    chunk = await fh.read(min(CHUNK_SIZE, remaining))
                     if not chunk:
                         break
                     remaining -= len(chunk)
                     yield chunk
 
-        return StreamingResponse(iter_range(), status_code=206, media_type=content_type, headers={
+        return StreamingResponse(async_iter_range(), status_code=206, media_type=content_type, headers={
             "Content-Range": f"bytes {start}-{end}/{file_size}",
             "Accept-Ranges": "bytes",
             "Content-Length": str(length),
+            "Cache-Control": "public, max-age=86400",
         })
     else:
-        return FileResponse(file_path, media_type=content_type, headers={"Accept-Ranges": "bytes"})
+        return FileResponse(file_path, media_type=content_type, headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=86400",
+        })
 
 @api_router.get("/share/{token}/download/{file_id}")
 async def download_share_file(token: str, file_id: str, request: Request, session=Depends(get_share_session)):
