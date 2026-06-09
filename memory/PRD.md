@@ -4,8 +4,8 @@
 Self-hosted wedding photography client gallery management system with admin panel, sharing, downloads, print shop, slideshow, and QR codes.
 
 ## Core Architecture
-- **Frontend:** React + Tailwind CSS + Shadcn/UI
-- **Backend:** FastAPI + Motor (async MongoDB) + Pillow
+- **Frontend:** React + Tailwind CSS + Shadcn/UI + video.js
+- **Backend:** FastAPI + Motor (async MongoDB) + Pillow + aiofiles
 - **Deployment:** Docker Compose on TrueNAS
 
 ## Implemented Features
@@ -13,6 +13,11 @@ Self-hosted wedding photography client gallery management system with admin pane
 ### Core: Galleries, uploads, sharing, password protection, print shop, 2FA, guest uploads
 
 ### Video: Thumbnails on upload (ffmpeg), inline playback with Range streaming
+- **Async streaming** (aiofiles) with 512KB chunks — no event loop blocking
+- **video.js player** in lightbox with professional controls, buffering, playback speed
+- Automatic fallback to native HTML5 player if video.js fails
+- Supports .mp4, .mov, .webm, .mkv, .avi, .mts
+- Cache-Control headers for CDN caching
 
 ### Cinematic Slideshow with Music Picker + Shareable Link
 - Music picker: 3 MP3 tracks (Romantic, Cinematic, Eternity) with 12s preview snippets
@@ -37,7 +42,8 @@ Self-hosted wedding photography client gallery management system with admin pane
 ### QR Code Generator (3 designs), Activity Log, Photographer Mode
 
 ## Key Files
-- `/app/frontend/src/pages/ShareView.js` — Share views with dark mode toggle
+- `/app/frontend/src/pages/ShareView.js` — Share views with dark mode toggle + video.js lightbox
+- `/app/frontend/src/components/VideoPlayer.js` — video.js player with native fallback
 - `/app/frontend/src/pages/Slideshow.js` — Music picker + slideshow + share button
 - `/app/frontend/src/pages/SlideshowDirect.js` — Direct slideshow route handler
 - `/app/frontend/src/pages/ShareAccess.js` — Auth with `?next=slideshow` redirect support
