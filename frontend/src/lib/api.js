@@ -261,6 +261,12 @@ export const videoStreamUrl = (token, fileId) => {
   return `${BACKEND_URL}/api/share/${token}/stream/${fileId}?t=${encodeURIComponent(jwt)}`;
 };
 
+export const getVideoPlaybackUrl = async (token, fileId) => {
+  const jwt = localStorage.getItem('share_token');
+  const res = await apiClient.get(`/share/${token}/video-token/${fileId}?t=${encodeURIComponent(jwt)}`);
+  return `${BACKEND_URL}${res.data.url}`;
+};
+
 export const slideshowMusicUrl = (filename) => `${API}/slideshow/music/${filename}`;
 
 export default apiClient;

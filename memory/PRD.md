@@ -12,11 +12,13 @@ Self-hosted wedding photography client gallery management system with admin pane
 
 ### Core: Galleries, uploads, sharing, password protection, print shop, 2FA, guest uploads
 
-### Video: Thumbnails on upload (ffmpeg), inline playback with Range streaming
-- **Async streaming** (aiofiles) with 512KB chunks — no event loop blocking
-- **video.js player** in lightbox with professional controls, buffering, playback speed
-- Automatic fallback to native HTML5 player if video.js fails
+### Video Streaming (Optimized for multi-GB files)
+- **Video playback token system**: Auth + DB lookup done ONCE on play, generates 2hr signed JWT with file path embedded
+- **Direct streaming endpoint** (`/api/v/{token}`): Zero DB calls during playback — just JWT check + disk read
+- **1MB chunks** for direct stream, async I/O via aiofiles
+- **video.js** professional player with smart buffering, playback speed, fullscreen. Auto-fallback to native HTML5 on error
 - Supports .mp4, .mov, .webm, .mkv, .avi, .mts
+- Thumbnails on upload (ffmpeg), inline playback with Range streaming
 - Cache-Control headers for CDN caching
 
 ### Cinematic Slideshow with Music Picker + Shareable Link
@@ -27,29 +29,28 @@ Self-hosted wedding photography client gallery management system with admin pane
 - **Share button**: Copies direct slideshow URL to clipboard
 - **Direct slideshow route**: `/s/{token}/slideshow` — goes straight to music picker -> slideshow
 - Auth-aware: redirects through ShareAccess if not authenticated, then back to slideshow
-- Works with password-protected shares too
 
 ### Client Share Landing Page — Design A Classic
 - Hero using Wedding Images cover photo as blurred background
 - Elegant serif couple name, gold dividers, album cards with cover photo fills
 
-### Dark Mode Toggle (Completed June 2026)
+### Dark Mode Toggle
 - Moon/Sun toggle in share view header (persists via localStorage)
 - Theme object `t` with dark (#1A1A1A) and light (#FDFCF8) palettes
-- Applied across: landing page, album detail, favourites, delete dialog, thank you modal, footer
-- FileCard and ThankYouModal components receive theme as prop
+- Applied across all share views: landing, album detail, favourites, delete dialog, thank you modal, footer
 
 ### QR Code Generator (3 designs), Activity Log, Photographer Mode
 
 ## Key Files
-- `/app/frontend/src/pages/ShareView.js` — Share views with dark mode toggle + video.js lightbox
-- `/app/frontend/src/components/VideoPlayer.js` — video.js player with native fallback
-- `/app/frontend/src/pages/Slideshow.js` — Music picker + slideshow + share button
-- `/app/frontend/src/pages/SlideshowDirect.js` — Direct slideshow route handler
-- `/app/frontend/src/pages/ShareAccess.js` — Auth with `?next=slideshow` redirect support
-- `/app/frontend/src/App.js` — Route: `/s/:token/slideshow`
-- `/app/backend/assets/slideshow_music/` — romantic.mp3, cinematic.mp3, eternity.mp3
-- `/app/backend/server.py` — All API endpoints (>2600 lines)
+- `/app/frontend/src/pages/ShareView.js` — Share views with dark mode + video.js lightbox
+- `/app/frontend/src/components/VideoPlayer.js` — video.js player with token resolution + native fallback
+- `/app/frontend/src/lib/api.js` — getVideoPlaybackUrl() for token-based streaming
+- `/app/backend/server.py` — `/api/share/{token}/video-token/{file_id}` + `/api/v/{vtoken}`
+
+## Key API Endpoints
+- `GET /api/share/{token}/video-token/{file_id}` — Generate 2hr playback token (one auth + DB call)
+- `GET /api/v/{vtoken}` — Direct video streaming (zero DB calls, JWT-only auth)
+- `GET /api/share/{token}/stream/{file_id}` — Legacy streaming endpoint (kept as fallback)
 
 ## Backlog
 - P1: Replace "Floral" QR design with decorated "Minimal" variation

@@ -1680,6 +1680,75 @@ async def _log_download(gallery_id, gallery_name, share_label, client_ip,
     })
 
 
+@api_router.get("/share/{token}/video-token/{file_id}")
+async def get_video_playback_token(token: str, file_id: str, t: str = Query(None)):
+    """Generate a short-lived playback token with file path baked in — no DB lookups during streaming."""
+    if not t:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = verify_jwt(t)
+    if payload.get("role") != "share" or payload.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    f = await db.files.find_one({"id": file_id, "gallery_id": payload["gallery_id"]}, {"_id": 0})
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+    gallery = await db.galleries.find_one({"id": payload["gallery_id"]}, {"_id": 0})
+    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    # Create a playback token valid for 2 hours with the file path embedded
+    vtoken = create_jwt({"role": "video", "path": str(file_path)}, expires_hours=2)
+    return {"url": f"/api/v/{vtoken}"}
+
+@api_router.get("/v/{vtoken}")
+async def stream_video_direct(vtoken: str, request: Request):
+    """Ultra-lightweight video streaming — JWT contains file path, zero DB calls."""
+    payload = verify_jwt(vtoken)
+    if payload.get("role") != "video":
+        raise HTTPException(status_code=403, detail="Invalid video token")
+    file_path = Path(payload["path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_size = file_path.stat().st_size
+    ext = file_path.suffix.lower()
+    content_types = {'.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+                     '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska', '.mts': 'video/mp2t'}
+    content_type = content_types.get(ext, 'video/mp4')
+    CHUNK_SIZE = 1024 * 1024  # 1MB chunks for large files
+
+    range_header = request.headers.get("range")
+    if range_header:
+        range_val = range_header.strip().split("=")[-1]
+        range_parts = range_val.split("-")
+        start = int(range_parts[0])
+        end = int(range_parts[1]) if range_parts[1] else min(start + 10 * 1024 * 1024, file_size - 1)
+        end = min(end, file_size - 1)
+        length = end - start + 1
+
+        async def async_iter_range():
+            async with aiofiles.open(file_path, "rb") as fh:
+                await fh.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = await fh.read(min(CHUNK_SIZE, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        return StreamingResponse(async_iter_range(), status_code=206, media_type=content_type, headers={
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(length),
+            "Cache-Control": "public, max-age=86400",
+        })
+    else:
+        return FileResponse(file_path, media_type=content_type, headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(file_size),
+            "Cache-Control": "public, max-age=86400",
+        })
+
 @api_router.get("/share/{token}/stream/{file_id}")
 async def stream_share_video(token: str, file_id: str, request: Request, t: str = Query(None)):
     """Stream a video file with async range request support for smooth in-browser playback."""

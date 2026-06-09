@@ -13,7 +13,7 @@ import {
   ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText, Play, PlayCircle, Moon, Sun
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, getErrorMessage, videoStreamUrl
+  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl
 } from "@/lib/api";
 import GuestUploadView from "@/pages/GuestUploadView";
 import Slideshow from "@/pages/Slideshow";
@@ -900,7 +900,11 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
           {isVideo && shareToken ? (
             <motion.div key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
               onClick={e => e.stopPropagation()}>
-              <VideoPlayer src={videoStreamUrl(shareToken, currentPhoto.id)} filename={currentPhoto.filename} />
+              <VideoPlayer
+                src={videoStreamUrl(shareToken, currentPhoto.id)}
+                resolveUrl={() => getVideoPlaybackUrl(shareToken, currentPhoto.id)}
+                filename={currentPhoto.filename}
+              />
             </motion.div>
           ) : (
             <motion.img key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
