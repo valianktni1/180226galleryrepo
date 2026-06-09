@@ -26,6 +26,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import pyotp
 import base64
+import hashlib
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -40,6 +41,20 @@ CACHE_DIR = UPLOAD_DIR / ".cache" / "thumbs"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
+
+# Nginx video serving (optional — dramatically improves streaming for multi-GB files)
+NGINX_VIDEO_URL = os.environ.get('NGINX_VIDEO_URL', '')  # e.g. "http://nginx-video:8090" or "" to disable
+NGINX_VIDEO_SECRET = os.environ.get('NGINX_VIDEO_SECRET', JWT_SECRET)  # shared secret with nginx
+
+def generate_nginx_video_url(gallery_folder: str, subfolder: str, filename: str, expires_seconds: int = 7200) -> str:
+    """Generate a signed nginx URL for direct video serving."""
+    expires = int(time.time()) + expires_seconds
+    relative_path = f"{gallery_folder}/{subfolder}/{filename}"
+    uri = f"/video/{relative_path}"
+    hash_input = f"{NGINX_VIDEO_SECRET}{uri}{expires}"
+    md5_hash = hashlib.md5(hash_input.encode()).digest()
+    b64_hash = base64.urlsafe_b64encode(md5_hash).rstrip(b'=').decode()
+    return f"{NGINX_VIDEO_URL}{uri}?md5={b64_hash}&expires={expires}"
 
 # Rate limiting for login attempts
 login_attempts = defaultdict(list)  # IP -> list of timestamps
@@ -314,6 +329,28 @@ def safe_filename(filename: str, existing_dir: Path) -> str:
 # ─── Background Thumbnail Generation ───
 thumbnail_executor = ThreadPoolExecutor(max_workers=4)
 
+def ensure_video_faststart(file_path: Path):
+    """Move moov atom to start of MP4 for smooth web streaming. No re-encoding — just metadata move."""
+    try:
+        temp_path = file_path.with_suffix('.faststart.mp4')
+        result = subprocess.run([
+            'ffmpeg', '-y', '-i', str(file_path),
+            '-c', 'copy', '-movflags', '+faststart',
+            str(temp_path)
+        ], capture_output=True, timeout=600)  # 10 min timeout for large files
+        if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
+            temp_path.replace(file_path)  # atomic replace
+            logger.info(f"Faststart applied: {file_path.name}")
+        else:
+            if temp_path.exists():
+                temp_path.unlink()
+            logger.warning(f"Faststart failed for {file_path.name}: {result.stderr[:200] if result.stderr else 'unknown'}")
+    except Exception as e:
+        logger.error(f"Faststart error for {file_path.name}: {e}")
+        temp_path = file_path.with_suffix('.faststart.mp4')
+        if temp_path.exists():
+            temp_path.unlink()
+
 def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: str, filename: str, file_type: str, file_id: str):
     """Generate thumbnails in background thread - doesn't block uploads."""
     try:
@@ -326,6 +363,8 @@ def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: 
             has_thumb = make_thumbnail(file_path, thumb_p)
             has_preview = make_preview(file_path, preview_p)
         elif file_type == "video":
+            # First ensure faststart (moov atom at beginning) for smooth streaming
+            ensure_video_faststart(file_path)
             thumb_p = get_thumb_path(gallery_id, subfolder, filename)
             preview_p = get_preview_path(gallery_id, subfolder, filename)
             has_thumb = make_video_thumbnail(file_path, thumb_p)
@@ -801,6 +840,21 @@ async def upload_files(
         {"$set": {f"file_counts.{subfolder}": count, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     return {"uploaded": uploaded, "count": len(uploaded)}
+
+@api_router.post("/admin/galleries/{gallery_id}/reprocess-videos")
+async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
+    """Reprocess all existing videos to add faststart for smooth streaming."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    videos = await db.files.find({"gallery_id": gallery_id, "file_type": "video"}, {"_id": 0}).to_list(None)
+    queued = 0
+    for v in videos:
+        file_path = get_gallery_path(gallery["folder_name"]) / v["subfolder"] / v["filename"]
+        if file_path.exists():
+            thumbnail_executor.submit(ensure_video_faststart, file_path)
+            queued += 1
+    return {"queued": queued, "message": f"{queued} video(s) queued for faststart processing"}
 
 @api_router.delete("/admin/galleries/{gallery_id}/files/{file_id}")
 async def delete_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
@@ -1695,9 +1749,15 @@ async def get_video_playback_token(token: str, file_id: str, t: str = Query(None
     file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
-    # Create a playback token valid for 2 hours with the file path embedded
+    
+    # If nginx video server is configured, use it (zero Python involvement in streaming)
+    if NGINX_VIDEO_URL:
+        url = generate_nginx_video_url(gallery["folder_name"], f["subfolder"], f["filename"])
+        return {"url": url, "mode": "nginx"}
+    
+    # Fallback: Python streaming with JWT token (zero DB calls during playback)
     vtoken = create_jwt({"role": "video", "path": str(file_path)}, expires_hours=2)
-    return {"url": f"/api/v/{vtoken}"}
+    return {"url": f"/api/v/{vtoken}", "mode": "direct"}
 
 @api_router.get("/v/{vtoken}")
 async def stream_video_direct(vtoken: str, request: Request):

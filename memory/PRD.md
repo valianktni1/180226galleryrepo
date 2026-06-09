@@ -6,6 +6,7 @@ Self-hosted wedding photography client gallery management system with admin pane
 ## Core Architecture
 - **Frontend:** React + Tailwind CSS + Shadcn/UI + video.js
 - **Backend:** FastAPI + Motor (async MongoDB) + Pillow + aiofiles
+- **Video Serving:** nginx (optional, for multi-GB files) + Python fallback
 - **Deployment:** Docker Compose on TrueNAS
 
 ## Implemented Features
@@ -13,44 +14,29 @@ Self-hosted wedding photography client gallery management system with admin pane
 ### Core: Galleries, uploads, sharing, password protection, print shop, 2FA, guest uploads
 
 ### Video Streaming (Optimized for multi-GB files)
-- **Video playback token system**: Auth + DB lookup done ONCE on play, generates 2hr signed JWT with file path embedded
-- **Direct streaming endpoint** (`/api/v/{token}`): Zero DB calls during playback — just JWT check + disk read
-- **1MB chunks** for direct stream, async I/O via aiofiles
-- **video.js** professional player with smart buffering, playback speed, fullscreen. Auto-fallback to native HTML5 on error
+- **Faststart processing**: Auto-runs `ffmpeg -movflags +faststart` on video upload (moves moov atom to beginning for instant playback)
+- **Reprocess endpoint**: `POST /api/admin/galleries/{id}/reprocess-videos` for existing videos
+- **nginx direct serving** (optional): Zero-copy sendfile, signed URLs with secure_link module
+- **Python fallback**: JWT-based playback tokens with zero DB calls during streaming
+- **video.js player** with smart buffering, playback speed, fullscreen, native fallback
 - Supports .mp4, .mov, .webm, .mkv, .avi, .mts
-- Thumbnails on upload (ffmpeg), inline playback with Range streaming
-- Cache-Control headers for CDN caching
 
 ### Cinematic Slideshow with Music Picker + Shareable Link
-- Music picker: 3 MP3 tracks (Romantic, Cinematic, Eternity) with 12s preview snippets
-- "Continue without music" option
-- MP3s served from backend with Range support, loop continuously, fade in/out
-- Dual-layer crossfade (2s), Ken Burns (9s, contain mode), 6s per slide
-- **Share button**: Copies direct slideshow URL to clipboard
-- **Direct slideshow route**: `/s/{token}/slideshow` — goes straight to music picker -> slideshow
-- Auth-aware: redirects through ShareAccess if not authenticated, then back to slideshow
+- Music picker: 3 MP3 tracks (Romantic, Cinematic, Eternity)
+- Ken Burns effect, crossfade, shareable direct link
 
 ### Client Share Landing Page — Design A Classic
-- Hero using Wedding Images cover photo as blurred background
-- Elegant serif couple name, gold dividers, album cards with cover photo fills
+- Hero with blurred cover photo, elegant serif typography, gold accents
 
 ### Dark Mode Toggle
-- Moon/Sun toggle in share view header (persists via localStorage)
-- Theme object `t` with dark (#1A1A1A) and light (#FDFCF8) palettes
-- Applied across all share views: landing, album detail, favourites, delete dialog, thank you modal, footer
+- Persists via localStorage, applied across all share views
 
 ### QR Code Generator (3 designs), Activity Log, Photographer Mode
 
-## Key Files
-- `/app/frontend/src/pages/ShareView.js` — Share views with dark mode + video.js lightbox
-- `/app/frontend/src/components/VideoPlayer.js` — video.js player with token resolution + native fallback
-- `/app/frontend/src/lib/api.js` — getVideoPlaybackUrl() for token-based streaming
-- `/app/backend/server.py` — `/api/share/{token}/video-token/{file_id}` + `/api/v/{vtoken}`
-
 ## Key API Endpoints
-- `GET /api/share/{token}/video-token/{file_id}` — Generate 2hr playback token (one auth + DB call)
-- `GET /api/v/{vtoken}` — Direct video streaming (zero DB calls, JWT-only auth)
-- `GET /api/share/{token}/stream/{file_id}` — Legacy streaming endpoint (kept as fallback)
+- `GET /api/share/{token}/video-token/{file_id}` — Get playback URL (nginx or Python)
+- `GET /api/v/{vtoken}` — Direct Python streaming (zero DB calls)
+- `POST /api/admin/galleries/{id}/reprocess-videos` — Fix existing videos for streaming
 
 ## Backlog
 - P1: Replace "Floral" QR design with decorated "Minimal" variation

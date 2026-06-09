@@ -264,7 +264,9 @@ export const videoStreamUrl = (token, fileId) => {
 export const getVideoPlaybackUrl = async (token, fileId) => {
   const jwt = localStorage.getItem('share_token');
   const res = await apiClient.get(`/share/${token}/video-token/${fileId}?t=${encodeURIComponent(jwt)}`);
-  return `${BACKEND_URL}${res.data.url}`;
+  const { url, mode } = res.data;
+  // nginx mode returns a full external URL, direct mode returns a relative /api/ path
+  return mode === 'nginx' ? url : `${BACKEND_URL}${url}`;
 };
 
 export const slideshowMusicUrl = (filename) => `${API}/slideshow/music/${filename}`;
