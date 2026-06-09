@@ -329,9 +329,14 @@ def safe_filename(filename: str, existing_dir: Path) -> str:
 # ─── Background Thumbnail Generation ───
 thumbnail_executor = ThreadPoolExecutor(max_workers=4)
 
-def ensure_video_faststart(file_path: Path):
+# Video optimisation progress tracking
+video_optimise_progress = {}  # gallery_id -> {total, done, current_file}
+
+def ensure_video_faststart(file_path: Path, gallery_id: str = None):
     """Move moov atom to start of MP4 for smooth web streaming. No re-encoding — just metadata move."""
     try:
+        if gallery_id and gallery_id in video_optimise_progress:
+            video_optimise_progress[gallery_id]["current_file"] = file_path.name
         temp_path = file_path.with_suffix('.faststart.mp4')
         result = subprocess.run([
             'ffmpeg', '-y', '-i', str(file_path),
@@ -350,6 +355,11 @@ def ensure_video_faststart(file_path: Path):
         temp_path = file_path.with_suffix('.faststart.mp4')
         if temp_path.exists():
             temp_path.unlink()
+    finally:
+        if gallery_id and gallery_id in video_optimise_progress:
+            video_optimise_progress[gallery_id]["done"] += 1
+            if video_optimise_progress[gallery_id]["done"] >= video_optimise_progress[gallery_id]["total"]:
+                video_optimise_progress[gallery_id]["current_file"] = None
 
 def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: str, filename: str, file_type: str, file_id: str):
     """Generate thumbnails in background thread - doesn't block uploads."""
@@ -848,13 +858,30 @@ async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
     videos = await db.files.find({"gallery_id": gallery_id, "file_type": "video"}, {"_id": 0}).to_list(None)
-    queued = 0
+    valid_videos = []
     for v in videos:
         file_path = get_gallery_path(gallery["folder_name"]) / v["subfolder"] / v["filename"]
         if file_path.exists():
-            thumbnail_executor.submit(ensure_video_faststart, file_path)
-            queued += 1
-    return {"queued": queued, "message": f"{queued} video(s) queued for faststart processing"}
+            valid_videos.append((file_path, v["filename"]))
+    if not valid_videos:
+        return {"queued": 0, "message": "No video files found"}
+    video_optimise_progress[gallery_id] = {"total": len(valid_videos), "done": 0, "current_file": None}
+    for file_path, _ in valid_videos:
+        thumbnail_executor.submit(ensure_video_faststart, file_path, gallery_id)
+    return {"queued": len(valid_videos), "message": f"{len(valid_videos)} video(s) queued for optimisation"}
+
+@api_router.get("/admin/galleries/{gallery_id}/reprocess-progress")
+async def reprocess_progress(gallery_id: str, admin=Depends(get_admin)):
+    """Get video optimisation progress for a gallery."""
+    progress = video_optimise_progress.get(gallery_id)
+    if not progress:
+        return {"active": False}
+    return {
+        "active": progress["done"] < progress["total"],
+        "total": progress["total"],
+        "done": progress["done"],
+        "current_file": progress["current_file"],
+    }
 
 @api_router.delete("/admin/galleries/{gallery_id}/files/{file_id}")
 async def delete_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):

@@ -46,6 +46,7 @@ export default function AdminGalleryDetail() {
   const [copying, setCopying] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [reprocessProgress, setReprocessProgress] = useState(null);
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -286,16 +287,39 @@ export default function AdminGalleryDetail() {
   const handleReprocessVideos = async () => {
     try {
       setReprocessing(true);
+      setReprocessProgress({ total: 0, done: 0, current_file: null });
       const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${id}/reprocess-videos`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('admin_token')}` }
       });
       const data = await res.json();
-      toast.success(`${data.queued} video(s) queued for optimisation. This runs in the background.`);
+      if (data.queued === 0) {
+        toast.info('No video files to optimise');
+        setReprocessing(false);
+        setReprocessProgress(null);
+        return;
+      }
+      toast.success(`Optimising ${data.queued} video(s)...`);
+      // Poll for progress
+      const poll = setInterval(async () => {
+        try {
+          const pr = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${id}/reprocess-progress`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('admin_token')}` }
+          });
+          const prog = await pr.json();
+          setReprocessProgress(prog);
+          if (!prog.active) {
+            clearInterval(poll);
+            setReprocessing(false);
+            toast.success('All videos optimised for streaming!');
+            setTimeout(() => setReprocessProgress(null), 3000);
+          }
+        } catch { /* ignore poll errors */ }
+      }, 1500);
     } catch (err) {
       toast.error('Failed to start video optimisation');
-    } finally {
       setReprocessing(false);
+      setReprocessProgress(null);
     }
   };
 
@@ -503,12 +527,28 @@ export default function AdminGalleryDetail() {
                   )}
 
                   <div className="ml-auto flex items-center gap-2">
-                    {videoFiles.length > 0 && (
+                    {videoFiles.length > 0 && !reprocessProgress && (
                       <Button data-testid="optimise-videos-btn" variant="outline" onClick={handleReprocessVideos} disabled={reprocessing}
                         className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
                         style={{ fontFamily: 'Manrope, sans-serif' }}>
-                        <Film className="w-3.5 h-3.5" /> {reprocessing ? "Optimising..." : "Optimise Videos"}
+                        <Film className="w-3.5 h-3.5" /> {reprocessing ? "Starting..." : "Optimise Videos"}
                       </Button>
+                    )}
+                    {reprocessProgress && reprocessProgress.total > 0 && (
+                      <div className="flex items-center gap-3 px-3 py-1.5 rounded-sm border" style={{ borderColor: '#D4AF37', backgroundColor: '#FEFCE8', minWidth: '240px' }}>
+                        <Film className="w-3.5 h-3.5 shrink-0" style={{ color: '#D4AF37' }} />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-medium" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                              {reprocessProgress.done >= reprocessProgress.total ? 'Done!' : reprocessProgress.current_file || 'Processing...'}
+                            </span>
+                            <span className="text-[10px] font-bold" style={{ color: '#D4AF37', fontFamily: 'Manrope, sans-serif' }}>
+                              {reprocessProgress.done}/{reprocessProgress.total}
+                            </span>
+                          </div>
+                          <Progress value={reprocessProgress.total > 0 ? (reprocessProgress.done / reprocessProgress.total) * 100 : 0} className="h-1.5" />
+                        </div>
+                      </div>
                     )}
                     <Button data-testid="download-all-btn" variant="outline" onClick={handleDownloadAll}
                       className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
