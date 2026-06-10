@@ -1,0 +1,64 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: wbm-mongodb
+    restart: unless-stopped
+    volumes:
+      - /mnt/apps/newweddingsbymarkgallery/mongodb:/data/db
+    networks:
+      - wbm-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+  backend:
+    build:
+      context: https://github.com/valianktni1/180226galleryrepo.git#main:backend
+    container_name: wbm-backend
+    restart: unless-stopped
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=weddings_by_mark
+      - CORS_ORIGINS=*
+      - JWT_SECRET=2PGOiuUGvnf2BHY4up69T1F3tM+AqPQIp21hUYfXstI=
+      - UPLOAD_DIR=/data/userfiles
+      - NGINX_VIDEO_URL=http://192.168.24.10:3038
+      - NGINX_VIDEO_SECRET=2PGOiuUGvnf2BHY4up69T1F3tM+AqPQIp21hUYfXstI=
+    volumes:
+      - /mnt/nextcloud/newwedidngsbymarkuserfiles:/data/userfiles
+      - /mnt/couplesgalleriesbackup/180226:/backup
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - wbm-network
+  nginx-video:
+    build:
+      context: https://github.com/valianktni1/180226galleryrepo.git#main:nginx
+    container_name: wbm-nginx-video
+    restart: unless-stopped
+    environment:
+      - NGINX_VIDEO_SECRET=2PGOiuUGvnf2BHY4up69T1F3tM+AqPQIp21hUYfXstI=
+    volumes:
+      - /mnt/nextcloud/newwedidngsbymarkuserfiles:/uploads:ro
+    ports:
+      - 3038:8090
+    networks:
+      - wbm-network
+  frontend:
+    build:
+      context: https://github.com/valianktni1/180226galleryrepo.git#main:frontend
+      args:
+        - REACT_APP_BACKEND_URL=
+    container_name: wbm-frontend
+    restart: unless-stopped
+    ports:
+      - 3037:80
+    depends_on:
+      - backend
+    networks:
+      - wbm-network
+networks:
+  wbm-network:
