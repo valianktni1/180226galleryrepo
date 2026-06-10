@@ -331,7 +331,7 @@ def safe_filename(filename: str, existing_dir: Path) -> str:
     return f"{stem} ({counter}){ext}"
 
 # ─── Background Thumbnail Generation ───
-thumbnail_executor = ThreadPoolExecutor(max_workers=4)
+thumbnail_executor = ThreadPoolExecutor(max_workers=2)
 
 # Video optimisation progress tracking
 video_optimise_progress = {}  # gallery_id -> {total, done, current_file, step}
@@ -357,7 +357,7 @@ def create_web_version(file_path: Path, gallery_id: str = None):
             '-vf', 'scale=-2:1080',
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
-            '-threads', '0',
+            '-threads', '2',
             str(temp_path)
         ], capture_output=True, timeout=7200)  # 2 hour timeout for large files
         if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
