@@ -51,10 +51,14 @@ def generate_nginx_video_url(gallery_folder: str, subfolder: str, filename: str,
     expires = int(time.time()) + expires_seconds
     relative_path = f"{gallery_folder}/{subfolder}/{filename}"
     uri = f"/video/{relative_path}"
+    # Hash is computed on the decoded URI (nginx decodes before checking)
     hash_input = f"{NGINX_VIDEO_SECRET}{uri}{expires}"
     md5_hash = hashlib.md5(hash_input.encode()).digest()
     b64_hash = base64.urlsafe_b64encode(md5_hash).rstrip(b'=').decode()
-    return f"{NGINX_VIDEO_URL}{uri}?md5={b64_hash}&expires={expires}"
+    # URL-encode spaces and special chars in the path for the browser
+    from urllib.parse import quote
+    encoded_uri = quote(uri, safe='/')
+    return f"{NGINX_VIDEO_URL}{encoded_uri}?md5={b64_hash}&expires={expires}"
 
 # Rate limiting for login attempts
 login_attempts = defaultdict(list)  # IP -> list of timestamps

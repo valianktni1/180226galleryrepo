@@ -287,7 +287,6 @@ export default function AdminGalleryDetail() {
   const handleReprocessVideos = async () => {
     try {
       setReprocessing(true);
-      setReprocessProgress({ total: 0, done: 0, current_file: null });
       const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${id}/reprocess-videos`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('admin_token')}` }
@@ -296,9 +295,10 @@ export default function AdminGalleryDetail() {
       if (data.queued === 0) {
         toast.info('No video files to optimise');
         setReprocessing(false);
-        setReprocessProgress(null);
         return;
       }
+      // Show progress bar immediately with correct total
+      setReprocessProgress({ total: data.queued, done: 0, current_file: 'Starting...' });
       toast.success(`Optimising ${data.queued} video(s)...`);
       // Poll for progress
       const poll = setInterval(async () => {
@@ -307,15 +307,17 @@ export default function AdminGalleryDetail() {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('admin_token')}` }
           });
           const prog = await pr.json();
-          setReprocessProgress(prog);
           if (!prog.active) {
             clearInterval(poll);
             setReprocessing(false);
+            setReprocessProgress({ total: data.queued, done: data.queued, current_file: null });
             toast.success('All videos optimised for streaming!');
             setTimeout(() => setReprocessProgress(null), 3000);
+          } else {
+            setReprocessProgress(prog);
           }
         } catch { /* ignore poll errors */ }
-      }, 1500);
+      }, 1000);
     } catch (err) {
       toast.error('Failed to start video optimisation');
       setReprocessing(false);
