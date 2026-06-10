@@ -733,6 +733,18 @@ function ShareViewFull() {
             </p>
           </div>
         )}
+        {activeAlbum && activeAlbum.toLowerCase() !== 'video' && (
+          <div className="mb-8 p-5 rounded-sm border" style={{ 
+            backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)', 
+            borderColor: 'rgba(212,175,55,0.25)' 
+          }}>
+            <p className="text-sm leading-relaxed" style={{ fontFamily: 'Manrope, sans-serif', color: t.text }}>
+              <ImageIcon className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: '#D4AF37' }} />
+              The small logo you see on your images is only visible here in your online gallery. 
+              When you download your photos, they are completely watermark-free and in full quality.
+            </p>
+          </div>
+        )}
         {currentAlbumFiles.length === 0 ? (
           <div className="text-center py-20">
             <FolderOpen className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" strokeWidth={1} />
@@ -832,7 +844,11 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
     >
       {file.file_type === 'photo' ? (
         file.has_preview ? (
-          <img src={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
+          <div className="relative">
+            <img src={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
+            <img src="/watermark-logo.png" alt="" className="absolute pointer-events-none" 
+              style={{ bottom: '10px', right: '10px', width: '80px', opacity: 0.5 }} />
+          </div>
         ) : (
           <div className="aspect-square flex flex-col items-center justify-center file-card-empty">
             <ImageIcon className="w-8 h-8 mb-1" style={{ color: emptyColor }} />
@@ -966,9 +982,15 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
               />
             </motion.div>
           ) : (
-            <motion.img key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-              src={galleryId && currentPhoto.has_preview ? previewUrl(galleryId, currentPhoto.subfolder || currentPhoto._subfolder, currentPhoto.filename) : ''}
-              alt={currentPhoto.filename} className="max-w-[90vw] max-h-[85vh] object-contain" onClick={e => e.stopPropagation()} />
+            <div className="relative" onClick={e => e.stopPropagation()}>
+              <motion.img key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                src={galleryId && currentPhoto.has_preview ? previewUrl(galleryId, currentPhoto.subfolder || currentPhoto._subfolder, currentPhoto.filename) : ''}
+                alt={currentPhoto.filename} className="max-w-[90vw] max-h-[85vh] object-contain" />
+              {currentPhoto.file_type === 'photo' && (
+                <img src="/watermark-logo.png" alt="" className="absolute pointer-events-none"
+                  style={{ bottom: '10px', right: '10px', width: '120px', opacity: 0.45 }} />
+              )}
+            </div>
           )}
         </motion.div>
       )}
