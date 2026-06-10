@@ -43,11 +43,11 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 
 # Nginx video serving (optional — dramatically improves streaming for multi-GB files)
-NGINX_VIDEO_URL = os.environ.get('NGINX_VIDEO_URL', '')  # e.g. "http://nginx-video:8090" or "" to disable
+NGINX_VIDEO_URL = os.environ.get('NGINX_VIDEO_URL', '')  # set to any value to enable nginx video serving
 NGINX_VIDEO_SECRET = os.environ.get('NGINX_VIDEO_SECRET', JWT_SECRET)  # shared secret with nginx
 
 def generate_nginx_video_url(gallery_folder: str, subfolder: str, filename: str, expires_seconds: int = 7200) -> str:
-    """Generate a signed nginx URL for direct video serving."""
+    """Generate a signed nginx URL for direct video serving. Returns relative path."""
     expires = int(time.time()) + expires_seconds
     relative_path = f"{gallery_folder}/{subfolder}/{filename}"
     uri = f"/video/{relative_path}"
@@ -58,7 +58,7 @@ def generate_nginx_video_url(gallery_folder: str, subfolder: str, filename: str,
     # URL-encode spaces and special chars in the path for the browser
     from urllib.parse import quote
     encoded_uri = quote(uri, safe='/')
-    return f"{NGINX_VIDEO_URL}{encoded_uri}?md5={b64_hash}&expires={expires}"
+    return f"{encoded_uri}?md5={b64_hash}&expires={expires}"
 
 # Rate limiting for login attempts
 login_attempts = defaultdict(list)  # IP -> list of timestamps
