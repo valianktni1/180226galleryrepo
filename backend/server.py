@@ -334,21 +334,72 @@ def safe_filename(filename: str, existing_dir: Path) -> str:
 thumbnail_executor = ThreadPoolExecutor(max_workers=4)
 
 # Video optimisation progress tracking
-video_optimise_progress = {}  # gallery_id -> {total, done, current_file}
+video_optimise_progress = {}  # gallery_id -> {total, done, current_file, step}
+
+def get_web_version_path(file_path: Path) -> Path:
+    """Get the path for the web-optimised version of a video."""
+    return file_path.parent / f"{file_path.stem}.web.mp4"
+
+def create_web_version(file_path: Path, gallery_id: str = None):
+    """Create a web-optimised copy (1080p, 5Mbps H.264) for smooth streaming. Original stays untouched."""
+    web_path = get_web_version_path(file_path)
+    if web_path.exists():
+        logger.info(f"Web version already exists: {web_path.name}")
+        return True
+    try:
+        if gallery_id and gallery_id in video_optimise_progress:
+            video_optimise_progress[gallery_id]["current_file"] = f"Transcoding {file_path.name}..."
+        temp_path = file_path.parent / f"{file_path.stem}.web.tmp.mp4"
+        result = subprocess.run([
+            'ffmpeg', '-y', '-i', str(file_path),
+            '-c:v', 'libx264', '-preset', 'medium',
+            '-b:v', '5M', '-maxrate', '5M', '-bufsize', '10M',
+            '-vf', 'scale=-2:1080',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            '-threads', '0',
+            str(temp_path)
+        ], capture_output=True, timeout=7200)  # 2 hour timeout for large files
+        if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
+            temp_path.rename(web_path)
+            logger.info(f"Web version created: {web_path.name} ({web_path.stat().st_size / (1024*1024):.0f}MB)")
+            return True
+        else:
+            if temp_path.exists():
+                temp_path.unlink()
+            logger.warning(f"Web version failed for {file_path.name}: {result.stderr[-300:] if result.stderr else 'unknown'}")
+            return False
+    except Exception as e:
+        logger.error(f"Web version error for {file_path.name}: {e}")
+        temp_path = file_path.parent / f"{file_path.stem}.web.tmp.mp4"
+        if temp_path.exists():
+            temp_path.unlink()
+        return False
+
+def optimise_video_full(file_path: Path, gallery_id: str = None):
+    """Run faststart on original + create web-optimised version."""
+    try:
+        if gallery_id and gallery_id in video_optimise_progress:
+            video_optimise_progress[gallery_id]["current_file"] = f"Faststart: {file_path.name}"
+        ensure_video_faststart(file_path)
+        create_web_version(file_path, gallery_id)
+    finally:
+        if gallery_id and gallery_id in video_optimise_progress:
+            video_optimise_progress[gallery_id]["done"] += 1
+            if video_optimise_progress[gallery_id]["done"] >= video_optimise_progress[gallery_id]["total"]:
+                video_optimise_progress[gallery_id]["current_file"] = "Complete!"
 
 def ensure_video_faststart(file_path: Path, gallery_id: str = None):
     """Move moov atom to start of MP4 for smooth web streaming. No re-encoding — just metadata move."""
     try:
-        if gallery_id and gallery_id in video_optimise_progress:
-            video_optimise_progress[gallery_id]["current_file"] = file_path.name
         temp_path = file_path.with_suffix('.faststart.mp4')
         result = subprocess.run([
             'ffmpeg', '-y', '-i', str(file_path),
             '-c', 'copy', '-movflags', '+faststart',
             str(temp_path)
-        ], capture_output=True, timeout=600)  # 10 min timeout for large files
+        ], capture_output=True, timeout=600)
         if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
-            temp_path.replace(file_path)  # atomic replace
+            temp_path.replace(file_path)
             logger.info(f"Faststart applied: {file_path.name}")
         else:
             if temp_path.exists():
@@ -359,11 +410,6 @@ def ensure_video_faststart(file_path: Path, gallery_id: str = None):
         temp_path = file_path.with_suffix('.faststart.mp4')
         if temp_path.exists():
             temp_path.unlink()
-    finally:
-        if gallery_id and gallery_id in video_optimise_progress:
-            video_optimise_progress[gallery_id]["done"] += 1
-            if video_optimise_progress[gallery_id]["done"] >= video_optimise_progress[gallery_id]["total"]:
-                video_optimise_progress[gallery_id]["current_file"] = None
 
 def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: str, filename: str, file_type: str, file_id: str):
     """Generate thumbnails in background thread - doesn't block uploads."""
@@ -379,6 +425,8 @@ def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: 
         elif file_type == "video":
             # First ensure faststart (moov atom at beginning) for smooth streaming
             ensure_video_faststart(file_path)
+            # Create web-optimised version for smooth browser playback
+            create_web_version(file_path)
             thumb_p = get_thumb_path(gallery_id, subfolder, filename)
             preview_p = get_preview_path(gallery_id, subfolder, filename)
             has_thumb = make_video_thumbnail(file_path, thumb_p)
@@ -857,7 +905,7 @@ async def upload_files(
 
 @api_router.post("/admin/galleries/{gallery_id}/reprocess-videos")
 async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
-    """Reprocess all existing videos to add faststart for smooth streaming."""
+    """Reprocess all existing videos: faststart + create web-optimised versions for streaming."""
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
@@ -871,8 +919,8 @@ async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
         return {"queued": 0, "message": "No video files found"}
     video_optimise_progress[gallery_id] = {"total": len(valid_videos), "done": 0, "current_file": None}
     for file_path, _ in valid_videos:
-        thumbnail_executor.submit(ensure_video_faststart, file_path, gallery_id)
-    return {"queued": len(valid_videos), "message": f"{len(valid_videos)} video(s) queued for optimisation"}
+        thumbnail_executor.submit(optimise_video_full, file_path, gallery_id)
+    return {"queued": len(valid_videos), "message": f"{len(valid_videos)} video(s) queued for web optimisation"}
 
 @api_router.get("/admin/galleries/{gallery_id}/reprocess-progress")
 async def reprocess_progress(gallery_id: str, admin=Depends(get_admin)):
@@ -1781,13 +1829,18 @@ async def get_video_playback_token(token: str, file_id: str, t: str = Query(None
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     
+    # Check for web-optimised version (smaller, smoother streaming)
+    web_path = get_web_version_path(file_path)
+    stream_filename = web_path.name if web_path.exists() else f["filename"]
+    
     # If nginx video server is configured, use it (zero Python involvement in streaming)
     if NGINX_VIDEO_URL:
-        url = generate_nginx_video_url(gallery["folder_name"], f["subfolder"], f["filename"])
+        url = generate_nginx_video_url(gallery["folder_name"], f["subfolder"], stream_filename)
         return {"url": url, "mode": "nginx"}
     
     # Fallback: Python streaming with JWT token (zero DB calls during playback)
-    vtoken = create_jwt({"role": "video", "path": str(file_path)}, expires_hours=2)
+    stream_path = web_path if web_path.exists() else file_path
+    vtoken = create_jwt({"role": "video", "path": str(stream_path)}, expires_hours=2)
     return {"url": f"/api/v/{vtoken}", "mode": "direct"}
 
 @api_router.get("/v/{vtoken}")

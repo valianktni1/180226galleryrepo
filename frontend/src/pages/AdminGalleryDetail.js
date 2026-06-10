@@ -533,7 +533,7 @@ export default function AdminGalleryDetail() {
                       <Button data-testid="optimise-videos-btn" variant="outline" onClick={handleReprocessVideos} disabled={reprocessing}
                         className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
                         style={{ fontFamily: 'Manrope, sans-serif' }}>
-                        <Film className="w-3.5 h-3.5" /> {reprocessing ? "Starting..." : "Optimise Videos"}
+                        <Film className="w-3.5 h-3.5" /> {reprocessing ? "Starting..." : "Optimise Videos for Web"}
                       </Button>
                     )}
                     {reprocessProgress && reprocessProgress.total > 0 && (
