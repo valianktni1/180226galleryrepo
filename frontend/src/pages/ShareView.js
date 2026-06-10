@@ -847,7 +847,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           <div className="relative">
             <img src={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
             <img src="/watermark-logo.png" alt="" className="absolute pointer-events-none" 
-              style={{ bottom: '10px', right: '10px', width: '80px', opacity: 0.5 }} />
+              style={{ bottom: '10px', right: '10px', width: '80px', opacity: 0.72 }} />
           </div>
         ) : (
           <div className="aspect-square flex flex-col items-center justify-center file-card-empty">
