@@ -144,24 +144,44 @@ function ShareViewFull() {
     } catch { toast.error("Failed to update favourite"); }
   };
 
+  const [downloadProgress, setDownloadProgress] = useState(null); // {fileId, percent, filename}
+
   const handleDownloadSingle = async (file) => {
     if (!permissions.allowDownloads) {
       toast.error("Downloads are not allowed on this share");
       return;
     }
     try {
+      setDownloadProgress({ fileId: file.id, percent: 0, filename: file.filename });
       const res = await downloadShareFile(token, file.id);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Download failed");
       }
-      const blob = await res.blob();
+      const contentLength = res.headers.get('content-length');
+      const total = contentLength ? parseInt(contentLength, 10) : 0;
+      const reader = res.body.getReader();
+      const chunks = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        if (total > 0) {
+          setDownloadProgress({ fileId: file.id, percent: Math.round((received / total) * 100), filename: file.filename });
+        }
+      }
+      const blob = new Blob(chunks);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = file.filename; a.click();
       window.URL.revokeObjectURL(url);
-      // Track download
       trackDownload(token);
-    } catch (err) { toast.error(err.message || "Download failed"); }
+      setDownloadProgress(null);
+    } catch (err) { 
+      toast.error(err.message || "Download failed"); 
+      setDownloadProgress(null);
+    }
   };
 
   const handleDownloadAlbum = () => {
@@ -633,14 +653,16 @@ function ShareViewFull() {
               {displayFiles.map((file, i) => (
                 <FileCard key={file.id} file={file} index={i} galleryId={galleryId}
                   onFav={handleFavourite} onDownload={handleDownloadSingle}
-                  onClick={() => setLightboxIndex(i)} permissions={permissions} theme={t} />
+                  onClick={() => setLightboxIndex(i)} permissions={permissions} theme={t}
+                  downloadProgress={downloadProgress} />
               ))}
             </div>
           )}
         </main>
         <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
           setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
-          galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token} />
+          galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
+          downloadProgress={downloadProgress} />
         <ThankYouModal show={showThankYou} onClose={() => setShowThankYou(false)} count={submittedCount} galleryName={galleryName} theme={t} />
       </div>
     );
@@ -724,7 +746,8 @@ function ShareViewFull() {
                 onClick={selectMode ? () => toggleSelect(file.id) : () => setLightboxIndex(i)} 
                 permissions={permissions}
                 selectMode={selectMode}
-                isSelected={selectedFiles.has(file.id)} theme={t} />
+                isSelected={selectedFiles.has(file.id)} theme={t}
+                downloadProgress={downloadProgress} />
             ))}
           </div>
         )}
@@ -751,7 +774,8 @@ function ShareViewFull() {
 
       <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
         setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
-        galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token} />
+        galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
+        downloadProgress={downloadProgress} />
       
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -793,9 +817,10 @@ function ShareViewFull() {
 }
 
 // ─── Reusable Components ───
-function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false, theme = {} }) {
+function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false, theme = {}, downloadProgress = null }) {
   const emptyColor = theme.textSub || '#A8A29E';
   const mutedColor = theme.textMuted || '#C4C0B8';
+  const isDownloading = downloadProgress && downloadProgress.fileId === file.id;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -868,12 +893,27 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           </div>
         </>
       )}
+      {/* Download progress overlay */}
+      {isDownloading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 rounded-sm"
+          style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(2px)' }}>
+          <Download className="w-6 h-6 text-white mb-2 animate-bounce" />
+          <div className="w-3/4 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+            <div className="h-full rounded-full transition-all duration-300" 
+              style={{ width: `${downloadProgress.percent}%`, backgroundColor: '#D4AF37' }} />
+          </div>
+          <span className="text-white text-xs mt-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
+            {downloadProgress.percent}%
+          </span>
+        </div>
+      )}
     </motion.div>
   );
 }
 
-function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload, permissions = {}, shareToken }) {
+function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload, permissions = {}, shareToken, downloadProgress }) {
   const isVideo = currentPhoto && currentPhoto.file_type === 'video';
+  const isDownloading = downloadProgress && currentPhoto && downloadProgress.fileId === currentPhoto.id;
   return (
     <AnimatePresence>
       {currentPhoto && (
@@ -888,9 +928,16 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
               <Heart className="w-5 h-5" fill={currentPhoto.is_favourite ? '#D4AF37' : 'none'} stroke={currentPhoto.is_favourite ? '#D4AF37' : 'white'} />
             </button>
             {permissions.allowDownloads && (
-              <button data-testid="lightbox-download" onClick={e => { e.stopPropagation(); onDownload(currentPhoto); }}
-                className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
-                <Download className="w-5 h-5 text-white" />
+              <button data-testid="lightbox-download" onClick={e => { e.stopPropagation(); if (!isDownloading) onDownload(currentPhoto); }}
+                className="h-10 rounded-full flex items-center justify-center gap-2 px-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)', minWidth: '40px' }}>
+                {isDownloading ? (
+                  <>
+                    <Download className="w-5 h-5 text-white animate-bounce" />
+                    <span className="text-white text-xs font-medium" style={{ fontFamily: 'Manrope, sans-serif' }}>{downloadProgress.percent}%</span>
+                  </>
+                ) : (
+                  <Download className="w-5 h-5 text-white" />
+                )}
               </button>
             )}
           </div>
