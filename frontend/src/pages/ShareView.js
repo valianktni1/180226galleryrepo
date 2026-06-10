@@ -699,6 +699,18 @@ function ShareViewFull() {
       </header>
 
       <main className="max-w-screen-xl mx-auto px-6 py-8">
+        {activeAlbum && activeAlbum.toLowerCase() === 'video' && (
+          <div className="mb-8 p-5 rounded-sm border" style={{ 
+            backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)', 
+            borderColor: 'rgba(212,175,55,0.25)' 
+          }}>
+            <p className="text-sm leading-relaxed" style={{ fontFamily: 'Manrope, sans-serif', color: t.text }}>
+              <Film className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: '#D4AF37' }} />
+              Your videos are ready for online viewing, optimised for smooth streaming on all your devices. 
+              You can also download the full high-quality original — perfect for watching on your big screen at home.
+            </p>
+          </div>
+        )}
         {currentAlbumFiles.length === 0 ? (
           <div className="text-center py-20">
             <FolderOpen className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" strokeWidth={1} />
