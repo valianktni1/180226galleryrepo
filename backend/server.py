@@ -457,8 +457,7 @@ def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: 
         elif file_type == "video":
             # First ensure faststart (moov atom at beginning) for smooth streaming
             ensure_video_faststart(file_path)
-            # Create web-optimised version for smooth browser playback
-            create_web_version(file_path)
+            # Generate thumbnails FIRST so they appear instantly in the UI
             thumb_p = get_thumb_path(gallery_id, subfolder, filename)
             preview_p = get_preview_path(gallery_id, subfolder, filename)
             has_thumb = make_video_thumbnail(file_path, thumb_p)
@@ -474,6 +473,10 @@ def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: 
         )
         sync_client.close()
         logger.info(f"Thumbnails generated for {filename}")
+        
+        # Create web-optimised version AFTER thumbnails so UI updates instantly
+        if file_type == "video":
+            create_web_version(file_path)
     except Exception as e:
         logger.error(f"Background thumbnail error for {filename}: {e}")
 
