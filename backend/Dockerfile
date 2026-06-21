@@ -3,7 +3,8 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libjpeg-dev zlib1g-dev ffmpeg curl fonts-liberation && \
+    libjpeg-dev zlib1g-dev ffmpeg curl fonts-liberation \
+    vainfo libva2 libva-drm2 mesa-va-drivers && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

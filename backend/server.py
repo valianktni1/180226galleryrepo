@@ -341,15 +341,18 @@ def get_web_version_path(file_path: Path) -> Path:
     return file_path.parent / f"{file_path.stem}.web.mp4"
 
 def create_web_version(file_path: Path, gallery_id: str = None):
-    """Create a web-optimised copy (1080p, 5Mbps H.264) for smooth streaming. Original stays untouched."""
+    """Create a web-optimised copy (1080p, 5Mbps) for smooth streaming. Tries GPU first, falls back to CPU."""
     web_path = get_web_version_path(file_path)
     if web_path.exists():
         logger.info(f"Web version already exists: {web_path.name}")
         return True
+    
+    temp_path = file_path.parent / f"{file_path.stem}.web.tmp.mp4"
+    
+    # Try GPU encoding first (VAAPI)
     try:
         if gallery_id and gallery_id in video_optimise_progress:
-            video_optimise_progress[gallery_id]["current_file"] = f"Transcoding {file_path.name}..."
-        temp_path = file_path.parent / f"{file_path.stem}.web.tmp.mp4"
+            video_optimise_progress[gallery_id]["current_file"] = f"Transcoding (GPU): {file_path.name}"
         result = subprocess.run([
             'ffmpeg', '-y',
             '-hwaccel', 'vaapi',
@@ -362,19 +365,45 @@ def create_web_version(file_path: Path, gallery_id: str = None):
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
             str(temp_path)
-        ], capture_output=True, timeout=7200)  # 2 hour timeout for large files
+        ], capture_output=True, timeout=7200)
         if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
             temp_path.rename(web_path)
-            logger.info(f"Web version created: {web_path.name} ({web_path.stat().st_size / (1024*1024):.0f}MB)")
+            logger.info(f"Web version created (GPU): {web_path.name} ({web_path.stat().st_size / (1024*1024):.0f}MB)")
             return True
         else:
             if temp_path.exists():
                 temp_path.unlink()
-            logger.warning(f"Web version failed for {file_path.name}: {result.stderr[-300:] if result.stderr else 'unknown'}")
+            logger.warning(f"GPU encoding failed for {file_path.name}, falling back to CPU")
+    except Exception as e:
+        logger.warning(f"GPU encoding error for {file_path.name}: {e}, falling back to CPU")
+        if temp_path.exists():
+            temp_path.unlink()
+    
+    # Fallback: CPU encoding
+    try:
+        if gallery_id and gallery_id in video_optimise_progress:
+            video_optimise_progress[gallery_id]["current_file"] = f"Transcoding (CPU): {file_path.name}"
+        result = subprocess.run([
+            'ffmpeg', '-y', '-i', str(file_path),
+            '-c:v', 'libx264', '-preset', 'medium',
+            '-b:v', '5M', '-maxrate', '5M', '-bufsize', '10M',
+            '-vf', 'scale=-2:1080',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            '-threads', '2',
+            str(temp_path)
+        ], capture_output=True, timeout=7200)
+        if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
+            temp_path.rename(web_path)
+            logger.info(f"Web version created (CPU): {web_path.name} ({web_path.stat().st_size / (1024*1024):.0f}MB)")
+            return True
+        else:
+            if temp_path.exists():
+                temp_path.unlink()
+            logger.warning(f"CPU encoding also failed for {file_path.name}: {result.stderr[-300:] if result.stderr else 'unknown'}")
             return False
     except Exception as e:
         logger.error(f"Web version error for {file_path.name}: {e}")
-        temp_path = file_path.parent / f"{file_path.stem}.web.tmp.mp4"
         if temp_path.exists():
             temp_path.unlink()
         return False
