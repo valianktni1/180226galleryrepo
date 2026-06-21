@@ -351,13 +351,16 @@ def create_web_version(file_path: Path, gallery_id: str = None):
             video_optimise_progress[gallery_id]["current_file"] = f"Transcoding {file_path.name}..."
         temp_path = file_path.parent / f"{file_path.stem}.web.tmp.mp4"
         result = subprocess.run([
-            'ffmpeg', '-y', '-i', str(file_path),
-            '-c:v', 'libx264', '-preset', 'medium',
+            'ffmpeg', '-y',
+            '-hwaccel', 'vaapi',
+            '-hwaccel_device', '/dev/dri/renderD128',
+            '-hwaccel_output_format', 'vaapi',
+            '-i', str(file_path),
+            '-vf', 'format=nv12|vaapi,scale_vaapi=w=-2:h=1080',
+            '-c:v', 'h264_vaapi',
             '-b:v', '5M', '-maxrate', '5M', '-bufsize', '10M',
-            '-vf', 'scale=-2:1080',
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
-            '-threads', '2',
             str(temp_path)
         ], capture_output=True, timeout=7200)  # 2 hour timeout for large files
         if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
