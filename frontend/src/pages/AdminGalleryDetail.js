@@ -47,6 +47,8 @@ export default function AdminGalleryDetail() {
   const [selectMode, setSelectMode] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [reprocessProgress, setReprocessProgress] = useState(null);
+  const [transcodeStatus, setTranscodeStatus] = useState({});  // file_id -> {percent, status, method, filename}
+  const transcodePollingRef = useRef(null);
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -86,17 +88,50 @@ export default function AdminGalleryDetail() {
     loadGallery();
   }, [navigate, loadGallery]);
 
+  // Poll transcode status
+  const startTranscodePolling = useCallback(() => {
+    if (transcodePollingRef.current) return;
+    transcodePollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${id}/transcode-status`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('admin_token')}` }
+        });
+        const data = await res.json();
+        if (data.active) {
+          setTranscodeStatus(data.files);
+        } else {
+          setTranscodeStatus({});
+          clearInterval(transcodePollingRef.current);
+          transcodePollingRef.current = null;
+        }
+      } catch { /* ignore poll errors */ }
+    }, 2000);
+  }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (transcodePollingRef.current) {
+        clearInterval(transcodePollingRef.current);
+        transcodePollingRef.current = null;
+      }
+    };
+  }, []);
+
   const handleUpload = async (fileList) => {
     if (!fileList?.length || !activeTab) return;
     setUploading(true);
     setUploadProgress(0);
     try {
       const arr = Array.from(fileList);
+      const hasVideos = arr.some(f => /\.(mp4|mov|avi|mkv|wmv|webm|m4v|flv|mts|m2ts)$/i.test(f.name));
       await uploadFiles(id, activeTab, arr, (e) => {
         setUploadProgress(Math.round((e.loaded * 100) / e.total));
       });
       toast.success(`${arr.length} file(s) uploaded to ${activeTab}`);
       loadGallery();
+      if (hasVideos) {
+        setTimeout(() => startTranscodePolling(), 3000);
+      }
     } catch (err) {
       toast.error("Upload failed");
     } finally {
@@ -300,7 +335,9 @@ export default function AdminGalleryDetail() {
       // Show progress bar immediately with correct total
       setReprocessProgress({ total: data.queued, done: 0, current_file: 'Starting...' });
       toast.success(`Optimising ${data.queued} video(s)...`);
-      // Poll for progress
+      // Start per-file transcode polling
+      startTranscodePolling();
+      // Poll for bulk progress
       const poll = setInterval(async () => {
         try {
           const pr = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${id}/reprocess-progress`, {
@@ -552,6 +589,20 @@ export default function AdminGalleryDetail() {
                         </div>
                       </div>
                     )}
+                    {/* Auto-transcode indicator (shows when videos are transcoding after upload, not from Optimise button) */}
+                    {!reprocessProgress && Object.keys(transcodeStatus).length > 0 && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm border" style={{ borderColor: '#D4AF37', backgroundColor: '#FEFCE8' }}>
+                        <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#D4AF37' }} />
+                        <span className="text-[10px] font-medium" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                          Transcoding {Object.values(transcodeStatus).filter(t => t.status === 'transcoding').length} video(s)...
+                        </span>
+                        {Object.values(transcodeStatus).filter(t => t.status === 'transcoding').map((t) => (
+                          <span key={t.filename} className="text-[10px] font-bold" style={{ color: '#D4AF37', fontFamily: 'Manrope, sans-serif' }}>
+                            {t.method} {t.percent}%
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <Button data-testid="download-all-btn" variant="outline" onClick={handleDownloadAll}
                       className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
                       style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -571,6 +622,9 @@ export default function AdminGalleryDetail() {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                   {currentFiles.map((file, i) => {
                     const isCover = gallery.covers && gallery.covers[activeTab] === file.id;
+                    const tc = transcodeStatus[file.id];
+                    const isTranscoding = tc && tc.status === 'transcoding';
+                    const justCompleted = tc && tc.status === 'complete';
                     return (
                     <motion.div key={file.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(i * 0.01, 0.5) }}
                       className={`photo-card relative group aspect-square ${selectMode ? 'cursor-pointer' : ''} ${selectedFiles.has(file.id) ? 'ring-2 ring-[#D4AF37]' : ''} ${isCover ? 'ring-2 ring-amber-400' : ''}`}
@@ -602,6 +656,30 @@ export default function AdminGalleryDetail() {
                           <FileText className="w-8 h-8 text-[#A8A29E] mb-1" />
                           <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
                           <span className="text-[10px] text-[#C4C0B8] mt-0.5">{(file.file_size / (1024*1024)).toFixed(1)} MB</span>
+                        </div>
+                      )}
+                      {/* Transcode progress overlay */}
+                      {(isTranscoding || justCompleted) && (
+                        <div className="absolute inset-x-0 bottom-0 z-10" data-testid={`transcode-progress-${file.id}`}>
+                          <div className="px-2 py-1.5" style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.85))' }}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[9px] font-semibold tracking-wider uppercase" style={{ color: justCompleted ? '#4ADE80' : '#D4AF37', fontFamily: 'Manrope, sans-serif' }}>
+                                {justCompleted ? 'Ready' : `${tc.method} ${tc.percent}%`}
+                              </span>
+                              {isTranscoding && (
+                                <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.7)', fontFamily: 'Manrope, sans-serif' }}>
+                                  Optimising
+                                </span>
+                              )}
+                            </div>
+                            <div className="w-full h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                              <div className="h-full rounded-full transition-all duration-700 ease-out"
+                                style={{ 
+                                  width: `${tc.percent}%`, 
+                                  backgroundColor: justCompleted ? '#4ADE80' : '#D4AF37'
+                                }} />
+                            </div>
+                          </div>
                         </div>
                       )}
                       {/* Cover indicator */}

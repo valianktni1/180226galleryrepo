@@ -336,85 +336,135 @@ thumbnail_executor = ThreadPoolExecutor(max_workers=2)
 # Video optimisation progress tracking
 video_optimise_progress = {}  # gallery_id -> {total, done, current_file, step}
 
+# Per-file transcoding progress tracking
+file_transcode_progress = {}  # file_id -> {gallery_id, filename, percent, status, method}
+
+def get_video_duration(file_path: Path) -> float:
+    """Get video duration in seconds using ffprobe."""
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=noprint_wrappers=1:nokey=1', str(file_path)],
+            capture_output=True, text=True, timeout=30
+        )
+        return float(result.stdout.strip())
+    except Exception:
+        return 0
+
 def get_web_version_path(file_path: Path) -> Path:
     """Get the path for the web-optimised version of a video."""
     return file_path.parent / f"{file_path.stem}.web.mp4"
 
-def create_web_version(file_path: Path, gallery_id: str = None):
-    """Create a web-optimised copy (1080p, 5Mbps) for smooth streaming. Tries GPU first, falls back to CPU."""
+def create_web_version(file_path: Path, gallery_id: str = None, file_id: str = None):
+    """Create a web-optimised copy (1080p, 5Mbps) for smooth streaming. Tries GPU first, falls back to CPU. Reports real-time progress."""
     web_path = get_web_version_path(file_path)
     if web_path.exists():
         logger.info(f"Web version already exists: {web_path.name}")
         return True
     
+    duration = get_video_duration(file_path)
+    progress_key = file_id or file_path.stem
     temp_path = file_path.parent / f"{file_path.stem}.web.tmp.mp4"
     
-    # Try GPU encoding first (VAAPI)
-    try:
+    def _run_ffmpeg_with_progress(cmd, method):
+        """Run FFmpeg with real-time progress tracking. Returns True on success."""
+        file_transcode_progress[progress_key] = {
+            "gallery_id": gallery_id,
+            "filename": file_path.name,
+            "percent": 0,
+            "status": "transcoding",
+            "method": method
+        }
         if gallery_id and gallery_id in video_optimise_progress:
-            video_optimise_progress[gallery_id]["current_file"] = f"Transcoding (GPU): {file_path.name}"
-        result = subprocess.run([
-            'ffmpeg', '-y',
-            '-hwaccel', 'vaapi',
-            '-hwaccel_device', '/dev/dri/renderD128',
-            '-hwaccel_output_format', 'vaapi',
-            '-i', str(file_path),
-            '-vf', 'format=nv12|vaapi,scale_vaapi=w=-2:h=1080',
-            '-c:v', 'h264_vaapi',
-            '-b:v', '5M', '-maxrate', '5M', '-bufsize', '10M',
-            '-c:a', 'aac', '-b:a', '128k',
-            '-movflags', '+faststart',
-            str(temp_path)
-        ], capture_output=True, timeout=7200)
-        if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
-            temp_path.rename(web_path)
-            logger.info(f"Web version created (GPU): {web_path.name} ({web_path.stat().st_size / (1024*1024):.0f}MB)")
-            return True
-        else:
+            video_optimise_progress[gallery_id]["current_file"] = f"Transcoding ({method}): {file_path.name}"
+        
+        try:
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            for line in process.stdout:
+                line = line.strip()
+                if line.startswith('out_time_us='):
+                    try:
+                        us = int(line.split('=')[1])
+                        if duration > 0:
+                            pct = min(99, int((us / 1000000) / duration * 100))
+                            file_transcode_progress[progress_key]["percent"] = pct
+                    except (ValueError, ZeroDivisionError):
+                        pass
+            process.wait(timeout=7200)
+            
+            if process.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
+                temp_path.rename(web_path)
+                file_transcode_progress[progress_key]["percent"] = 100
+                file_transcode_progress[progress_key]["status"] = "complete"
+                logger.info(f"Web version created ({method}): {web_path.name} ({web_path.stat().st_size / (1024*1024):.0f}MB)")
+                return True
+            else:
+                if temp_path.exists():
+                    temp_path.unlink()
+                logger.warning(f"{method} encoding failed for {file_path.name}")
+                return False
+        except Exception as e:
+            logger.warning(f"{method} encoding error for {file_path.name}: {e}")
             if temp_path.exists():
                 temp_path.unlink()
-            logger.warning(f"GPU encoding failed for {file_path.name}, falling back to CPU")
-    except Exception as e:
-        logger.warning(f"GPU encoding error for {file_path.name}: {e}, falling back to CPU")
-        if temp_path.exists():
-            temp_path.unlink()
+            return False
+    
+    # Try GPU encoding first (VAAPI)
+    gpu_cmd = [
+        'ffmpeg', '-y', '-progress', 'pipe:1', '-nostats',
+        '-hwaccel', 'vaapi',
+        '-hwaccel_device', '/dev/dri/renderD128',
+        '-hwaccel_output_format', 'vaapi',
+        '-i', str(file_path),
+        '-vf', 'format=nv12|vaapi,scale_vaapi=w=-2:h=1080',
+        '-c:v', 'h264_vaapi',
+        '-b:v', '5M', '-maxrate', '5M', '-bufsize', '10M',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart',
+        str(temp_path)
+    ]
+    
+    if _run_ffmpeg_with_progress(gpu_cmd, "GPU"):
+        def _cleanup():
+            time.sleep(15)
+            file_transcode_progress.pop(progress_key, None)
+        threading.Thread(target=_cleanup, daemon=True).start()
+        return True
+    
+    logger.warning(f"GPU encoding failed for {file_path.name}, falling back to CPU")
     
     # Fallback: CPU encoding
-    try:
-        if gallery_id and gallery_id in video_optimise_progress:
-            video_optimise_progress[gallery_id]["current_file"] = f"Transcoding (CPU): {file_path.name}"
-        result = subprocess.run([
-            'ffmpeg', '-y', '-i', str(file_path),
-            '-c:v', 'libx264', '-preset', 'medium',
-            '-b:v', '5M', '-maxrate', '5M', '-bufsize', '10M',
-            '-vf', 'scale=-2:1080',
-            '-c:a', 'aac', '-b:a', '128k',
-            '-movflags', '+faststart',
-            '-threads', '2',
-            str(temp_path)
-        ], capture_output=True, timeout=7200)
-        if result.returncode == 0 and temp_path.exists() and temp_path.stat().st_size > 0:
-            temp_path.rename(web_path)
-            logger.info(f"Web version created (CPU): {web_path.name} ({web_path.stat().st_size / (1024*1024):.0f}MB)")
-            return True
-        else:
-            if temp_path.exists():
-                temp_path.unlink()
-            logger.warning(f"CPU encoding also failed for {file_path.name}: {result.stderr[-300:] if result.stderr else 'unknown'}")
-            return False
-    except Exception as e:
-        logger.error(f"Web version error for {file_path.name}: {e}")
-        if temp_path.exists():
-            temp_path.unlink()
-        return False
+    cpu_cmd = [
+        'ffmpeg', '-y', '-progress', 'pipe:1', '-nostats',
+        '-i', str(file_path),
+        '-c:v', 'libx264', '-preset', 'medium',
+        '-b:v', '5M', '-maxrate', '5M', '-bufsize', '10M',
+        '-vf', 'scale=-2:1080',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart',
+        '-threads', '2',
+        str(temp_path)
+    ]
+    
+    success = _run_ffmpeg_with_progress(cpu_cmd, "CPU")
+    
+    if not success:
+        file_transcode_progress[progress_key]["status"] = "failed"
+    
+    def _cleanup():
+        time.sleep(15)
+        file_transcode_progress.pop(progress_key, None)
+    threading.Thread(target=_cleanup, daemon=True).start()
+    
+    return success
 
-def optimise_video_full(file_path: Path, gallery_id: str = None):
+def optimise_video_full(file_path: Path, gallery_id: str = None, file_id: str = None):
     """Run faststart on original + create web-optimised version."""
     try:
         if gallery_id and gallery_id in video_optimise_progress:
             video_optimise_progress[gallery_id]["current_file"] = f"Faststart: {file_path.name}"
         ensure_video_faststart(file_path)
-        create_web_version(file_path, gallery_id)
+        create_web_version(file_path, gallery_id, file_id)
     finally:
         if gallery_id and gallery_id in video_optimise_progress:
             video_optimise_progress[gallery_id]["done"] += 1
@@ -476,7 +526,7 @@ def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: 
         
         # Create web-optimised version AFTER thumbnails so UI updates instantly
         if file_type == "video":
-            create_web_version(file_path)
+            create_web_version(file_path, gallery_id, file_id)
     except Exception as e:
         logger.error(f"Background thumbnail error for {filename}: {e}")
 
@@ -949,12 +999,12 @@ async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
     for v in videos:
         file_path = get_gallery_path(gallery["folder_name"]) / v["subfolder"] / v["filename"]
         if file_path.exists():
-            valid_videos.append((file_path, v["filename"]))
+            valid_videos.append((file_path, v["filename"], v["id"]))
     if not valid_videos:
         return {"queued": 0, "message": "No video files found"}
     video_optimise_progress[gallery_id] = {"total": len(valid_videos), "done": 0, "current_file": None}
-    for file_path, _ in valid_videos:
-        thumbnail_executor.submit(optimise_video_full, file_path, gallery_id)
+    for file_path, _, fid in valid_videos:
+        thumbnail_executor.submit(optimise_video_full, file_path, gallery_id, fid)
     return {"queued": len(valid_videos), "message": f"{len(valid_videos)} video(s) queued for web optimisation"}
 
 @api_router.get("/admin/galleries/{gallery_id}/reprocess-progress")
@@ -969,6 +1019,20 @@ async def reprocess_progress(gallery_id: str, admin=Depends(get_admin)):
         "done": progress["done"],
         "current_file": progress["current_file"],
     }
+
+@api_router.get("/admin/galleries/{gallery_id}/transcode-status")
+async def transcode_status(gallery_id: str, admin=Depends(get_admin)):
+    """Get per-file transcoding progress for all active transcodes in a gallery."""
+    active_files = {}
+    for key, info in dict(file_transcode_progress).items():
+        if info.get("gallery_id") == gallery_id:
+            active_files[key] = {
+                "filename": info["filename"],
+                "percent": info["percent"],
+                "status": info["status"],
+                "method": info.get("method", "")
+            }
+    return {"active": len(active_files) > 0, "files": active_files}
 
 @api_router.delete("/admin/galleries/{gallery_id}/files/{file_id}")
 async def delete_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
