@@ -1,53 +1,69 @@
-# Wedding Photography Gallery - PRD
+# Wedding Photography Gallery Management System — PRD
 
 ## Original Problem Statement
-Self-hosted wedding photography client gallery management system with admin panel, sharing, downloads, print shop, slideshow, and QR codes.
+Full-featured, self-hosted wedding photography client gallery management system with admin-managed galleries, chunked large file uploads/downloads, robust sharing, password protection, branded QR codes, cinematic slideshows, activity logging, and optimized video streaming.
 
-## Core Architecture
-- **Frontend:** React + Tailwind CSS + Shadcn/UI + video.js
-- **Backend:** FastAPI + Motor (async MongoDB) + Pillow + aiofiles
-- **Video Serving:** nginx (optional, for multi-GB files) + Python fallback
-- **Deployment:** Docker Compose on TrueNAS
-
-## Implemented Features
-
-### Core: Galleries, uploads, sharing, password protection, print shop, 2FA, guest uploads
-
-### Video Streaming (Optimized for multi-GB files)
-- **Faststart processing**: Auto-runs `ffmpeg -movflags +faststart` on video upload (moves moov atom to beginning for instant playback)
-- **Reprocess endpoint**: `POST /api/admin/galleries/{id}/reprocess-videos` for existing videos
-- **nginx direct serving** (optional): Zero-copy sendfile, signed URLs with secure_link module
-- **Python fallback**: JWT-based playback tokens with zero DB calls during streaming
-- **video.js player** with smart buffering, playback speed, fullscreen, native fallback
-- Supports .mp4, .mov, .webm, .mkv, .avi, .mts
-
-### Cinematic Slideshow with Music Picker + Shareable Link
-- Music picker: 3 MP3 tracks (Romantic, Cinematic, Eternity)
-- Ken Burns effect, crossfade, shareable direct link
-
-### Client Share Landing Page — Design A Classic
-- Hero with blurred cover photo, elegant serif typography, gold accents
-
-### Dark Mode Toggle
-- Persists via localStorage, applied across all share views
-
-### QR Code Generator (3 designs), Activity Log, Photographer Mode
-
-## Key API Endpoints
-- `GET /api/share/{token}/video-token/{file_id}` — Get playback URL (nginx or Python)
-- `GET /api/v/{vtoken}` — Direct Python streaming (zero DB calls)
-- `POST /api/admin/galleries/{id}/reprocess-videos` — Fix existing videos for streaming
-
-## Backlog
-- P1: Replace "Floral" QR design with decorated "Minimal" variation
-- P1: Email notifications on album favourites submission
-- P2: Client comments on favourited photos
-- P3: Watermark previews
-- P4: Modularize server.py into separate routers
+## Architecture
+- **Backend**: FastAPI, Motor (MongoDB), Pillow, FFmpeg (VAAPI Hardware encoding)
+- **Frontend**: React, Tailwind CSS, video.js, Fetch API streaming
+- **Infrastructure**: Docker Compose on TrueNAS, NGINX direct video serving, Dockge management
+- **Hardware**: Minisforum UM780XTX (Radeon 780M iGPU) for GPU-accelerated transcoding
 
 ## Deployment
-```bash
-docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml down
-docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml build --no-cache
-docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml up -d
-```
+User deploys on TrueNAS via Dockge. Steps:
+1. "Save to Github" in Emergent
+2. `docker compose -f /mnt/apps/dockge/data/180226galleryrepo/compose.yaml down`
+3. `docker compose build --no-cache backend`
+4. `docker compose up -d`
+
+## Completed Features
+- [x] Admin-managed galleries with chunked uploads
+- [x] Share links with password protection
+- [x] Dark/Light mode toggle (Classic Timeless theme)
+- [x] Cinematic Ken Burns slideshow
+- [x] CSS-based watermarks on photo previews (clean downloads)
+- [x] video.js integration for robust playback
+- [x] Direct NGINX video serving (bypasses Python)
+- [x] Background FFmpeg transcoding (5Mbps .web.mp4 streams)
+- [x] "Optimise Videos for Web" admin button with progress polling
+- [x] Visual download progress overlay for large files
+- [x] Activity logging with exact file download tracking
+- [x] Multi-design PDF QR code frame generator
+- [x] .gitignore cleanup (removed 114MB test video bloat)
+- [x] VAAPI hardware-accelerated transcoding (Radeon 780M) with CPU fallback (Jun 22, 2026)
+- [x] Thumbnail generation before transcoding — instant UI feedback (Jun 22, 2026)
+
+## In Progress
+None
+
+## Prioritized Backlog
+- **P1**: Real-time transcoding progress bar in admin panel (per-file after upload + optimise button)
+- **P1**: Replace "Floral" QR design with "Minimal" variation
+- **P1**: Email notifications when client submits album favourites
+- **P2**: Client comments on favourited photos
+- **P4**: Modularize server.py (~2930 lines -> routes/galleries.py, routes/shares.py, routes/qr.py)
+
+## Key Files
+- `/app/backend/Dockerfile` — VAAPI drivers installed
+- `/app/backend/server.py` — All APIs, FFmpeg logic, NGINX signed URLs
+- `/app/frontend/src/pages/ShareView.js` — Watermarks, download progress, dark mode
+- `/app/frontend/src/pages/AdminGalleryDetail.js` — Gallery management
+- `/app/frontend/src/components/VideoPlayer.js` — video.js wrapper
+- `/app/frontend/nginx.conf` — Proxy for /video/ to nginx-video container
+- `/app/nginx/nginx.conf` — Direct file serving config
+
+## Key API Endpoints
+- `GET /api/share/{token}/video-token/{file_id}` — Signed streaming URLs
+- `POST /api/admin/galleries/{gallery_id}/reprocess-videos` — Manual web-optimization trigger
+- `GET /api/admin/galleries/reprocess-progress` — Transcoding status polling
+- `/video/...` — NGINX proxy for streaming
+
+## 3rd Party Integrations
+- PayPal (Payments) — Direct link redirect (MOCKED)
+- Google Authenticator (Auth) — pyotp local library
+
+## Critical Notes
+- Watermarks are CSS-only overlays in ShareView.js — never burn into images
+- Video delivery: .web.mp4 for streaming, original for downloads
+- UPLOAD_DIR env var = /data/userfiles in production (compose.yaml)
+- NGINX video container mounts same volume read-only at /uploads
