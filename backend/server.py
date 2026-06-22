@@ -331,7 +331,8 @@ def safe_filename(filename: str, existing_dir: Path) -> str:
     return f"{stem} ({counter}){ext}"
 
 # ─── Background Thumbnail Generation ───
-thumbnail_executor = ThreadPoolExecutor(max_workers=2)
+thumbnail_executor = ThreadPoolExecutor(max_workers=4)
+transcode_executor = ThreadPoolExecutor(max_workers=2)
 
 # Video optimisation progress tracking
 video_optimise_progress = {}  # gallery_id -> {total, done, current_file, step}
@@ -524,9 +525,9 @@ def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: 
         sync_client.close()
         logger.info(f"Thumbnails generated for {filename}")
         
-        # Create web-optimised version AFTER thumbnails so UI updates instantly
+        # Kick off web-optimised transcode in SEPARATE pool so it never blocks thumbnail workers
         if file_type == "video":
-            create_web_version(file_path, gallery_id, file_id)
+            transcode_executor.submit(create_web_version, file_path, gallery_id, file_id)
     except Exception as e:
         logger.error(f"Background thumbnail error for {filename}: {e}")
 
@@ -1004,7 +1005,7 @@ async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
         return {"queued": 0, "message": "No video files found"}
     video_optimise_progress[gallery_id] = {"total": len(valid_videos), "done": 0, "current_file": None}
     for file_path, _, fid in valid_videos:
-        thumbnail_executor.submit(optimise_video_full, file_path, gallery_id, fid)
+        transcode_executor.submit(optimise_video_full, file_path, gallery_id, fid)
     return {"queued": len(valid_videos), "message": f"{len(valid_videos)} video(s) queued for web optimisation"}
 
 @api_router.get("/admin/galleries/{gallery_id}/reprocess-progress")
