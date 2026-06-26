@@ -74,10 +74,11 @@ export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/sta
 export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats');
 
 // Admin Activity Log
-export const getAdminActivity = (limit = 50, galleryId = null, action = null) => {
+export const getAdminActivity = (limit = 50, galleryId = null, action = null, search = null) => {
   let url = `/admin/activity?limit=${limit}`;
   if (galleryId) url += `&gallery_id=${galleryId}`;
   if (action) url += `&action=${action}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
   return apiClient.get(url);
 };
 

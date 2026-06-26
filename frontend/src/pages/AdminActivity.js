@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getAdminActivity } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Eye, Download, Heart, RefreshCw, ChevronDown, ChevronUp, Filter, FileText, Package } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Eye, Download, Heart, RefreshCw, ChevronDown, ChevronUp, Filter, FileText, Package, Search } from "lucide-react";
 
 export default function AdminActivity() {
   const navigate = useNavigate();
@@ -11,12 +12,14 @@ export default function AdminActivity() {
   const [loading, setLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [filterAction, setFilterAction] = useState(searchParams.get("action") || "");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const galleryFilter = searchParams.get("gallery_id") || "";
 
   const loadActivity = async () => {
     setLoading(true);
     try {
-      const res = await getAdminActivity(200, galleryFilter || null, filterAction || null);
+      const res = await getAdminActivity(200, galleryFilter || null, filterAction || null, searchQuery || null);
       setActivities(res.data.activities || []);
     } catch (err) {
       console.error("Failed to load activity", err);
@@ -27,7 +30,7 @@ export default function AdminActivity() {
 
   useEffect(() => {
     loadActivity();
-  }, [filterAction]);
+  }, [filterAction, searchQuery]);
 
   const toggleExpand = (id) => {
     setExpandedRows(prev => {
@@ -110,6 +113,27 @@ export default function AdminActivity() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Input
+                data-testid="search-name"
+                type="text"
+                placeholder="Search by name..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') setSearchQuery(searchInput); }}
+                className="pl-8 h-8 w-48 text-xs border-gray-200 rounded"
+              />
+            </div>
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(""); setSearchInput(""); }}
+                className="text-[10px] text-gray-500 hover:text-gray-800 underline"
+                data-testid="clear-search"
+              >
+                Clear
+              </button>
+            )}
             <select
               value={filterAction}
               onChange={(e) => setFilterAction(e.target.value)}

@@ -2715,13 +2715,19 @@ async def track_download(token: str, request: Request, session=Depends(get_share
     return {"ok": True}
 
 @api_router.get("/admin/activity")
-async def get_admin_activity(limit: int = Query(50, le=200), gallery_id: str = Query(None), action: str = Query(None), admin=Depends(get_admin)):
+async def get_admin_activity(limit: int = Query(50, le=200), gallery_id: str = Query(None), action: str = Query(None), search: str = Query(None), admin=Depends(get_admin)):
     """Get recent activity across all galleries, optionally filtered."""
     query = {}
     if gallery_id:
         query["gallery_id"] = gallery_id
     if action:
         query["action"] = action
+    if search:
+        query["$or"] = [
+            {"share_label": {"$regex": search, "$options": "i"}},
+            {"gallery_name": {"$regex": search, "$options": "i"}},
+            {"details": {"$regex": search, "$options": "i"}},
+        ]
     activities = await db.activity_log.find(
         query, {"_id": 0}
     ).sort("timestamp", -1).limit(limit).to_list(limit)
