@@ -30,6 +30,7 @@ import hashlib
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -3045,7 +3046,7 @@ async def test_smtp(admin=Depends(get_admin)):
     try:
         msg = MIMEText("Your email settings are configured correctly!", "plain")
         msg["Subject"] = "SMTP Test — Gallery Notification System"
-        msg["From"] = f"{smtp.get('sender_name', '')} <{smtp['smtp_email']}>"
+        msg["From"] = formataddr((smtp.get('sender_name', ''), smtp['smtp_email']))
         msg["To"] = smtp["smtp_email"]
         
         if smtp["smtp_port"] == 465:
@@ -3212,7 +3213,7 @@ WEDDINGS BY MARK &bull; CAPTURING YOUR STORY
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "Your Wedding Gallery is Ready"
-        msg["From"] = f"{smtp.get('sender_name', 'Weddings By Mark')} <{smtp['smtp_email']}>"
+        msg["From"] = formataddr((smtp.get('sender_name', 'Weddings By Mark'), smtp['smtp_email']))
         msg["To"] = client_email
         msg.attach(MIMEText(html_body, "html"))
         
