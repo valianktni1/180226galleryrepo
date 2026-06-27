@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ folder_name: "", template_id: "" });
+  const [form, setForm] = useState({ folder_name: "", template_id: "", client_email: "" });
   const [newTemplate, setNewTemplate] = useState({ name: "", subfolders: "" });
   const [backingUp, setBackingUp] = useState(false);
 
@@ -73,11 +73,12 @@ export default function AdminDashboard() {
     try {
       const res = await createGallery({
         folder_name: form.folder_name.trim(),
-        template_id: form.template_id || null
+        template_id: form.template_id || null,
+        client_email: form.client_email.trim() || null
       });
       toast.success("Gallery created");
       setShowCreate(false);
-      setForm({ folder_name: "", template_id: "" });
+      setForm({ folder_name: "", template_id: "", client_email: "" });
       navigate(`/admin/gallery/${res.data.id}`);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to create");
@@ -311,6 +312,13 @@ export default function AdminDashboard() {
                   Subfolders: {templates.find(t => t.id === form.template_id)?.subfolders.join(", ")}
                 </p>
               )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Couple&apos;s Email <span className="font-normal text-[#A8A29E]">(optional)</span></Label>
+              <Input data-testid="client-email-input" type="email" value={form.client_email}
+                onChange={e => setForm(f => ({...f, client_email: e.target.value}))}
+                placeholder="e.g. couple@email.com" className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]" />
+              <p className="text-xs" style={{ color: '#A8A29E' }}>Used to send gallery-ready notifications</p>
             </div>
             <DialogFooter>
               <Button data-testid="create-gallery-submit" type="submit" disabled={creating}

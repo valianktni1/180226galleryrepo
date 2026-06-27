@@ -72,6 +72,12 @@ export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}
 export const deleteGallery = (id) => apiClient.delete(`/admin/galleries/${id}`);
 export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/stats`);
 export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats');
+export const sendGalleryNotification = (id) => apiClient.post(`/admin/galleries/${id}/notify`);
+
+// SMTP / Email Settings
+export const getSMTPSettings = () => apiClient.get('/admin/settings/smtp');
+export const saveSMTPSettings = (data) => apiClient.post('/admin/settings/smtp', data);
+export const testSMTP = () => apiClient.post('/admin/settings/smtp/test');
 
 // Admin Activity Log
 export const getAdminActivity = (limit = 50, galleryId = null, action = null, search = null) => {

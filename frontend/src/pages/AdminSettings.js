@@ -13,12 +13,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Key, Package, Plus, Pencil, Trash2, Printer, Eye, Check, Film, Shield, Copy, AlertTriangle
+  ArrowLeft, Key, Package, Plus, Pencil, Trash2, Printer, Eye, Check, Film, Shield, Copy, AlertTriangle, Mail, Send
 } from "lucide-react";
 import {
   changePassword, getPrintSizes, createPrintSize, updatePrintSize, deletePrintSize,
   getPrintOrders, updateOrderStatus, getCompressionSetting, setCompressionSetting,
-  get2FAStatus, setup2FA, enable2FA, disable2FA
+  get2FAStatus, setup2FA, enable2FA, disable2FA, getSMTPSettings, saveSMTPSettings, testSMTP
 } from "@/lib/api";
 
 export default function AdminSettings() {
@@ -62,11 +62,18 @@ export default function AdminSettings() {
   const [recoveryCodes, setRecoveryCodes] = useState(null);
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
 
+  // SMTP / Email
+  const [smtpForm, setSMTPForm] = useState({ smtp_server: "", smtp_port: 465, smtp_email: "", smtp_password: "", sender_name: "" });
+  const [loadingSMTP, setLoadingSMTP] = useState(false);
+  const [savingSMTP, setSavingSMTP] = useState(false);
+  const [testingSMTP, setTestingSMTP] = useState(false);
+
   useEffect(() => {
     if (activeTab === "print-sizes") loadPrintSizes();
     if (activeTab === "orders") loadOrders();
     if (activeTab === "video") loadCompressionSetting();
     if (activeTab === "2fa") load2FAStatus();
+    if (activeTab === "email") loadSMTPSettings();
   }, [activeTab]);
 
   const loadPrintSizes = async () => {
@@ -109,6 +116,36 @@ export default function AdminSettings() {
     } finally {
       setTogglingCompression(false);
     }
+  };
+
+  // SMTP / Email functions
+  const loadSMTPSettings = async () => {
+    setLoadingSMTP(true);
+    try {
+      const res = await getSMTPSettings();
+      setSMTPForm(res.data);
+    } catch { /* ignore */ }
+    finally { setLoadingSMTP(false); }
+  };
+
+  const handleSaveSMTP = async () => {
+    setSavingSMTP(true);
+    try {
+      await saveSMTPSettings(smtpForm);
+      toast.success("Email settings saved");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to save");
+    } finally { setSavingSMTP(false); }
+  };
+
+  const handleTestSMTP = async () => {
+    setTestingSMTP(true);
+    try {
+      const res = await testSMTP();
+      toast.success(res.data.message);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "SMTP test failed");
+    } finally { setTestingSMTP(false); }
   };
 
   // 2FA functions
@@ -295,6 +332,7 @@ export default function AdminSettings() {
           {[
             { id: "password", label: "Change Password", icon: Key },
             { id: "2fa", label: "Two-Factor Auth", icon: Shield },
+            { id: "email", label: "Email Settings", icon: Mail },
             { id: "video", label: "Video Compression", icon: Film },
             { id: "print-sizes", label: "Print Sizes & Prices", icon: Printer },
             { id: "orders", label: "Print Orders", icon: Package }
@@ -522,6 +560,84 @@ export default function AdminSettings() {
                       <li>• Can be disabled at any time</li>
                     </ul>
                   </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Email Settings Tab */}
+        {activeTab === "email" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-xl">
+            {loadingSMTP ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="border rounded-sm p-6" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+                  <h3 className="text-lg font-medium mb-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                    SMTP Configuration
+                  </h3>
+                  <p className="text-sm text-[#57534E] mb-5" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    Configure your email to send gallery notifications directly from your own address.
+                  </p>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>SMTP Server</Label>
+                        <Input data-testid="smtp-server" value={smtpForm.smtp_server}
+                          onChange={e => setSMTPForm(f => ({...f, smtp_server: e.target.value}))}
+                          placeholder="smtp.hostinger.com" className="border-[#D4D4D8] rounded-sm" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Port</Label>
+                        <Input data-testid="smtp-port" type="number" value={smtpForm.smtp_port}
+                          onChange={e => setSMTPForm(f => ({...f, smtp_port: parseInt(e.target.value) || 465}))}
+                          placeholder="465" className="border-[#D4D4D8] rounded-sm" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Email Address</Label>
+                      <Input data-testid="smtp-email" type="email" value={smtpForm.smtp_email}
+                        onChange={e => setSMTPForm(f => ({...f, smtp_email: e.target.value}))}
+                        placeholder="mark@perfectweddingsbymark.uk" className="border-[#D4D4D8] rounded-sm" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password</Label>
+                      <Input data-testid="smtp-password" type="password" value={smtpForm.smtp_password}
+                        onChange={e => setSMTPForm(f => ({...f, smtp_password: e.target.value}))}
+                        placeholder="Your email password" className="border-[#D4D4D8] rounded-sm" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Sender Name</Label>
+                      <Input data-testid="smtp-sender" value={smtpForm.sender_name}
+                        onChange={e => setSMTPForm(f => ({...f, sender_name: e.target.value}))}
+                        placeholder="Weddings By Mark" className="border-[#D4D4D8] rounded-sm" />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <Button onClick={handleSaveSMTP} disabled={savingSMTP} data-testid="save-smtp-btn"
+                        className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold">
+                        {savingSMTP ? "Saving..." : "Save Settings"}
+                      </Button>
+                      <Button onClick={handleTestSMTP} disabled={testingSMTP} variant="outline" data-testid="test-smtp-btn"
+                        className="rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2">
+                        <Send className="w-3.5 h-3.5" />
+                        {testingSMTP ? "Sending..." : "Send Test Email"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                  <Mail className="w-6 h-6 text-[#D4AF37] mb-2" />
+                  <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>How it works</h4>
+                  <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    <li>1. Enter your email SMTP details above (one-time setup)</li>
+                    <li>2. Add a couple's email when creating or editing a gallery</li>
+                    <li>3. When the gallery is ready, press "Notify Couple" — they get a beautiful branded email from your address</li>
+                    <li>4. The test button sends a test email to yourself to verify it works</li>
+                  </ul>
                 </div>
               </div>
             )}

@@ -22,11 +22,12 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText
+  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
-  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover
+  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
+  updateGallery, sendGalleryNotification
 } from "@/lib/api";
 
 export default function AdminGalleryDetail() {
@@ -49,6 +50,9 @@ export default function AdminGalleryDetail() {
   const [reprocessProgress, setReprocessProgress] = useState(null);
   const [transcodeStatus, setTranscodeStatus] = useState({});  // file_id -> {percent, status, method, filename}
   const transcodePollingRef = useRef(null);
+  const [sendingNotification, setSendingNotification] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [clientEmail, setClientEmail] = useState("");
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -72,6 +76,7 @@ export default function AdminGalleryDetail() {
       setGallery(res.data);
       setFiles(res.data.files || []);
       setShares(res.data.shares || []);
+      setClientEmail(res.data.client_email || "");
       if (!activeTab && res.data.subfolders?.length) {
         setActiveTab(res.data.subfolders[0]);
       }
@@ -362,6 +367,34 @@ export default function AdminGalleryDetail() {
     }
   };
 
+  const handleSaveEmail = async () => {
+    try {
+      await updateGallery(id, { client_email: clientEmail });
+      setEditingEmail(false);
+      toast.success("Couple's email saved");
+    } catch { toast.error("Failed to save email"); }
+  };
+
+  const handleNotifyCouple = async () => {
+    if (!clientEmail) {
+      setEditingEmail(true);
+      toast.error("Add the couple's email first");
+      return;
+    }
+    if (shares.length === 0) {
+      toast.error("Create a share link first");
+      return;
+    }
+    setSendingNotification(true);
+    try {
+      const res = await sendGalleryNotification(id);
+      toast.success(res.data.message);
+      loadGallery();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send notification");
+    } finally { setSendingNotification(false); }
+  };
+
   if (!gallery) return null;
 
   const currentFiles = files.filter(f => f.subfolder === activeTab);
@@ -379,10 +412,33 @@ export default function AdminGalleryDetail() {
             </button>
             <div>
               <h1 className="text-xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>{gallery.folder_name}</h1>
-              <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{gallery.subfolders.length} subfolders &middot; {files.length} files</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{gallery.subfolders.length} subfolders &middot; {files.length} files</p>
+                {editingEmail ? (
+                  <div className="flex items-center gap-1.5 ml-2">
+                    <Input data-testid="edit-client-email" type="email" value={clientEmail}
+                      onChange={e => setClientEmail(e.target.value)} placeholder="couple@email.com"
+                      className="h-6 text-xs w-44 border-[#D4AF37] rounded-sm px-2" autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') handleSaveEmail(); if (e.key === 'Escape') setEditingEmail(false); }} />
+                    <button onClick={handleSaveEmail} className="text-green-600 hover:text-green-800"><Check className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setEditingEmail(false)} className="text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ) : (
+                  <button onClick={() => setEditingEmail(true)} className="flex items-center gap-1 ml-2 text-xs hover:text-[#D4AF37] transition-colors"
+                    style={{ color: clientEmail ? '#57534E' : '#A8A29E', fontFamily: 'Manrope, sans-serif' }} data-testid="client-email-display">
+                    <Mail className="w-3 h-3" />
+                    {clientEmail || "Add email"}
+                    {gallery.notification_sent_at && <span className="text-[9px] ml-1 text-green-600 font-semibold">Sent</span>}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button data-testid="notify-couple-btn" onClick={handleNotifyCouple} disabled={sendingNotification}
+              variant="outline" className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37]/10">
+              <Mail className="w-3.5 h-3.5" /> {sendingNotification ? "Sending..." : "Notify Couple"}
+            </Button>
             <Button data-testid="create-share-btn" onClick={() => setShowShareDialog(true)}
               className="bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-5 py-2 text-xs tracking-wider uppercase font-bold gap-2">
               <Share2 className="w-3.5 h-3.5" /> Create Share

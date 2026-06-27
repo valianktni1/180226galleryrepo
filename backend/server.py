@@ -27,6 +27,9 @@ from concurrent.futures import ThreadPoolExecutor
 import pyotp
 import base64
 import hashlib
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -103,9 +106,11 @@ class TemplateUpdate(BaseModel):
 class GalleryCreate(BaseModel):
     folder_name: str  # e.g. "Gina & Mark 30.11.22"
     template_id: Optional[str] = None
+    client_email: Optional[str] = None
 
 class GalleryUpdate(BaseModel):
     folder_name: Optional[str] = None
+    client_email: Optional[str] = None
 
 class ShareCreate(BaseModel):
     gallery_id: str
@@ -775,6 +780,7 @@ async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
         "folder_name": data.folder_name,
         "subfolders": subfolders,
         "template_id": data.template_id,
+        "client_email": data.client_email or "",
         "file_counts": {sf: 0 for sf in subfolders},
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
@@ -844,6 +850,8 @@ async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get
         if old_path.exists():
             old_path.rename(new_path)
         update["folder_name"] = data.folder_name
+    if data.client_email is not None:
+        update["client_email"] = data.client_email
     await db.galleries.update_one({"id": gallery_id}, {"$set": update})
     updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     return updated
@@ -1208,6 +1216,7 @@ async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_adm
         "token": share_token,
         "subfolder": data.subfolder,
         "password_hash": hashed_pw,
+        "password_raw": data.password or "",
         "has_password": hashed_pw is not None,
         "access_level": data.access_level,
         "allow_uploads": data.access_level in ("upload", "full"),
@@ -1219,7 +1228,7 @@ async def create_share(gallery_id: str, data: ShareCreate, admin=Depends(get_adm
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.shares.insert_one(share_doc)
-    result = {k: v for k, v in share_doc.items() if k not in ("_id", "password_hash")}
+    result = {k: v for k, v in share_doc.items() if k not in ("_id", "password_hash", "password_raw")}
     return result
 
 @api_router.get("/admin/galleries/{gallery_id}/shares")
@@ -2987,6 +2996,244 @@ async def toggle_compression(enabled: bool = Query(...), admin=Depends(get_admin
     await set_compression_setting(enabled)
     status = "enabled" if enabled else "disabled"
     return {"success": True, "message": f"Guest video compression {status}", "enabled": enabled}
+
+# ─── Email / SMTP Settings ───
+
+@api_router.get("/admin/settings/smtp")
+async def get_smtp_settings(admin=Depends(get_admin)):
+    """Get SMTP settings (password masked)."""
+    doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not doc:
+        return {"smtp_server": "", "smtp_port": 465, "smtp_email": "", "smtp_password": "", "sender_name": ""}
+    data = doc.get("value", {})
+    masked_pw = "••••••••" if data.get("smtp_password") else ""
+    return {**data, "smtp_password": masked_pw}
+
+class SMTPSettings(BaseModel):
+    smtp_server: str
+    smtp_port: int = 465
+    smtp_email: str
+    smtp_password: Optional[str] = None
+    sender_name: str = ""
+
+@api_router.post("/admin/settings/smtp")
+async def save_smtp_settings(data: SMTPSettings, admin=Depends(get_admin)):
+    """Save SMTP settings."""
+    existing = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    value = {
+        "smtp_server": data.smtp_server,
+        "smtp_port": data.smtp_port,
+        "smtp_email": data.smtp_email,
+        "sender_name": data.sender_name,
+    }
+    # Only update password if not the masked placeholder
+    if data.smtp_password and data.smtp_password != "••••••••":
+        value["smtp_password"] = data.smtp_password
+    elif existing and existing.get("value", {}).get("smtp_password"):
+        value["smtp_password"] = existing["value"]["smtp_password"]
+    
+    await db.settings.update_one({"key": "smtp"}, {"$set": {"key": "smtp", "value": value}}, upsert=True)
+    return {"success": True}
+
+@api_router.post("/admin/settings/smtp/test")
+async def test_smtp(admin=Depends(get_admin)):
+    """Send a test email to verify SMTP settings."""
+    doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not doc or not doc.get("value", {}).get("smtp_email"):
+        raise HTTPException(status_code=400, detail="SMTP not configured")
+    smtp = doc["value"]
+    try:
+        msg = MIMEText("Your email settings are configured correctly!", "plain")
+        msg["Subject"] = "SMTP Test — Gallery Notification System"
+        msg["From"] = f"{smtp.get('sender_name', '')} <{smtp['smtp_email']}>"
+        msg["To"] = smtp["smtp_email"]
+        
+        if smtp["smtp_port"] == 465:
+            server = smtplib.SMTP_SSL(smtp["smtp_server"], smtp["smtp_port"], timeout=10)
+        else:
+            server = smtplib.SMTP(smtp["smtp_server"], smtp["smtp_port"], timeout=10)
+            server.starttls()
+        server.login(smtp["smtp_email"], smtp["smtp_password"])
+        server.send_message(msg)
+        server.quit()
+        return {"success": True, "message": "Test email sent to " + smtp["smtp_email"]}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"SMTP error: {str(e)}")
+
+@api_router.post("/admin/galleries/{gallery_id}/notify")
+async def send_gallery_notification(gallery_id: str, request: Request, admin=Depends(get_admin)):
+    """Send gallery ready notification email to couple."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    client_email = gallery.get("client_email", "")
+    if not client_email:
+        raise HTTPException(status_code=400, detail="No client email set for this gallery")
+    
+    # Get SMTP settings
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        raise HTTPException(status_code=400, detail="SMTP not configured. Go to Settings > Email to set up.")
+    smtp = smtp_doc["value"]
+    
+    # Find the primary share link for this gallery
+    share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=400, detail="No active share link found. Create a share link first.")
+    
+    # Build gallery URL
+    base_url = str(request.base_url).rstrip("/")
+    # Use Referer/Origin header for the correct public URL
+    origin = request.headers.get("origin") or request.headers.get("referer", "").rstrip("/")
+    if origin:
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+    gallery_link = f"{base_url}/s/{share['token']}"
+    share_password = share.get("password_raw", "")
+    
+    couple_name = gallery["folder_name"]
+    
+    # Build HTML email
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#FDFCF8;font-family:Georgia,'Times New Roman',serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FDFCF8;padding:40px 20px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border:1px solid #E8E4DC;max-width:600px;">
+
+<!-- Header -->
+<tr><td style="background-color:#1C1917;padding:30px 40px;text-align:center;">
+<h1 style="color:#D4AF37;font-family:Georgia,'Times New Roman',serif;font-size:24px;margin:0;font-weight:normal;letter-spacing:2px;">
+Your Wedding Gallery is Ready
+</h1>
+</td></tr>
+
+<!-- Body -->
+<tr><td style="padding:40px;">
+
+<p style="font-size:18px;color:#1C1917;margin:0 0 20px 0;line-height:1.6;">
+Huge Congratulations, {couple_name} &#x1F942;
+</p>
+
+<p style="font-size:15px;color:#57534E;margin:0 0 15px 0;line-height:1.8;">
+I hope you're both having the best time settling into married life!
+</p>
+
+<p style="font-size:15px;color:#57534E;margin:0 0 25px 0;line-height:1.8;">
+The wait is finally over&mdash;your wedding gallery is officially ready for viewing &amp; downloading. I know you've been eager to relive all those special moments, and I'm so excited for you to see them.
+</p>
+
+<!-- Gallery Link Section -->
+<div style="background-color:#F5F2EB;border-left:4px solid #D4AF37;padding:20px 25px;margin:0 0 25px 0;">
+<p style="font-size:14px;color:#1C1917;margin:0 0 8px 0;font-weight:bold;letter-spacing:1px;">
+&#x1F4F8; HOW TO ACCESS YOUR MEMORIES
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.6;">
+You can dive into your gallery right now using the link below.
+</p>
+<p style="margin:0;">
+<a href="{gallery_link}" style="display:inline-block;background-color:#1C1917;color:#D4AF37;text-decoration:none;padding:12px 30px;font-size:14px;letter-spacing:2px;font-weight:bold;">
+VIEW YOUR GALLERY
+</a>
+</p>
+{f'<p style="font-size:13px;color:#A8A29E;margin:10px 0 0 0;">Password: <strong style="color:#1C1917;">{share_password}</strong></p>' if share_password else ''}
+</div>
+
+<!-- Album Section -->
+<div style="margin:0 0 25px 0;">
+<p style="font-size:14px;color:#1C1917;margin:0 0 12px 0;font-weight:bold;letter-spacing:1px;">
+&#x1F4D6; CREATING YOUR KEEPSAKE ALBUM
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 10px 0;line-height:1.8;">
+If your package includes a wedding album, let's get the design process started!<br>
+Select Your Favourites: Browse your gallery and click the "Heart" icon on the photos you love most.
+</p>
+
+<p style="font-size:14px;color:#1C1917;margin:15px 0 8px 0;font-weight:bold;">
+How Many Images to Choose:
+</p>
+<table cellpadding="8" cellspacing="0" style="border:1px solid #E8E4DC;margin:0 0 10px 0;width:100%;">
+<tr style="background-color:#F5F2EB;">
+<td style="font-size:13px;color:#57534E;border-bottom:1px solid #E8E4DC;font-weight:bold;">Standard / Special Offer Albums</td>
+<td style="font-size:13px;color:#1C1917;border-bottom:1px solid #E8E4DC;text-align:right;">Up to <strong>40 images</strong> + 1 front cover</td>
+</tr>
+<tr>
+<td style="font-size:13px;color:#57534E;font-weight:bold;">Full-Price Albums</td>
+<td style="font-size:13px;color:#1C1917;text-align:right;">Up to <strong>60 images</strong> + 1 front cover</td>
+</tr>
+</table>
+<p style="font-size:14px;color:#57534E;margin:0 0 10px 0;line-height:1.6;">
+<strong>Final Step:</strong> Once you've picked your favourites, send me a quick email with the image number you'd like for your front cover.
+</p>
+<p style="font-size:14px;color:#A8A29E;margin:0;line-height:1.6;font-style:italic;">
+Need help? I've included some "How-To" videos right inside your gallery folder to guide you through the process!
+</p>
+</div>
+
+<!-- What Happens Next -->
+<div style="background-color:#F5F2EB;border-left:4px solid #D4AF37;padding:20px 25px;margin:0 0 30px 0;">
+<p style="font-size:14px;color:#1C1917;margin:0 0 8px 0;font-weight:bold;letter-spacing:1px;">
+&#x1F552; WHAT HAPPENS NEXT?
+</p>
+<p style="font-size:15px;color:#57534E;margin:0;line-height:1.8;">
+Once I receive your final selection, I'll get to work on the design. Your custom album will be designed, printed, and delivered to your door within 4 to 6 weeks.
+</p>
+</div>
+
+<p style="font-size:15px;color:#57534E;margin:0 0 25px 0;line-height:1.8;">
+Enjoy your photos&mdash;it was such an honour to capture your big day!
+</p>
+
+<p style="font-size:15px;color:#1C1917;margin:0;line-height:1.8;">
+Best Regards<br>
+<strong>Mark</strong><br>
+<em>Weddings By Mark</em>
+</p>
+
+</td></tr>
+
+<!-- Footer -->
+<tr><td style="background-color:#1C1917;padding:20px 40px;text-align:center;">
+<p style="color:#A8A29E;font-size:12px;margin:0;letter-spacing:1px;">
+WEDDINGS BY MARK &bull; CAPTURING YOUR STORY
+</p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+    # Send the email
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Your Wedding Gallery is Ready"
+        msg["From"] = f"{smtp.get('sender_name', 'Weddings By Mark')} <{smtp['smtp_email']}>"
+        msg["To"] = client_email
+        msg.attach(MIMEText(html_body, "html"))
+        
+        if smtp["smtp_port"] == 465:
+            server = smtplib.SMTP_SSL(smtp["smtp_server"], smtp["smtp_port"], timeout=15)
+        else:
+            server = smtplib.SMTP(smtp["smtp_server"], smtp["smtp_port"], timeout=15)
+            server.starttls()
+        server.login(smtp["smtp_email"], smtp["smtp_password"])
+        server.send_message(msg)
+        server.quit()
+        
+        # Log the notification
+        await db.galleries.update_one({"id": gallery_id}, {"$set": {
+            "notification_sent_at": datetime.now(timezone.utc).isoformat(),
+            "notification_sent_to": client_email
+        }})
+        
+        return {"success": True, "message": f"Notification sent to {client_email}"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to send email: {str(e)}")
 
 app.include_router(api_router)
 
