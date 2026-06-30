@@ -53,6 +53,7 @@ export default function AdminGalleryDetail() {
   const [sendingNotification, setSendingNotification] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [clientEmail, setClientEmail] = useState("");
+  const thumbPollingRef = useRef(null);
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -119,8 +120,25 @@ export default function AdminGalleryDetail() {
         clearInterval(transcodePollingRef.current);
         transcodePollingRef.current = null;
       }
+      if (thumbPollingRef.current) {
+        clearInterval(thumbPollingRef.current);
+        thumbPollingRef.current = null;
+      }
     };
   }, []);
+
+  // Auto-refresh when files are missing thumbnails (e.g. after bulk upload)
+  useEffect(() => {
+    const missingThumbs = files.some(f => !f.has_thumb);
+    if (missingThumbs && !thumbPollingRef.current) {
+      thumbPollingRef.current = setInterval(() => {
+        loadGallery();
+      }, 5000);
+    } else if (!missingThumbs && thumbPollingRef.current) {
+      clearInterval(thumbPollingRef.current);
+      thumbPollingRef.current = null;
+    }
+  }, [files, loadGallery]);
 
   const handleUpload = async (fileList) => {
     if (!fileList?.length || !activeTab) return;

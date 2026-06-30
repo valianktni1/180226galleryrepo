@@ -337,7 +337,7 @@ def safe_filename(filename: str, existing_dir: Path) -> str:
     return f"{stem} ({counter}){ext}"
 
 # ─── Background Thumbnail Generation ───
-thumbnail_executor = ThreadPoolExecutor(max_workers=4)
+thumbnail_executor = ThreadPoolExecutor(max_workers=8)
 transcode_executor = ThreadPoolExecutor(max_workers=2)
 
 # Video optimisation progress tracking
