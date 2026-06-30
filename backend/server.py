@@ -2743,6 +2743,46 @@ async def get_admin_activity(limit: int = Query(50, le=200), gallery_id: str = Q
     ).sort("timestamp", -1).limit(limit).to_list(limit)
     return {"activities": activities}
 
+@api_router.get("/admin/activity/archived")
+async def get_archived_activity(limit: int = Query(200, le=500), gallery_id: str = Query(None), action: str = Query(None), search: str = Query(None), admin=Depends(get_admin)):
+    """Get archived activity logs."""
+    query = {}
+    if gallery_id:
+        query["gallery_id"] = gallery_id
+    if action:
+        query["action"] = action
+    if search:
+        query["$or"] = [
+            {"share_label": {"$regex": search, "$options": "i"}},
+            {"gallery_name": {"$regex": search, "$options": "i"}},
+            {"details": {"$regex": search, "$options": "i"}},
+        ]
+    activities = await db.activity_log_archive.find(
+        query, {"_id": 0}
+    ).sort("timestamp", -1).limit(limit).to_list(limit)
+    count = await db.activity_log_archive.count_documents({})
+    return {"activities": activities, "total_archived": count}
+
+@api_router.delete("/admin/activity/clear")
+async def clear_activity_logs(admin=Depends(get_admin)):
+    """Clear all active activity logs."""
+    result = await db.activity_log.delete_many({})
+    logger.info(f"Cleared {result.deleted_count} activity logs")
+    return {"success": True, "cleared": result.deleted_count}
+
+@api_router.post("/admin/activity/archive-now")
+async def archive_old_logs(admin=Depends(get_admin)):
+    """Manually trigger archiving of logs older than 6 months."""
+    count = await run_auto_archive()
+    return {"success": True, "archived": count}
+
+@api_router.get("/admin/activity/stats")
+async def activity_stats(admin=Depends(get_admin)):
+    """Get counts for active and archived logs."""
+    active = await db.activity_log.count_documents({})
+    archived = await db.activity_log_archive.count_documents({})
+    return {"active_count": active, "archived_count": archived}
+
 @api_router.get("/admin/galleries/{gallery_id}/stats")
 async def get_gallery_stats(gallery_id: str, admin=Depends(get_admin)):
     """Get activity stats for a gallery."""
@@ -3235,6 +3275,58 @@ WEDDINGS BY MARK &bull; CAPTURING YOUR STORY
         return {"success": True, "message": f"Notification sent to {client_email}"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to send email: {str(e)}")
+
+async def run_auto_archive():
+    """Move activity logs older than 6 months to the archive collection."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=183)).isoformat()
+    old_logs = await db.activity_log.find({"timestamp": {"$lt": cutoff}}).to_list(None)
+    if not old_logs:
+        return 0
+    # Copy to archive (strip _id so MongoDB assigns new ones)
+    archive_docs = [{k: v for k, v in doc.items() if k != "_id"} for doc in old_logs]
+    await db.activity_log_archive.insert_many(archive_docs)
+    # Remove from active
+    result = await db.activity_log.delete_many({"timestamp": {"$lt": cutoff}})
+    logger.info(f"Auto-archived {result.deleted_count} activity logs older than 6 months")
+    
+    # Send archive email notification if SMTP is configured
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if smtp_doc and smtp_doc.get("value", {}).get("smtp_email"):
+        smtp = smtp_doc["value"]
+        try:
+            msg = MIMEText(
+                f"Activity Log Archive Summary\n\n"
+                f"{result.deleted_count} log entries older than 6 months have been archived.\n"
+                f"Archived on: {datetime.now(timezone.utc).strftime('%d %B %Y at %H:%M UTC')}\n\n"
+                f"You can view archived logs in your admin panel under Activity > Archive tab.\n\n"
+                f"— Gallery System",
+                "plain"
+            )
+            msg["Subject"] = "Activity Log Archived — Gallery System"
+            msg["From"] = formataddr((smtp.get("sender_name", ""), smtp["smtp_email"]))
+            msg["To"] = smtp["smtp_email"]
+            
+            if smtp["smtp_port"] == 465:
+                server = smtplib.SMTP_SSL(smtp["smtp_server"], smtp["smtp_port"], timeout=10)
+            else:
+                server = smtplib.SMTP(smtp["smtp_server"], smtp["smtp_port"], timeout=10)
+                server.starttls()
+            server.login(smtp["smtp_email"], smtp["smtp_password"])
+            server.send_message(msg)
+            server.quit()
+            logger.info("Archive notification email sent")
+        except Exception as e:
+            logger.warning(f"Failed to send archive email: {e}")
+    
+    return result.deleted_count
+
+@app.on_event("startup")
+async def startup_auto_archive():
+    """Check for old logs on startup and archive if needed."""
+    try:
+        await run_auto_archive()
+    except Exception as e:
+        logger.warning(f"Auto-archive check failed: {e}")
 
 app.include_router(api_router)
 

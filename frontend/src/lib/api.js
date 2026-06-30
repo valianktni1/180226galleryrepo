@@ -87,6 +87,16 @@ export const getAdminActivity = (limit = 50, galleryId = null, action = null, se
   if (search) url += `&search=${encodeURIComponent(search)}`;
   return apiClient.get(url);
 };
+export const getArchivedActivity = (limit = 200, galleryId = null, action = null, search = null) => {
+  let url = `/admin/activity/archived?limit=${limit}`;
+  if (galleryId) url += `&gallery_id=${galleryId}`;
+  if (action) url += `&action=${action}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  return apiClient.get(url);
+};
+export const clearActivityLogs = () => apiClient.delete('/admin/activity/clear');
+export const archiveLogsNow = () => apiClient.post('/admin/activity/archive-now');
+export const getActivityStats = () => apiClient.get('/admin/activity/stats');
 
 // File Upload
 export const uploadFiles = (galleryId, subfolder, files, onProgress) => {

@@ -1,25 +1,67 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { getAdminActivity } from "@/lib/api";
+import { getAdminActivity, getArchivedActivity, clearActivityLogs, archiveLogsNow, getActivityStats } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Eye, Download, Heart, RefreshCw, ChevronDown, ChevronUp, Filter, FileText, Package, Search } from "lucide-react";
+import { ArrowLeft, Eye, Download, Heart, RefreshCw, ChevronDown, ChevronUp, Filter, FileText, Package, Search, Trash2, Archive, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
+
+// ─── Helpers ───
+const formatTimestamp = (ts) => {
+  if (!ts) return "-";
+  try {
+    const d = new Date(ts);
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) + " " +
+           d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  } catch { return ts; }
+};
+const getActionIcon = (action) => {
+  if (action === "download") return <Download className="w-4 h-4 text-blue-500" />;
+  if (action === "view") return <Eye className="w-4 h-4 text-green-500" />;
+  if (action === "favourites_submitted") return <Heart className="w-4 h-4 text-pink-500" />;
+  return <FileText className="w-4 h-4 text-gray-400" />;
+};
+const getActionLabel = (action) => {
+  if (action === "download") return "Download";
+  if (action === "view") return "Gallery View";
+  if (action === "favourites_submitted") return "Favourites Submitted";
+  return action || "Unknown";
+};
+const getDownloadTypeBadge = (activity) => {
+  if (activity.action !== "download") return null;
+  if (activity.download_type === "all_zip") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium"><Package className="w-3 h-3 inline mr-0.5" />Full ZIP</span>;
+  if (activity.download_type === "subfolder_zip") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium"><Package className="w-3 h-3 inline mr-0.5" />Folder ZIP</span>;
+  if (activity.download_type === "single") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium"><FileText className="w-3 h-3 inline mr-0.5" />Single File</span>;
+  return null;
+};
+const getCompletenessBadge = (activity) => {
+  if (activity.action !== "download" || !activity.files_count) return null;
+  return <span className="text-[10px] text-gray-400">{activity.files_count} file{activity.files_count !== 1 ? "s" : ""}</span>;
+};
 
 export default function AdminActivity() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [filterAction, setFilterAction] = useState(searchParams.get("action") || "");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [viewMode, setViewMode] = useState("active"); // "active" or "archive"
+  const [stats, setStats] = useState({ active_count: 0, archived_count: 0 });
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const galleryFilter = searchParams.get("gallery_id") || "";
 
   const loadActivity = async () => {
     setLoading(true);
     try {
-      const res = await getAdminActivity(200, galleryFilter || null, filterAction || null, searchQuery || null);
+      const fetcher = viewMode === "archive" ? getArchivedActivity : getAdminActivity;
+      const limit = viewMode === "archive" ? 200 : 200;
+      const res = await fetcher(limit, galleryFilter || null, filterAction || null, searchQuery || null);
       setActivities(res.data.activities || []);
     } catch (err) {
       console.error("Failed to load activity", err);
@@ -28,89 +70,71 @@ export default function AdminActivity() {
     }
   };
 
+  const loadStats = async () => {
+    try {
+      const res = await getActivityStats();
+      setStats(res.data);
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     loadActivity();
-  }, [filterAction, searchQuery]);
+    loadStats();
+  }, [filterAction, searchQuery, viewMode]);
 
   const toggleExpand = (id) => {
     setExpandedRows(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
 
-  const getActionIcon = (action) => {
-    switch (action) {
-      case "view": return <Eye className="w-4 h-4 text-blue-500" />;
-      case "download": return <Download className="w-4 h-4 text-green-600" />;
-      case "favourites_submitted": return <Heart className="w-4 h-4 text-amber-500" fill="#D4AF37" />;
-      default: return <Eye className="w-4 h-4 text-gray-400" />;
+  const handleClearLogs = async () => {
+    try {
+      const res = await clearActivityLogs();
+      toast.success(`Cleared ${res.data.cleared} log entries`);
+      setShowClearConfirm(false);
+      loadActivity();
+      loadStats();
+    } catch (err) {
+      toast.error("Failed to clear logs");
     }
   };
 
-  const getActionLabel = (action) => {
-    switch (action) {
-      case "view": return "Viewed Gallery";
-      case "download": return "Downloaded";
-      case "favourites_submitted": return "Submitted Favourites";
-      default: return action;
-    }
-  };
-
-  const getCompletenessBadge = (activity) => {
-    if (activity.action !== "download" || !activity.completeness) return null;
-    const c = activity.completeness;
-    const colors = {
-      full: "bg-green-100 text-green-800 border-green-200",
-      partial: "bg-amber-100 text-amber-800 border-amber-200",
-      single: "bg-blue-100 text-blue-800 border-blue-200",
-    };
-    const labels = {
-      full: "Full Download",
-      partial: `Partial (${activity.files_count}/${activity.total_available})`,
-      single: "Single File",
-    };
-    return (
-      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase border rounded-sm ${colors[c] || ""}`}
-        data-testid={`completeness-badge-${c}`}>
-        {labels[c] || c}
-      </span>
-    );
-  };
-
-  const getDownloadTypeBadge = (activity) => {
-    if (activity.action !== "download" || !activity.download_type) return null;
-    const t = activity.download_type;
-    const icons = { single: FileText, selection: Filter, album: Package, favourites: Heart };
-    const labels = { single: "Single", selection: "Selection", album: "Album", favourites: "Favourites" };
-    const Icon = icons[t] || Download;
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
-        <Icon className="w-3 h-3" /> {labels[t] || t}
-      </span>
-    );
-  };
-
-  const formatTimestamp = (ts) => {
-    const date = new Date(ts);
-    return date.toLocaleString("en-GB", {
-      day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
+  const handleArchiveNow = async () => {
+    setArchiving(true);
+    try {
+      const res = await archiveLogsNow();
+      if (res.data.archived > 0) {
+        toast.success(`Archived ${res.data.archived} log entries older than 6 months`);
+      } else {
+        toast.info("No logs older than 6 months to archive");
+      }
+      loadActivity();
+      loadStats();
+    } catch (err) {
+      toast.error("Failed to archive logs");
+    } finally { setArchiving(false); }
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFCF8]">
-      <header className="sticky top-0 z-40 border-b bg-white/80 backdrop-blur-md">
+    <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
+      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/admin/galleries")} className="text-gray-600 hover:text-gray-900" data-testid="back-btn">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <h1 className="text-xl font-semibold" style={{ fontFamily: "Cormorant Garamond, serif" }}>
-              Activity Log
-            </h1>
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/admin/dashboard")} className="gap-2"
+              data-testid="back-btn">
+              <ArrowLeft className="w-4 h-4" /> Back
+            </Button>
+            <div>
+              <h1 className="text-lg font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                Activity Log
+              </h1>
+              <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                {stats.active_count} active {stats.archived_count > 0 && `· ${stats.archived_count} archived`}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -153,13 +177,92 @@ export default function AdminActivity() {
       </header>
 
       <main className="max-w-screen-xl mx-auto px-6 py-8">
+        {/* Toolbar: Active/Archive toggle + Clear/Archive buttons */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-1 p-1 rounded-sm border" style={{ borderColor: '#E8E4DC', backgroundColor: '#F5F2EB' }}>
+            <button
+              onClick={() => setViewMode("active")}
+              className={`px-4 py-1.5 text-xs font-semibold tracking-wider uppercase rounded-sm transition-colors ${
+                viewMode === "active" ? "bg-white shadow-sm text-[#1C1917]" : "text-[#A8A29E] hover:text-[#57534E]"
+              }`}
+              style={{ fontFamily: 'Manrope, sans-serif' }}
+              data-testid="tab-active"
+            >
+              Active ({stats.active_count})
+            </button>
+            <button
+              onClick={() => setViewMode("archive")}
+              className={`px-4 py-1.5 text-xs font-semibold tracking-wider uppercase rounded-sm transition-colors flex items-center gap-1.5 ${
+                viewMode === "archive" ? "bg-white shadow-sm text-[#1C1917]" : "text-[#A8A29E] hover:text-[#57534E]"
+              }`}
+              style={{ fontFamily: 'Manrope, sans-serif' }}
+              data-testid="tab-archive"
+            >
+              <Archive className="w-3 h-3" /> Archive ({stats.archived_count})
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleArchiveNow} disabled={archiving}
+              className="gap-2 text-xs" data-testid="archive-now-btn">
+              <Archive className="w-3.5 h-3.5" /> {archiving ? "Archiving..." : "Archive Old Logs"}
+            </Button>
+            {viewMode === "active" && (
+              <Button variant="outline" size="sm" onClick={() => setShowClearConfirm(true)}
+                className="gap-2 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                data-testid="clear-logs-btn">
+                <Trash2 className="w-3.5 h-3.5" /> Clear Logs
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Clear Confirmation Dialog */}
+        <AnimatePresence>
+          {showClearConfirm && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+              className="mb-6 p-4 border rounded-sm flex items-center justify-between"
+              style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}>
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-red-800">Clear all active logs?</p>
+                  <p className="text-xs text-red-600 mt-0.5">This will permanently delete {stats.active_count} log entries. Consider archiving first.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowClearConfirm(false)} className="text-xs">
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleClearLogs}
+                  className="text-xs bg-red-600 text-white hover:bg-red-700" data-testid="confirm-clear-btn">
+                  Yes, Clear All
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Archive info banner */}
+        {viewMode === "archive" && (
+          <div className="mb-6 p-4 rounded-sm border flex items-center gap-3" style={{ backgroundColor: 'rgba(212,175,55,0.06)', borderColor: 'rgba(212,175,55,0.25)' }}>
+            <Archive className="w-4 h-4 shrink-0" style={{ color: '#D4AF37' }} />
+            <p className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              Archived logs are automatically moved here after 6 months. An email notification is sent when archiving occurs.
+            </p>
+          </div>
+        )}
+
         {loading && activities.length === 0 ? (
           <div className="text-center py-20 text-gray-500">Loading activity...</div>
         ) : activities.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             <Eye className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p>No activity recorded yet</p>
-            <p className="text-sm mt-2">Activity will appear here when couples view or download their galleries</p>
+            <p>{viewMode === "archive" ? "No archived logs" : "No activity recorded yet"}</p>
+            <p className="text-sm mt-2">
+              {viewMode === "archive"
+                ? "Logs older than 6 months will appear here automatically"
+                : "Activity will appear here when couples view or download their galleries"}
+            </p>
           </div>
         ) : (
           <div className="bg-white rounded-lg border shadow-sm overflow-hidden overflow-x-auto">
