@@ -39,6 +39,13 @@ User deploys on TrueNAS via Dockge:
 - [x] Email notification system — SMTP settings page, couple's email on galleries, "Notify Couple" button
 - [x] Branded HTML email template with gallery link, password, album instructions, and photographer sign-off
 
+- [x] "Download All Images" bold CTA button on share album view
+- [x] Progressive Image Loading (ProgressiveImage component) + Smart preloading in lightbox
+- [x] Increased thumbnail_executor from 4→8 workers + 5s auto-refresh polling for thumb generation
+- [x] Activity Log Auto-Archiving (>6 months), manual clear, Archive Tab
+- [x] Live Visitors Panel on AdminDashboard (30s heartbeats from ShareView, real-time active session tracking)
+- [x] BUG FIX: Temporal dead zone crash in ShareView.js — useEffect referenced displayFiles before declaration, breaking all share links (fixed 2026-06-30)
+
 ## In Progress
 None
 
