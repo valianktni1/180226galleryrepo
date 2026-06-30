@@ -256,6 +256,11 @@ export const trackGalleryView = (token) =>
   apiClient.post(`/share/${token}/track-view`).catch(() => {});
 export const trackDownload = (token) =>
   apiClient.post(`/share/${token}/track-download`).catch(() => {});
+export const sendHeartbeat = (token, data) =>
+  apiClient.post(`/share/${token}/heartbeat`, data).catch(() => {});
+
+// Admin live visitors
+export const getLiveVisitors = () => apiClient.get('/admin/live-visitors');
 
 // Guest Upload Mode - get upload count
 export const getGuestUploadCount = (token) =>

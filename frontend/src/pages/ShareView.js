@@ -13,7 +13,7 @@ import {
   ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText, Play, PlayCircle, Moon, Sun
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl
+  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl
 } from "@/lib/api";
 import GuestUploadView from "@/pages/GuestUploadView";
 import Slideshow from "@/pages/Slideshow";
@@ -86,6 +86,41 @@ function ShareViewFull() {
     border: '#F5F2EB', borderGold: '#D4AF37', cardShadow: '0 2px 12px rgba(0,0,0,0.06)',
     emptyBg: '#F5F2EB',
   };
+
+  // ─── Live Heartbeat (silent background ping every 30s) ───
+  const sessionIdRef = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
+  const currentActionRef = useRef("browsing");
+  const currentDetailRef = useRef(null);
+
+  useEffect(() => {
+    if (!token) return;
+    const beat = () => {
+      sendHeartbeat(token, {
+        session_id: sessionIdRef.current,
+        action: currentActionRef.current,
+        subfolder: activeAlbum || null,
+        detail: currentDetailRef.current,
+      });
+    };
+    beat();
+    const interval = setInterval(beat, 30000);
+    return () => clearInterval(interval);
+  }, [token, activeAlbum]);
+
+  useEffect(() => {
+    if (lightboxIndex >= 0) {
+      const photo = displayFiles[lightboxIndex];
+      if (photo?.file_type === 'video') {
+        currentActionRef.current = "watching_video";
+      } else {
+        currentActionRef.current = "viewing_photo";
+      }
+      currentDetailRef.current = photo?.filename || null;
+    } else {
+      currentActionRef.current = "browsing";
+      currentDetailRef.current = null;
+    }
+  }, [lightboxIndex, displayFiles]);
 
   const handleSubmitFavourites = async () => {
     if (favCount === 0) return;

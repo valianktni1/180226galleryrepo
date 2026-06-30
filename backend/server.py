@@ -346,6 +346,10 @@ video_optimise_progress = {}  # gallery_id -> {total, done, current_file, step}
 # Per-file transcoding progress tracking
 file_transcode_progress = {}  # file_id -> {gallery_id, filename, percent, status, method}
 
+# Live visitor tracking (in-memory, ephemeral)
+active_visitors = {}  # session_id -> {gallery_id, gallery_name, action, subfolder, detail, device, last_seen, ip}
+VISITOR_TIMEOUT = 60  # seconds before a visitor is considered gone
+
 def get_video_duration(file_path: Path) -> float:
     """Get video duration in seconds using ffprobe."""
     try:
@@ -2723,6 +2727,86 @@ async def track_gallery_view(token: str, request: Request):
 async def track_download(token: str, request: Request, session=Depends(get_share_session)):
     """Legacy tracking endpoint — downloads are now logged directly in the download handlers."""
     return {"ok": True}
+
+# ─── Live Visitor Heartbeat ───
+
+def parse_device(user_agent: str) -> str:
+    """Simple device detection from User-Agent."""
+    ua = user_agent.lower()
+    if any(m in ua for m in ["iphone", "android", "mobile"]):
+        return "Mobile"
+    if any(t in ua for t in ["ipad", "tablet"]):
+        return "Tablet"
+    return "Desktop"
+
+class HeartbeatData(BaseModel):
+    session_id: str
+    action: str = "browsing"
+    subfolder: Optional[str] = None
+    detail: Optional[str] = None
+
+@api_router.post("/share/{token}/heartbeat")
+async def visitor_heartbeat(token: str, data: HeartbeatData, request: Request):
+    """Receive a heartbeat from an active gallery visitor."""
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share:
+        return {"ok": False}
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+    gallery_name = gallery.get("folder_name", "Unknown") if gallery else "Unknown"
+    
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    
+    user_agent = request.headers.get("User-Agent", "")
+    device = parse_device(user_agent)
+    
+    now = time.time()
+    # Update or create visitor entry
+    existing = active_visitors.get(data.session_id)
+    active_visitors[data.session_id] = {
+        "gallery_id": share["gallery_id"],
+        "gallery_name": gallery_name,
+        "share_label": share.get("label", token),
+        "action": data.action,
+        "subfolder": data.subfolder,
+        "detail": data.detail,
+        "device": device,
+        "ip": client_ip,
+        "last_seen": now,
+        "first_seen": existing["first_seen"] if existing else now,
+    }
+    
+    # Clean up stale visitors
+    stale = [k for k, v in active_visitors.items() if now - v["last_seen"] > VISITOR_TIMEOUT]
+    for k in stale:
+        del active_visitors[k]
+    
+    return {"ok": True}
+
+@api_router.get("/admin/live-visitors")
+async def get_live_visitors(admin=Depends(get_admin)):
+    """Get all currently active visitors."""
+    now = time.time()
+    # Clean stale entries
+    stale = [k for k, v in active_visitors.items() if now - v["last_seen"] > VISITOR_TIMEOUT]
+    for k in stale:
+        del active_visitors[k]
+    
+    visitors = []
+    for session_id, v in active_visitors.items():
+        visitors.append({
+            "session_id": session_id,
+            "gallery_id": v["gallery_id"],
+            "gallery_name": v["gallery_name"],
+            "share_label": v["share_label"],
+            "action": v["action"],
+            "subfolder": v["subfolder"],
+            "detail": v["detail"],
+            "device": v["device"],
+            "duration_seconds": int(now - v["first_seen"]),
+        })
+    return {"count": len(visitors), "visitors": visitors}
 
 @api_router.get("/admin/activity")
 async def get_admin_activity(limit: int = Query(50, le=200), gallery_id: str = Query(None), action: str = Query(None), search: str = Query(None), admin=Depends(get_admin)):

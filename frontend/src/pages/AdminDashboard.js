@@ -12,10 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors
 } from "@/lib/api";
 
 export default function AdminDashboard() {
@@ -32,6 +32,7 @@ export default function AdminDashboard() {
   const [form, setForm] = useState({ folder_name: "", template_id: "", client_email: "" });
   const [newTemplate, setNewTemplate] = useState({ name: "", subfolders: "" });
   const [backingUp, setBackingUp] = useState(false);
+  const [liveVisitors, setLiveVisitors] = useState([]);
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +54,16 @@ export default function AdminDashboard() {
     if (!localStorage.getItem("admin_token")) { navigate("/admin"); return; }
     load();
   }, [navigate, load]);
+
+  // Poll live visitors every 10 seconds
+  useEffect(() => {
+    const fetchVisitors = () => {
+      getLiveVisitors().then(res => setLiveVisitors(res.data.visitors || [])).catch(() => {});
+    };
+    fetchVisitors();
+    const interval = setInterval(fetchVisitors, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleBackup = async () => {
     setBackingUp(true);
@@ -171,6 +182,86 @@ export default function AdminDashboard() {
               <span className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>{value}</span>
             </div>
           ))}
+        </motion.div>
+
+        {/* Live Visitors Panel */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+          className="mb-8 border rounded-sm overflow-hidden" style={{ borderColor: liveVisitors.length > 0 ? 'rgba(212,175,55,0.3)' : '#F5F2EB' }}
+          data-testid="live-visitors-panel">
+          <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: liveVisitors.length > 0 ? 'rgba(212,175,55,0.06)' : '#FAFAF9' }}>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Eye className="w-4 h-4" style={{ color: liveVisitors.length > 0 ? '#D4AF37' : '#A8A29E' }} />
+                {liveVisitors.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                )}
+              </div>
+              <span className="text-xs font-semibold tracking-[0.12em] uppercase" style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#1C1917' : '#A8A29E' }}>
+                {liveVisitors.length > 0 ? `${liveVisitors.length} Visitor${liveVisitors.length !== 1 ? 's' : ''} Live Now` : 'No Active Visitors'}
+              </span>
+            </div>
+            {liveVisitors.length > 0 && (
+              <span className="flex items-center gap-1.5 text-[10px] font-medium" style={{ color: '#4ADE80' }}>
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Live
+              </span>
+            )}
+          </div>
+          {liveVisitors.length > 0 && (
+            <div className="divide-y" style={{ divideColor: '#F5F2EB' }}>
+              {liveVisitors.map((v) => {
+                const mins = Math.floor(v.duration_seconds / 60);
+                const actionIcon = v.action === 'watching_video' ? <Film className="w-3.5 h-3.5 text-purple-500" /> 
+                  : v.action === 'viewing_photo' ? <ImageIcon className="w-3.5 h-3.5 text-blue-500" />
+                  : v.action === 'downloading' ? <Download className="w-3.5 h-3.5 text-green-500" />
+                  : v.action === 'selecting_favourites' ? <Heart className="w-3.5 h-3.5 text-pink-500" />
+                  : <Eye className="w-3.5 h-3.5 text-gray-400" />;
+                const actionLabel = v.action === 'watching_video' ? 'Watching Video'
+                  : v.action === 'viewing_photo' ? 'Viewing Photo'
+                  : v.action === 'downloading' ? 'Downloading'
+                  : v.action === 'selecting_favourites' ? 'Picking Favourites'
+                  : 'Browsing';
+                const deviceIcon = v.device === 'Mobile' ? <Smartphone className="w-3 h-3" /> 
+                  : v.device === 'Tablet' ? <Tablet className="w-3 h-3" /> 
+                  : <Monitor className="w-3 h-3" />;
+                return (
+                  <div key={v.session_id} className="px-5 py-3 flex items-center gap-4 bg-white hover:bg-[#FAFAF9] transition-colors" data-testid={`visitor-${v.session_id}`}>
+                    <div className="w-2 h-2 rounded-full bg-green-500 shrink-0 animate-pulse" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                          {v.gallery_name}
+                        </span>
+                        {v.subfolder && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded truncate" style={{ backgroundColor: '#F5F2EB', color: '#57534E' }}>
+                            {v.subfolder}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="flex items-center gap-1 text-xs" style={{ color: '#57534E' }}>
+                          {actionIcon}
+                          <span style={{ fontFamily: 'Manrope, sans-serif' }}>{actionLabel}</span>
+                        </span>
+                        {v.detail && (
+                          <span className="text-[10px] truncate max-w-[200px]" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                            {v.detail}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="flex items-center gap-1 text-[10px]" style={{ color: '#A8A29E' }}>
+                        {deviceIcon} {v.device}
+                      </span>
+                      <span className="text-[10px] font-medium tabular-nums" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                        {mins > 0 ? `${mins} min` : 'Just joined'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </motion.div>
 
         {/* Search and Sort */}
