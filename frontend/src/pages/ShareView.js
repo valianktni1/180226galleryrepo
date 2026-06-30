@@ -297,6 +297,21 @@ function ShareViewFull() {
     return () => window.removeEventListener('keydown', handler);
   });
 
+  // Smart preloading: cache next 3 photos when navigating lightbox
+  useEffect(() => {
+    if (lightboxIndex < 0) return;
+    for (let i = 1; i <= 3; i++) {
+      const idx = lightboxIndex + i;
+      if (idx < displayFiles.length) {
+        const f = displayFiles[idx];
+        if (f.file_type === 'photo' && f.has_preview && galleryId) {
+          const img = new Image();
+          img.src = previewUrl(galleryId, f.subfolder || f._subfolder, f.filename);
+        }
+      }
+    }
+  }, [lightboxIndex, displayFiles, galleryId]);
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: t.bg }}>
       <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
@@ -864,7 +879,10 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
       {file.file_type === 'photo' ? (
         file.has_preview ? (
           <div className="relative">
-            <img src={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
+            <ProgressiveImage
+              thumbSrc={thumbUrl(galleryId, file.subfolder || file._subfolder, file.filename)}
+              fullSrc={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)}
+              alt={file.filename} className="w-full block" />
             <img src="/watermark-logo.png" alt="" className="absolute pointer-events-none" 
               style={{ bottom: '10px', right: '10px', width: '80px', opacity: 0.72 }} />
           </div>
@@ -1002,9 +1020,12 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
             </motion.div>
           ) : (
             <div className="relative" onClick={e => e.stopPropagation()}>
-              <motion.img key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-                src={galleryId && currentPhoto.has_preview ? previewUrl(galleryId, currentPhoto.subfolder || currentPhoto._subfolder, currentPhoto.filename) : ''}
-                alt={currentPhoto.filename} className="max-w-[90vw] max-h-[85vh] object-contain" />
+              <motion.div key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+                <ProgressiveImage
+                  thumbSrc={galleryId ? thumbUrl(galleryId, currentPhoto.subfolder || currentPhoto._subfolder, currentPhoto.filename) : ''}
+                  fullSrc={galleryId && currentPhoto.has_preview ? previewUrl(galleryId, currentPhoto.subfolder || currentPhoto._subfolder, currentPhoto.filename) : ''}
+                  alt={currentPhoto.filename} className="max-w-[90vw] max-h-[85vh] object-contain" />
+              </motion.div>
               {currentPhoto.file_type === 'photo' && (
                 <img src="/watermark-logo.png" alt="" className="absolute pointer-events-none"
                   style={{ bottom: '10px', right: '10px', width: '120px', opacity: 0.45 }} />
@@ -1014,6 +1035,29 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+// ─── Progressive Image: shows thumb instantly (blurred), crossfades to full preview ───
+function ProgressiveImage({ thumbSrc, fullSrc, alt, className, style }) {
+  const [currentSrc, setCurrentSrc] = useState(thumbSrc);
+  const [isFullLoaded, setIsFullLoaded] = useState(false);
+  const prevFullSrc = useRef(fullSrc);
+
+  useEffect(() => {
+    if (fullSrc === prevFullSrc.current && isFullLoaded) return;
+    prevFullSrc.current = fullSrc;
+    setCurrentSrc(thumbSrc);
+    setIsFullLoaded(false);
+    const img = new Image();
+    img.onload = () => { setCurrentSrc(fullSrc); setIsFullLoaded(true); };
+    img.src = fullSrc;
+    return () => { img.onload = null; };
+  }, [fullSrc, thumbSrc]);
+
+  return (
+    <img src={currentSrc} alt={alt} className={className}
+      style={{ ...style, filter: isFullLoaded ? 'none' : 'blur(10px)', transition: 'filter 0.4s ease-out' }} />
   );
 }
 
