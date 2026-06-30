@@ -107,21 +107,6 @@ function ShareViewFull() {
     return () => clearInterval(interval);
   }, [token, activeAlbum]);
 
-  useEffect(() => {
-    if (lightboxIndex >= 0) {
-      const photo = displayFiles[lightboxIndex];
-      if (photo?.file_type === 'video') {
-        currentActionRef.current = "watching_video";
-      } else {
-        currentActionRef.current = "viewing_photo";
-      }
-      currentDetailRef.current = photo?.filename || null;
-    } else {
-      currentActionRef.current = "browsing";
-      currentDetailRef.current = null;
-    }
-  }, [lightboxIndex, displayFiles]);
-
   const handleSubmitFavourites = async () => {
     if (favCount === 0) return;
     setSubmittingFavourites(true);
@@ -311,6 +296,23 @@ function ShareViewFull() {
   const fileFilter = (f) => permissions.allowAllFileTypes || f.file_type === 'photo' || f.file_type === 'video';
   const currentAlbumFiles = currentAlbumFilesRaw.filter(fileFilter);
   const displayFiles = showFavourites ? allFiles.filter(f => f.is_favourite && fileFilter(f)) : currentAlbumFiles;
+
+  // Track current action for heartbeat (must be after displayFiles is defined)
+  useEffect(() => {
+    if (lightboxIndex >= 0) {
+      const photo = displayFiles[lightboxIndex];
+      if (photo?.file_type === 'video') {
+        currentActionRef.current = "watching_video";
+      } else {
+        currentActionRef.current = "viewing_photo";
+      }
+      currentDetailRef.current = photo?.filename || null;
+    } else {
+      currentActionRef.current = "browsing";
+      currentDetailRef.current = null;
+    }
+  }, [lightboxIndex, displayFiles]);
+
   const favCount = allFiles.filter(f => f.is_favourite).length;
 
   // Show all subfolders from the gallery (not just ones with files)
