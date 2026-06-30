@@ -743,6 +743,25 @@ function ShareViewFull() {
               The small logo you see on your images is only visible here in your online gallery. 
               When you download your photos, they are completely watermark-free and in full quality.
             </p>
+            {permissions.allowDownloads && currentAlbumFiles.filter(f => f.file_type === 'photo').length > 0 && (
+              <button
+                data-testid="download-all-images-btn"
+                onClick={handleDownloadAlbum}
+                disabled={downloading}
+                className="mt-4 w-full flex items-center justify-center gap-3 py-3.5 rounded-sm text-sm font-bold tracking-[0.15em] uppercase transition-all duration-200"
+                style={{
+                  backgroundColor: '#D4AF37',
+                  color: '#1C1917',
+                  fontFamily: 'Manrope, sans-serif',
+                  opacity: downloading ? 0.7 : 1,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#C4A030'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#D4AF37'; }}
+              >
+                <Download className="w-5 h-5" />
+                {downloading ? "Preparing Download..." : "Download All Images"}
+              </button>
+            )}
           </div>
         )}
         {currentAlbumFiles.length === 0 ? (
