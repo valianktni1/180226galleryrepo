@@ -266,6 +266,9 @@ export const getLiveVisitors = () => apiClient.get('/admin/live-visitors');
 export const getBroadcastPreview = () => apiClient.get('/admin/broadcast-preview');
 export const sendBroadcastEmail = (data) => apiClient.post('/admin/broadcast-email', data);
 
+// Email log
+export const getEmailLog = (limit = 200) => apiClient.get(`/admin/email-log?limit=${limit}`);
+
 // Guest Upload Mode - get upload count
 export const getGuestUploadCount = (token) =>
   apiClient.get(`/share/${token}/guest-upload-count`);

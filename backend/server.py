@@ -3356,6 +3356,15 @@ WEDDINGS BY MARK &bull; CAPTURING YOUR STORY
             "notification_sent_at": datetime.now(timezone.utc).isoformat(),
             "notification_sent_to": client_email
         }})
+
+        # Log to email_log
+        await db.email_log.insert_one({
+            "type": "gallery_ready",
+            "subject": "Your Wedding Gallery is Ready",
+            "gallery_name": couple_name,
+            "recipient": client_email,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
         
         return {"success": True, "message": f"Notification sent to {client_email}"}
     except Exception as e:
@@ -3502,6 +3511,14 @@ async def send_broadcast_email(data: BroadcastEmailBody, admin=Depends(get_admin
         try:
             send_smtp_email(smtp, g["client_email"], data.subject.strip(), html_content)
             sent += 1
+            # Log each successful broadcast send
+            await db.email_log.insert_one({
+                "type": "broadcast",
+                "subject": data.subject.strip(),
+                "gallery_name": g["folder_name"],
+                "recipient": g["client_email"],
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
         except Exception as e:
             logger.warning(f"Broadcast email failed for {g['client_email']}: {e}")
             failed.append({"name": g["folder_name"], "email": g["client_email"], "error": str(e)})
@@ -3515,6 +3532,14 @@ async def send_broadcast_email(data: BroadcastEmailBody, admin=Depends(get_admin
     })
 
     return {"success": True, "sent": sent, "failed": len(failed), "failures": failed}
+
+# ─── Email Log ───
+
+@api_router.get("/admin/email-log")
+async def get_email_log(limit: int = Query(200), admin=Depends(get_admin)):
+    """Return log of all sent emails (broadcast, gallery-ready, expiry reminders)."""
+    logs = await db.email_log.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
+    return {"emails": logs, "count": len(logs)}
 
 # ─── Automated Expiry Reminder Emails ───
 
@@ -3600,6 +3625,15 @@ Speak soon,<br><br>
                 {"id": share["id"]},
                 {"$set": {"expiry_reminder_sent": True, "expiry_reminder_sent_at": now.isoformat()}}
             )
+
+            # Log to email_log
+            await db.email_log.insert_one({
+                "type": "expiry_reminder",
+                "subject": "Your Wedding Gallery Expires Soon",
+                "gallery_name": gallery["folder_name"],
+                "recipient": client_email,
+                "timestamp": now.isoformat()
+            })
 
             # Log it
             await db.activity_log.insert_one({

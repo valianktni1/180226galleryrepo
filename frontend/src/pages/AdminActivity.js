@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { getAdminActivity, getArchivedActivity, clearActivityLogs, archiveLogsNow, getActivityStats } from "@/lib/api";
+import { getAdminActivity, getArchivedActivity, clearActivityLogs, archiveLogsNow, getActivityStats, getEmailLog } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Eye, Download, Heart, RefreshCw, ChevronDown, ChevronUp, Filter, FileText, Package, Search, Trash2, Archive, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Eye, Download, Heart, RefreshCw, ChevronDown, ChevronUp, Filter, FileText, Package, Search, Trash2, Archive, AlertTriangle, Mail, Send, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -50,10 +50,12 @@ export default function AdminActivity() {
   const [filterAction, setFilterAction] = useState(searchParams.get("action") || "");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [viewMode, setViewMode] = useState("active"); // "active" or "archive"
+  const [viewMode, setViewMode] = useState("active"); // "active", "archive", or "emails"
   const [stats, setStats] = useState({ active_count: 0, archived_count: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [emailLogs, setEmailLogs] = useState([]);
+  const [emailLoading, setEmailLoading] = useState(false);
   const galleryFilter = searchParams.get("gallery_id") || "";
 
   const loadActivity = async () => {
@@ -77,8 +79,21 @@ export default function AdminActivity() {
     } catch { /* ignore */ }
   };
 
+  const loadEmailLog = async () => {
+    setEmailLoading(true);
+    try {
+      const res = await getEmailLog();
+      setEmailLogs(res.data.emails || []);
+    } catch { setEmailLogs([]); }
+    finally { setEmailLoading(false); }
+  };
+
   useEffect(() => {
-    loadActivity();
+    if (viewMode === "emails") {
+      loadEmailLog();
+    } else {
+      loadActivity();
+    }
     loadStats();
   }, [filterAction, searchQuery, viewMode]);
 
@@ -200,6 +215,16 @@ export default function AdminActivity() {
             >
               <Archive className="w-3 h-3" /> Archive ({stats.archived_count})
             </button>
+            <button
+              onClick={() => setViewMode("emails")}
+              className={`px-4 py-1.5 text-xs font-semibold tracking-wider uppercase rounded-sm transition-colors flex items-center gap-1.5 ${
+                viewMode === "emails" ? "bg-white shadow-sm text-[#1C1917]" : "text-[#A8A29E] hover:text-[#57534E]"
+              }`}
+              style={{ fontFamily: 'Manrope, sans-serif' }}
+              data-testid="tab-emails"
+            >
+              <Mail className="w-3 h-3" /> Emails
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleArchiveNow} disabled={archiving}
@@ -242,6 +267,75 @@ export default function AdminActivity() {
           )}
         </AnimatePresence>
 
+        {/* Email Log View */}
+        {viewMode === "emails" ? (
+          <>
+            <div className="mb-6 p-4 rounded-sm border flex items-center gap-3" style={{ backgroundColor: 'rgba(212,175,55,0.06)', borderColor: 'rgba(212,175,55,0.25)' }}>
+              <Mail className="w-4 h-4 shrink-0" style={{ color: '#D4AF37' }} />
+              <p className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                A record of all emails sent — broadcast messages, gallery-ready notifications, and automated expiry reminders.
+              </p>
+            </div>
+            {emailLoading ? (
+              <div className="text-center py-20 text-gray-500">Loading email log...</div>
+            ) : emailLogs.length === 0 ? (
+              <div className="text-center py-20 text-gray-500">
+                <Mail className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p>No emails sent yet</p>
+                <p className="text-sm mt-2">Emails will appear here when you send broadcasts, notify couples, or expiry reminders go out</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg border shadow-sm overflow-hidden overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date &amp; Time</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Couple / Gallery</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sent To</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {emailLogs.map((email, i) => {
+                      const typeIcon = email.type === "broadcast" ? <Send className="w-3.5 h-3.5 text-blue-500" />
+                        : email.type === "gallery_ready" ? <Bell className="w-3.5 h-3.5 text-green-500" />
+                        : <Mail className="w-3.5 h-3.5 text-amber-500" />;
+                      const typeLabel = email.type === "broadcast" ? "Broadcast"
+                        : email.type === "gallery_ready" ? "Gallery Ready"
+                        : "Expiry Reminder";
+                      const typeBg = email.type === "broadcast" ? "bg-blue-50 text-blue-700"
+                        : email.type === "gallery_ready" ? "bg-green-50 text-green-700"
+                        : "bg-amber-50 text-amber-700";
+                      return (
+                        <tr key={i} className="hover:bg-gray-50" data-testid={`email-row-${i}`}>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            {formatTimestamp(email.timestamp)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium ${typeBg}`}>
+                              {typeIcon} {typeLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                            {email.subject}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                            {email.gallery_name}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-500 font-mono">
+                            {email.recipient}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+        <>
         {/* Archive info banner */}
         {viewMode === "archive" && (
           <div className="mb-6 p-4 rounded-sm border flex items-center gap-3" style={{ backgroundColor: 'rgba(212,175,55,0.06)', borderColor: 'rgba(212,175,55,0.25)' }}>
@@ -349,6 +443,8 @@ export default function AdminActivity() {
               </tbody>
             </table>
           </div>
+        )}
+        </>
         )}
       </main>
     </div>
