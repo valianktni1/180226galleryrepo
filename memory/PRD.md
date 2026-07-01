@@ -49,6 +49,7 @@ User deploys on TrueNAS via Dockge:
 - [x] Broadcast Email system — Dashboard button opens dialog with recipients preview, subject/body fields, sends branded HTML to all couples with emails (2026-06-30)
 - [x] Automated Expiry Reminder Emails — Daily background task checks for main share links expiring within 7 days, auto-sends branded reminder email to couples (2026-06-30)
 - [x] Reusable SMTP helper (send_smtp_email) and branded email template wrapper (build_branded_email)
+- [x] Email Log tracking — all sent emails (broadcast, gallery-ready, expiry reminders) logged to db.email_log with "Emails" tab on Activity page (2026-06-30)
 
 ## In Progress
 None
