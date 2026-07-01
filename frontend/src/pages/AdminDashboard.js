@@ -12,10 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail
 } from "@/lib/api";
 
 export default function AdminDashboard() {
@@ -33,6 +33,10 @@ export default function AdminDashboard() {
   const [newTemplate, setNewTemplate] = useState({ name: "", subfolders: "" });
   const [backingUp, setBackingUp] = useState(false);
   const [liveVisitors, setLiveVisitors] = useState([]);
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [broadcastForm, setBroadcastForm] = useState({ subject: "", body: "" });
+  const [broadcastRecipients, setBroadcastRecipients] = useState([]);
+  const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -74,6 +78,43 @@ export default function AdminDashboard() {
       toast.error(err.response?.data?.detail || "Backup failed");
     } finally {
       setBackingUp(false);
+    }
+  };
+
+  const handleOpenBroadcast = async () => {
+    setShowBroadcast(true);
+    try {
+      const res = await getBroadcastPreview();
+      setBroadcastRecipients(res.data.recipients || []);
+    } catch {
+      setBroadcastRecipients([]);
+    }
+  };
+
+  const handleSendBroadcast = async () => {
+    if (!broadcastForm.subject.trim() || !broadcastForm.body.trim()) {
+      toast.error("Please fill in both subject and message");
+      return;
+    }
+    if (broadcastRecipients.length === 0) {
+      toast.error("No couples have email addresses set");
+      return;
+    }
+    setSendingBroadcast(true);
+    try {
+      const res = await sendBroadcastEmail(broadcastForm);
+      const { sent, failed } = res.data;
+      if (failed > 0) {
+        toast.success(`Email sent to ${sent} couple(s), ${failed} failed`);
+      } else {
+        toast.success(`Email sent to ${sent} couple(s) successfully!`);
+      }
+      setShowBroadcast(false);
+      setBroadcastForm({ subject: "", body: "" });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send broadcast");
+    } finally {
+      setSendingBroadcast(false);
     }
   };
 
@@ -149,6 +190,9 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-2">
             <Button data-testid="backup-btn" variant="ghost" onClick={handleBackup} disabled={backingUp} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <HardDrive className={`w-4 h-4 ${backingUp ? 'animate-pulse' : ''}`} /> {backingUp ? 'Backing up...' : 'Backup'}
+            </Button>
+            <Button data-testid="broadcast-email-btn" variant="ghost" onClick={handleOpenBroadcast} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+              <Mail className="w-4 h-4" /> Broadcast
             </Button>
             <Button data-testid="manage-templates-btn" variant="ghost" onClick={() => setShowTemplates(true)} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Layout className="w-4 h-4" /> Templates
@@ -461,6 +505,66 @@ export default function AdminDashboard() {
               Add Template
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Broadcast Email Dialog */}
+      <Dialog open={showBroadcast} onOpenChange={setShowBroadcast}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Broadcast Email</DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              Send an email to all couples who have an email address on their gallery
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {/* Recipients preview */}
+            <div className="p-3 rounded-sm border" style={{ backgroundColor: '#FAFAF9', borderColor: '#F5F2EB' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <Users className="w-3.5 h-3.5" style={{ color: '#D4AF37' }} />
+                <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: '#57534E' }}>
+                  {broadcastRecipients.length} Recipient{broadcastRecipients.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {broadcastRecipients.length > 0 ? (
+                <div className="max-h-24 overflow-y-auto space-y-1">
+                  {broadcastRecipients.map(r => (
+                    <div key={r.id} className="flex items-center justify-between text-xs" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>
+                      <span className="truncate">{r.folder_name}</span>
+                      <span className="text-[#A8A29E] truncate ml-2">{r.client_email}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                  No couples have email addresses set. Add emails to gallery settings first.
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Subject</Label>
+              <Input data-testid="broadcast-subject" value={broadcastForm.subject}
+                onChange={e => setBroadcastForm(f => ({...f, subject: e.target.value}))}
+                placeholder="e.g. Happy New Year from Weddings By Mark"
+                className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Message</Label>
+              <textarea data-testid="broadcast-body" value={broadcastForm.body}
+                onChange={e => setBroadcastForm(f => ({...f, body: e.target.value}))}
+                placeholder="Write your message here..."
+                rows={8}
+                className="w-full px-3 py-2 text-sm border rounded-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
+                style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button data-testid="send-broadcast-btn" onClick={handleSendBroadcast} 
+              disabled={sendingBroadcast || broadcastRecipients.length === 0}
+              className="w-full bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-8 py-5 text-xs tracking-[0.15em] uppercase font-bold gap-2">
+              <Send className="w-4 h-4" />
+              {sendingBroadcast ? "Sending..." : `Send to ${broadcastRecipients.length} Couple${broadcastRecipients.length !== 1 ? 's' : ''}`}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

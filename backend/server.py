@@ -22,6 +22,7 @@ import bcrypt
 from PIL import Image
 import aiofiles
 import qrcode
+import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import pyotp
@@ -3404,13 +3405,245 @@ async def run_auto_archive():
     
     return result.deleted_count
 
+# ─── Reusable SMTP Send Helper ───
+def send_smtp_email(smtp: dict, to_email: str, subject: str, html_body: str):
+    """Send an email using stored SMTP settings. Runs synchronously (use in thread/executor)."""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = formataddr((smtp.get("sender_name", "Weddings By Mark"), smtp["smtp_email"]))
+    msg["To"] = to_email
+    msg.attach(MIMEText(html_body, "html"))
+
+    if smtp["smtp_port"] == 465:
+        server = smtplib.SMTP_SSL(smtp["smtp_server"], smtp["smtp_port"], timeout=15)
+    else:
+        server = smtplib.SMTP(smtp["smtp_server"], smtp["smtp_port"], timeout=15)
+        server.starttls()
+    server.login(smtp["smtp_email"], smtp["smtp_password"])
+    server.send_message(msg)
+    server.quit()
+
+def build_branded_email(content_html: str) -> str:
+    """Wrap content in the branded Weddings By Mark email template."""
+    return f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#FDFCF8;font-family:Georgia,'Times New Roman',serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FDFCF8;padding:40px 20px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border:1px solid #E8E4DC;max-width:600px;">
+<tr><td style="background-color:#1C1917;padding:30px 40px;text-align:center;">
+<h1 style="color:#D4AF37;font-family:Georgia,'Times New Roman',serif;font-size:22px;margin:0;font-weight:normal;letter-spacing:2px;">
+Weddings By Mark
+</h1>
+</td></tr>
+<tr><td style="padding:40px;">
+{content_html}
+</td></tr>
+<tr><td style="background-color:#1C1917;padding:20px 40px;text-align:center;">
+<p style="color:#A8A29E;font-size:12px;margin:0;letter-spacing:1px;">
+WEDDINGS BY MARK &bull; CAPTURING YOUR STORY
+</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+# ─── Broadcast Email ───
+
+class BroadcastEmailBody(BaseModel):
+    subject: str
+    body: str
+
+@api_router.get("/admin/broadcast-preview")
+async def broadcast_preview(admin=Depends(get_admin)):
+    """Return list of couples who would receive a broadcast email."""
+    galleries = await db.galleries.find(
+        {"client_email": {"$exists": True, "$ne": "", "$ne": None}},
+        {"_id": 0, "id": 1, "folder_name": 1, "client_email": 1}
+    ).to_list(500)
+    return {"recipients": galleries, "count": len(galleries)}
+
+@api_router.post("/admin/broadcast-email")
+async def send_broadcast_email(data: BroadcastEmailBody, admin=Depends(get_admin)):
+    """Send an email to all couples with an email address on their gallery."""
+    if not data.subject.strip() or not data.body.strip():
+        raise HTTPException(status_code=400, detail="Subject and body are required")
+
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        raise HTTPException(status_code=400, detail="SMTP not configured. Go to Settings > Email to set up.")
+    smtp = smtp_doc["value"]
+
+    galleries = await db.galleries.find(
+        {"client_email": {"$exists": True, "$ne": "", "$ne": None}},
+        {"_id": 0, "folder_name": 1, "client_email": 1}
+    ).to_list(500)
+
+    if not galleries:
+        raise HTTPException(status_code=400, detail="No couples have email addresses set on their galleries")
+
+    # Convert plain text body to HTML paragraphs
+    body_html = ""
+    for line in data.body.strip().split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            body_html += '<br>'
+        else:
+            body_html += f'<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">{stripped}</p>\n'
+
+    html_content = build_branded_email(body_html)
+
+    sent = 0
+    failed = []
+    for g in galleries:
+        try:
+            send_smtp_email(smtp, g["client_email"], data.subject.strip(), html_content)
+            sent += 1
+        except Exception as e:
+            logger.warning(f"Broadcast email failed for {g['client_email']}: {e}")
+            failed.append({"name": g["folder_name"], "email": g["client_email"], "error": str(e)})
+
+    # Log the broadcast
+    await db.activity_log.insert_one({
+        "action": "broadcast_email",
+        "details": f"Broadcast sent: '{data.subject}' to {sent} couples",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "admin": True
+    })
+
+    return {"success": True, "sent": sent, "failed": len(failed), "failures": failed}
+
+# ─── Automated Expiry Reminder Emails ───
+
+async def check_expiry_reminders():
+    """Check for main share links expiring within 7 days and send reminders."""
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        return 0
+
+    smtp = smtp_doc["value"]
+    now = datetime.now(timezone.utc)
+    remind_start = now + timedelta(days=6)
+    remind_end = now + timedelta(days=8)
+
+    # Find active, non-guest-upload shares with expiry dates
+    shares = await db.shares.find({
+        "is_active": True,
+        "guest_upload_mode": {"$ne": True},
+        "expires_at": {"$exists": True, "$ne": None},
+        "expiry_reminder_sent": {"$ne": True}
+    }, {"_id": 0}).to_list(500)
+
+    sent_count = 0
+    for share in shares:
+        try:
+            expiry_str = share.get("expires_at", "")
+            if not expiry_str:
+                continue
+            expiry_date = datetime.fromisoformat(expiry_str.replace('Z', '+00:00'))
+
+            # Only send if expiring between 6-8 days from now
+            if not (remind_start <= expiry_date <= remind_end):
+                continue
+
+            # Get the gallery for this share
+            gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+            if not gallery:
+                continue
+
+            client_email = gallery.get("client_email", "")
+            if not client_email:
+                continue
+
+            expiry_formatted = expiry_date.strftime("%d %B %Y")
+
+            # Build the expiry reminder email with the user's exact wording
+            reminder_html = f"""
+<p style="font-size:15px;color:#57534E;margin:0 0 15px 0;line-height:1.8;">
+Hey Guys,
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 15px 0;line-height:1.8;">
+I hope you're both doing really well!
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 15px 0;line-height:1.8;">
+This is just a little reminder to let you know that your online wedding gallery is due to expire in <strong>one week's time</strong>.
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 15px 0;line-height:1.8;">
+If you haven't already done so, now's the perfect time to download everything from your gallery and save it somewhere safe. That includes all of your high-resolution photographs and, if your package included them, your wedding videos too.
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 15px 0;line-height:1.8;">
+Although your gallery has been available for quite a while, I know how quickly life gets busy, so I didn't want you to miss the opportunity to keep everything before the gallery closes.
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 15px 0;line-height:1.8;">
+If you've already downloaded everything, then you're all set and you can simply ignore this email.
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 15px 0;line-height:1.8;">
+If you need a little more time for any reason, just hit reply and let me know. I'm always happy to extend your gallery for a short while if it'll help.
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 25px 0;line-height:1.8;">
+Thank you once again for choosing me to capture your wedding day. It really was a privilege to be part of it, and I hope your photographs and films continue to bring back all those wonderful memories for many years to come.
+</p>
+<p style="font-size:15px;color:#1C1917;margin:0;line-height:1.8;">
+Speak soon,<br><br>
+<strong>Mark</strong><br>
+<em>Weddings by Mark</em>
+</p>"""
+
+            html_body = build_branded_email(reminder_html)
+            send_smtp_email(smtp, client_email, "Your Wedding Gallery Expires Soon", html_body)
+
+            # Mark as sent so we don't send again
+            await db.shares.update_one(
+                {"id": share["id"]},
+                {"$set": {"expiry_reminder_sent": True, "expiry_reminder_sent_at": now.isoformat()}}
+            )
+
+            # Log it
+            await db.activity_log.insert_one({
+                "action": "expiry_reminder",
+                "gallery_id": share["gallery_id"],
+                "details": f"Expiry reminder sent to {client_email} (gallery expires {expiry_formatted})",
+                "timestamp": now.isoformat(),
+                "admin": True
+            })
+
+            sent_count += 1
+            logger.info(f"Expiry reminder sent to {client_email} for gallery '{gallery['folder_name']}' (expires {expiry_formatted})")
+
+        except Exception as e:
+            logger.warning(f"Failed to send expiry reminder for share {share.get('id')}: {e}")
+
+    if sent_count > 0:
+        logger.info(f"Sent {sent_count} expiry reminder email(s)")
+    return sent_count
+
+async def expiry_reminder_loop():
+    """Background loop that checks for expiring shares once daily."""
+    while True:
+        try:
+            await check_expiry_reminders()
+        except Exception as e:
+            logger.warning(f"Expiry reminder check failed: {e}")
+        # Check once every 24 hours
+        await asyncio.sleep(86400)
+
 @app.on_event("startup")
 async def startup_auto_archive():
-    """Check for old logs on startup and archive if needed."""
+    """Check for old logs on startup and archive if needed. Also start expiry reminder loop."""
     try:
         await run_auto_archive()
     except Exception as e:
         logger.warning(f"Auto-archive check failed: {e}")
+    # Run expiry check once at startup
+    try:
+        await check_expiry_reminders()
+    except Exception as e:
+        logger.warning(f"Startup expiry reminder check failed: {e}")
+    # Start daily background loop
+    asyncio.create_task(expiry_reminder_loop())
 
 app.include_router(api_router)
 

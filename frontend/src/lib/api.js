@@ -262,6 +262,10 @@ export const sendHeartbeat = (token, data) =>
 // Admin live visitors
 export const getLiveVisitors = () => apiClient.get('/admin/live-visitors');
 
+// Broadcast email
+export const getBroadcastPreview = () => apiClient.get('/admin/broadcast-preview');
+export const sendBroadcastEmail = (data) => apiClient.post('/admin/broadcast-email', data);
+
 // Guest Upload Mode - get upload count
 export const getGuestUploadCount = (token) =>
   apiClient.get(`/share/${token}/guest-upload-count`);
