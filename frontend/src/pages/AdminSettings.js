@@ -13,12 +13,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Key, Package, Plus, Pencil, Trash2, Printer, Eye, Check, Film, Shield, Copy, AlertTriangle, Mail, Send
+  ArrowLeft, Key, Package, Plus, Pencil, Trash2, Printer, Eye, Check, Film, Shield, Copy, AlertTriangle, Mail, Send, FileText
 } from "lucide-react";
 import {
   changePassword, getPrintSizes, createPrintSize, updatePrintSize, deletePrintSize,
   getPrintOrders, updateOrderStatus, getCompressionSetting, setCompressionSetting,
-  get2FAStatus, setup2FA, enable2FA, disable2FA, getSMTPSettings, saveSMTPSettings, testSMTP
+  get2FAStatus, setup2FA, enable2FA, disable2FA, getSMTPSettings, saveSMTPSettings, testSMTP,
+  getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate
 } from "@/lib/api";
 
 export default function AdminSettings() {
@@ -68,12 +69,21 @@ export default function AdminSettings() {
   const [savingSMTP, setSavingSMTP] = useState(false);
   const [testingSMTP, setTestingSMTP] = useState(false);
 
+  // Email Templates
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [templateForm, setTemplateForm] = useState({ name: "", subject: "", body: "" });
+  const [deleteTemplateTarget, setDeleteTemplateTarget] = useState(null);
+
   useEffect(() => {
     if (activeTab === "print-sizes") loadPrintSizes();
     if (activeTab === "orders") loadOrders();
     if (activeTab === "video") loadCompressionSetting();
     if (activeTab === "2fa") load2FAStatus();
     if (activeTab === "email") loadSMTPSettings();
+    if (activeTab === "templates") loadEmailTemplates();
   }, [activeTab]);
 
   const loadPrintSizes = async () => {
@@ -146,6 +156,57 @@ export default function AdminSettings() {
     } catch (err) {
       toast.error(err.response?.data?.detail || "SMTP test failed");
     } finally { setTestingSMTP(false); }
+  };
+
+  // Email Template functions
+  const loadEmailTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const res = await getEmailTemplates();
+      setEmailTemplates(res.data);
+    } catch (e) { /* ignore */ }
+    finally { setLoadingTemplates(false); }
+  };
+
+  const openNewTemplate = () => {
+    setEditingTemplate(null);
+    setTemplateForm({ name: "", subject: "", body: "" });
+    setShowTemplateDialog(true);
+  };
+
+  const openEditTemplate = (t) => {
+    setEditingTemplate(t);
+    setTemplateForm({ name: t.name, subject: t.subject, body: t.body });
+    setShowTemplateDialog(true);
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!templateForm.name.trim() || !templateForm.subject.trim() || !templateForm.body.trim()) {
+      toast.error("All fields are required");
+      return;
+    }
+    try {
+      if (editingTemplate) {
+        await updateEmailTemplate(editingTemplate.id, templateForm);
+        toast.success("Template updated");
+      } else {
+        await createEmailTemplate(templateForm);
+        toast.success("Template created");
+      }
+      setShowTemplateDialog(false);
+      loadEmailTemplates();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to save template");
+    }
+  };
+
+  const handleDeleteTemplate = async () => {
+    try {
+      await deleteEmailTemplate(deleteTemplateTarget.id);
+      toast.success("Template deleted");
+      setDeleteTemplateTarget(null);
+      loadEmailTemplates();
+    } catch (e) { toast.error("Failed to delete"); }
   };
 
   // 2FA functions
@@ -333,6 +394,7 @@ export default function AdminSettings() {
             { id: "password", label: "Change Password", icon: Key },
             { id: "2fa", label: "Two-Factor Auth", icon: Shield },
             { id: "email", label: "Email Settings", icon: Mail },
+            { id: "templates", label: "Email Templates", icon: FileText },
             { id: "video", label: "Video Compression", icon: Film },
             { id: "print-sizes", label: "Print Sizes & Prices", icon: Printer },
             { id: "orders", label: "Print Orders", icon: Package }
@@ -400,7 +462,7 @@ export default function AdminSettings() {
                       </h3>
                       <p className="text-sm text-[#57534E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
                         If you lose your phone, you can use these codes to log in. Each code can only be used once.
-                        <strong> Save them somewhere safe — you won't see them again.</strong>
+                        <strong> Save them somewhere safe — you won&apos;t see them again.</strong>
                       </p>
                     </div>
                   </div>
@@ -420,7 +482,7 @@ export default function AdminSettings() {
                     </Button>
                     <Button onClick={() => setRecoveryCodes(null)} variant="outline" 
                       className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold">
-                      I've Saved Them
+                      I&apos;ve Saved Them
                     </Button>
                   </div>
                 </div>
@@ -449,7 +511,7 @@ export default function AdminSettings() {
                 <div className="border rounded-sm p-6 border-red-200 bg-red-50/50">
                   <h4 className="font-medium mb-2 text-red-800" style={{ fontFamily: 'Manrope, sans-serif' }}>Disable 2FA</h4>
                   <p className="text-sm text-red-700 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                    This will remove the extra security from your account. You'll need to enter a code to confirm.
+                    This will remove the extra security from your account. You&apos;ll need to enter a code to confirm.
                   </p>
                   <Button onClick={() => setShowDisableConfirm(true)} data-testid="disable-2fa-btn"
                     className="bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold">
@@ -473,7 +535,7 @@ export default function AdminSettings() {
                   </div>
 
                   <p className="text-xs text-[#A8A29E] text-center mb-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                    Can't scan? Enter this code manually:
+                    Can&apos;t scan? Enter this code manually:
                   </p>
                   <code className="block text-center text-sm font-mono font-bold p-2 rounded-sm select-all" 
                     style={{ backgroundColor: '#F5F2EB' }} data-testid="2fa-manual-secret">
@@ -486,7 +548,7 @@ export default function AdminSettings() {
                     Step 2: Enter Verification Code
                   </h3>
                   <p className="text-sm text-[#57534E] mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                    Enter the 6-digit code shown in Google Authenticator to verify it's working.
+                    Enter the 6-digit code shown in Google Authenticator to verify it&apos;s working.
                   </p>
                   
                   <div className="flex gap-3">
@@ -527,7 +589,7 @@ export default function AdminSettings() {
                           Two-Factor Authentication
                         </h3>
                         <p className="text-sm text-[#57534E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                          Add an extra layer of security to your account. After enabling, you'll need your password 
+                          Add an extra layer of security to your account. After enabling, you&apos;ll need your password 
                           AND a code from the Google Authenticator app on your phone to log in.
                         </p>
                       </div>
@@ -547,7 +609,7 @@ export default function AdminSettings() {
                       <li>1. Enable 2FA and scan a QR code</li>
                       <li>2. Google Authenticator generates a new code every 30 seconds</li>
                       <li>3. Enter the code after your password when logging in</li>
-                      <li>4. Even if someone knows your password, they can't get in</li>
+                      <li>4. Even if someone knows your password, they can&apos;t get in</li>
                     </ul>
                   </div>
                   <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
@@ -634,11 +696,71 @@ export default function AdminSettings() {
                   <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>How it works</h4>
                   <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
                     <li>1. Enter your email SMTP details above (one-time setup)</li>
-                    <li>2. Add a couple's email when creating or editing a gallery</li>
-                    <li>3. When the gallery is ready, press "Notify Couple" — they get a beautiful branded email from your address</li>
+                    <li>2. Add a couple&apos;s email when creating or editing a gallery</li>
+                    <li>3. When the gallery is ready, press &ldquo;Notify Couple&rdquo; — they get a beautiful branded email from your address</li>
                     <li>4. The test button sends a test email to yourself to verify it works</li>
                   </ul>
                 </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Email Templates Tab */}
+        {activeTab === "templates" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <p className="text-sm text-[#57534E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                  Create reusable email templates. Use <code className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#F5F2EB' }}>{'{couple_name}'}</code> and <code className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#F5F2EB' }}>{'{gallery_link}'}</code> as tokens — they auto-fill when you send.
+                </p>
+              </div>
+              <Button onClick={openNewTemplate} data-testid="add-template-btn"
+                className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 shrink-0 ml-4">
+                <Plus className="w-3.5 h-3.5" /> New Template
+              </Button>
+            </div>
+
+            {loadingTemplates ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : emailTemplates.length === 0 ? (
+              <div className="text-center py-12 border rounded-sm" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
+                <FileText className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" />
+                <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>No templates yet</p>
+                <p className="text-sm mt-1 text-[#A8A29E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                  Create your first template to start sending quick personalised emails
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {emailTemplates.map(t => (
+                  <div key={t.id} className="border rounded-sm p-4 bg-white hover:shadow-sm transition-shadow" style={{ borderColor: 'rgba(212,175,55,0.15)' }}
+                    data-testid={`template-${t.id}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                          {t.name}
+                        </h4>
+                        <p className="text-xs mt-0.5" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                          Subject: {t.subject}
+                        </p>
+                        <p className="text-xs mt-1 line-clamp-2" style={{ color: '#78716C', fontFamily: 'Manrope, sans-serif' }}>
+                          {t.body}
+                        </p>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => openEditTemplate(t)} className="p-1.5 text-[#57534E] hover:text-[#1C1917]">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => setDeleteTemplateTarget(t)} className="p-1.5 text-[#9F1239]">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </motion.div>
@@ -694,7 +816,7 @@ export default function AdminSettings() {
                   </div>
                   <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
                     <Check className="w-6 h-6 text-green-600 mb-2" />
-                    <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>What's protected</h4>
+                    <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>What&apos;s protected</h4>
                     <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
                       <li>• Your professional uploads are NEVER compressed</li>
                       <li>• Only affects new guest uploads</li>
@@ -905,7 +1027,7 @@ export default function AdminSettings() {
         <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
-              Delete "{deleteSizeTarget?.name}"?
+              Delete &ldquo;{deleteSizeTarget?.name}&rdquo;?
             </AlertDialogTitle>
             <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
               This will remove this print size option from the shop.
@@ -1019,6 +1141,73 @@ export default function AdminSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Email Template Create/Edit Dialog */}
+      <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+              {editingTemplate ? "Edit Template" : "New Email Template"}
+            </DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              Use <code className="text-xs px-1 py-0.5 rounded bg-gray-100">{'{couple_name}'}</code> and <code className="text-xs px-1 py-0.5 rounded bg-gray-100">{'{gallery_link}'}</code> — they auto-fill when sending.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Template Name</Label>
+              <Input data-testid="template-name" value={templateForm.name}
+                onChange={e => setTemplateForm(f => ({...f, name: e.target.value}))}
+                placeholder="e.g. Booking Confirmation, Thank You, Payment Reminder"
+                className="border-[#D4D4D8] rounded-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Subject Line</Label>
+              <Input data-testid="template-subject" value={templateForm.subject}
+                onChange={e => setTemplateForm(f => ({...f, subject: e.target.value}))}
+                placeholder="e.g. Booking Confirmed — {couple_name}"
+                className="border-[#D4D4D8] rounded-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Email Body</Label>
+              <textarea data-testid="template-body" value={templateForm.body}
+                onChange={e => setTemplateForm(f => ({...f, body: e.target.value}))}
+                placeholder={"Hey {couple_name},\n\nThank you for booking with Weddings By Mark...\n\nSpeak soon,\nMark"}
+                rows={10}
+                className="w-full px-3 py-2 text-sm border rounded-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
+                style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowTemplateDialog(false)} className="rounded-sm">Cancel</Button>
+            <Button onClick={handleSaveTemplate} data-testid="save-template-btn"
+              className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 text-xs tracking-wider uppercase font-bold">
+              {editingTemplate ? "Update Template" : "Create Template"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Template Confirmation */}
+      <AlertDialog open={!!deleteTemplateTarget} onOpenChange={() => setDeleteTemplateTarget(null)}>
+        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+              Delete template?
+            </AlertDialogTitle>
+            <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              This will permanently remove the &ldquo;{deleteTemplateTarget?.name}&rdquo; template.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-sm">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTemplate}
+              className="bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm text-xs tracking-wider uppercase font-bold">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

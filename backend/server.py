@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, Form, Query, Header, Request
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, Form, Query, Header, Request, Body
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -3553,6 +3553,115 @@ async def get_email_log(limit: int = Query(200), admin=Depends(get_admin)):
     """Return log of all sent emails (broadcast, gallery-ready, expiry reminders)."""
     logs = await db.email_log.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
     return {"emails": logs, "count": len(logs)}
+
+# ─── Email Templates ───
+
+class EmailTemplateBody(BaseModel):
+    name: str
+    subject: str
+    body: str
+
+@api_router.get("/admin/email-templates")
+async def list_email_templates(admin=Depends(get_admin)):
+    templates = await db.email_templates.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return templates
+
+@api_router.post("/admin/email-templates")
+async def create_email_template(data: EmailTemplateBody, admin=Depends(get_admin)):
+    if not data.name.strip() or not data.subject.strip() or not data.body.strip():
+        raise HTTPException(status_code=400, detail="Name, subject and body are required")
+    template = {
+        "id": str(uuid.uuid4()),
+        "name": data.name.strip(),
+        "subject": data.subject.strip(),
+        "body": data.body.strip(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.email_templates.insert_one(template)
+    template.pop("_id", None)
+    return template
+
+@api_router.put("/admin/email-templates/{template_id}")
+async def update_email_template(template_id: str, data: EmailTemplateBody, admin=Depends(get_admin)):
+    if not data.name.strip() or not data.subject.strip() or not data.body.strip():
+        raise HTTPException(status_code=400, detail="Name, subject and body are required")
+    result = await db.email_templates.update_one(
+        {"id": template_id},
+        {"$set": {"name": data.name.strip(), "subject": data.subject.strip(), "body": data.body.strip()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"success": True}
+
+@api_router.delete("/admin/email-templates/{template_id}")
+async def delete_email_template(template_id: str, admin=Depends(get_admin)):
+    result = await db.email_templates.delete_one({"id": template_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"success": True}
+
+class SendTemplateEmailBody(BaseModel):
+    template_id: str
+
+@api_router.post("/admin/galleries/{gallery_id}/send-template-email")
+async def send_template_email(gallery_id: str, data: SendTemplateEmailBody, admin=Depends(get_admin)):
+    template_id = data.template_id
+    """Send an email template to the couple on this gallery, with token replacement."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    client_email = gallery.get("client_email", "")
+    if not client_email:
+        raise HTTPException(status_code=400, detail="No email address set for this gallery")
+
+    template = await db.email_templates.find_one({"id": template_id}, {"_id": 0})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        raise HTTPException(status_code=400, detail="SMTP not configured. Go to Settings > Email to set up.")
+    smtp = smtp_doc["value"]
+
+    # Find the first active share link for this gallery
+    share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True, "guest_upload_mode": {"$ne": True}}, {"_id": 0})
+    gallery_link = ""
+    if share:
+        gallery_link = share.get("custom_slug") or share.get("token", "")
+
+    couple_name = gallery.get("folder_name", "")
+
+    # Token replacement in subject and body
+    subject = template["subject"].replace("{couple_name}", couple_name).replace("{gallery_link}", gallery_link)
+    body_text = template["body"].replace("{couple_name}", couple_name).replace("{gallery_link}", gallery_link)
+
+    # Convert body to HTML
+    body_html = ""
+    for line in body_text.strip().split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            body_html += '<br>'
+        else:
+            body_html += f'<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">{stripped}</p>\n'
+
+    html_content = build_branded_email(body_html)
+
+    try:
+        send_smtp_email(smtp, client_email, subject, html_content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to send email: {str(e)}")
+
+    # Log to email_log
+    await db.email_log.insert_one({
+        "type": "template",
+        "subject": subject,
+        "gallery_name": couple_name,
+        "recipient": client_email,
+        "template_name": template["name"],
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"success": True, "message": f"Email sent to {client_email}"}
 
 # ─── Automated Expiry Reminder Emails ───
 

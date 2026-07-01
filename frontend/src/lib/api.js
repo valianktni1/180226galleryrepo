@@ -269,6 +269,13 @@ export const sendBroadcastEmail = (data) => apiClient.post('/admin/broadcast-ema
 // Email log
 export const getEmailLog = (limit = 200) => apiClient.get(`/admin/email-log?limit=${limit}`);
 
+// Email templates
+export const getEmailTemplates = () => apiClient.get('/admin/email-templates');
+export const createEmailTemplate = (data) => apiClient.post('/admin/email-templates', data);
+export const updateEmailTemplate = (id, data) => apiClient.put(`/admin/email-templates/${id}`, data);
+export const deleteEmailTemplate = (id) => apiClient.delete(`/admin/email-templates/${id}`);
+export const sendTemplateEmail = (galleryId, templateId) => apiClient.post(`/admin/galleries/${galleryId}/send-template-email`, { template_id: templateId });
+
 // Guest Upload Mode - get upload count
 export const getGuestUploadCount = (token) =>
   apiClient.get(`/share/${token}/guest-upload-count`);

@@ -27,7 +27,7 @@ import {
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
-  updateGallery, sendGalleryNotification
+  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail
 } from "@/lib/api";
 
 export default function AdminGalleryDetail() {
@@ -54,6 +54,12 @@ export default function AdminGalleryDetail() {
   const [editingEmail, setEditingEmail] = useState(false);
   const [clientEmail, setClientEmail] = useState("");
   const thumbPollingRef = useRef(null);
+
+  // Send Template Email
+  const [showSendEmail, setShowSendEmail] = useState(false);
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [sendingTemplate, setSendingTemplate] = useState(false);
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -425,6 +431,35 @@ export default function AdminGalleryDetail() {
     } finally { setSendingNotification(false); }
   };
 
+  const handleOpenSendEmail = async () => {
+    if (!clientEmail) {
+      setEditingEmail(true);
+      toast.error("Add the couple's email first");
+      return;
+    }
+    setShowSendEmail(true);
+    setSelectedTemplateId("");
+    try {
+      const res = await getEmailTemplates();
+      setEmailTemplates(res.data);
+    } catch (e) { setEmailTemplates([]); }
+  };
+
+  const handleSendTemplateEmail = async () => {
+    if (!selectedTemplateId) {
+      toast.error("Select a template");
+      return;
+    }
+    setSendingTemplate(true);
+    try {
+      const res = await sendTemplateEmail(id, selectedTemplateId);
+      toast.success(res.data.message);
+      setShowSendEmail(false);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send email");
+    } finally { setSendingTemplate(false); }
+  };
+
   if (!gallery) return null;
 
   const currentFiles = files.filter(f => f.subfolder === activeTab);
@@ -468,6 +503,10 @@ export default function AdminGalleryDetail() {
             <Button data-testid="notify-couple-btn" onClick={handleNotifyCouple} disabled={sendingNotification}
               variant="outline" className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37]/10">
               <Mail className="w-3.5 h-3.5" /> {sendingNotification ? "Sending..." : "Notify Couple"}
+            </Button>
+            <Button data-testid="send-template-email-btn" onClick={handleOpenSendEmail}
+              variant="outline" className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#57534E] text-[#57534E] hover:bg-[#57534E]/10">
+              <Send className="w-3.5 h-3.5" /> Send Email
             </Button>
             <Button data-testid="create-share-btn" onClick={() => setShowShareDialog(true)}
               className="bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-5 py-2 text-xs tracking-wider uppercase font-bold gap-2">
@@ -1099,6 +1138,69 @@ export default function AdminGalleryDetail() {
             <Button data-testid="confirm-delete-file" onClick={confirmFileDelete}
               className="flex-1 bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm text-xs tracking-wider">
               <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete{fileDeleteConfirm.deleteBackup ? " + Backup" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Template Email Dialog */}
+      <Dialog open={showSendEmail} onOpenChange={setShowSendEmail}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Send Email</DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              Send a template email to <strong>{clientEmail}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {emailTemplates.length === 0 ? (
+              <div className="text-center py-6 border rounded-sm" style={{ borderColor: '#E8E4DC' }}>
+                <FileText className="w-10 h-10 mx-auto mb-2 text-[#D4D4D8]" />
+                <p className="text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>No templates found</p>
+                <p className="text-xs mt-1" style={{ color: '#A8A29E' }}>Create templates in Settings &gt; Email Templates first</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Choose Template</Label>
+                  <div className="space-y-2">
+                    {emailTemplates.map(t => (
+                      <label key={t.id} className={`flex items-start gap-3 p-3 rounded-sm border cursor-pointer transition-colors ${
+                        selectedTemplateId === t.id ? 'border-[#D4AF37] bg-[#D4AF37]/5' : 'border-[#E8E4DC] hover:bg-[#FAFAF9]'
+                      }`} data-testid={`template-option-${t.id}`}>
+                        <input type="radio" name="template" value={t.id} checked={selectedTemplateId === t.id}
+                          onChange={() => setSelectedTemplateId(t.id)}
+                          className="mt-0.5 accent-[#D4AF37]" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-semibold" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>{t.name}</span>
+                          <p className="text-xs mt-0.5" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                            Subject: {t.subject.replace('{couple_name}', gallery?.folder_name || '')}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {selectedTemplateId && (
+                  <div className="p-3 rounded-sm border text-xs" style={{ borderColor: '#E8E4DC', backgroundColor: '#FAFAF9', fontFamily: 'Manrope, sans-serif' }}>
+                    <p className="font-semibold mb-1" style={{ color: '#57534E' }}>Preview:</p>
+                    <p style={{ color: '#78716C', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                      {(emailTemplates.find(t => t.id === selectedTemplateId)?.body || '')
+                        .replace(/\{couple_name\}/g, gallery?.folder_name || '')
+                        .replace(/\{gallery_link\}/g, shares.find(s => s.is_active && !s.guest_upload_mode)?.custom_slug || shares.find(s => s.is_active && !s.guest_upload_mode)?.token || '')
+                        .slice(0, 300)}{(emailTemplates.find(t => t.id === selectedTemplateId)?.body || '').length > 300 ? '...' : ''}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowSendEmail(false)} className="rounded-sm">Cancel</Button>
+            <Button data-testid="confirm-send-template" onClick={handleSendTemplateEmail}
+              disabled={!selectedTemplateId || sendingTemplate || emailTemplates.length === 0}
+              className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 text-xs tracking-wider uppercase font-bold gap-2">
+              <Send className="w-3.5 h-3.5" /> {sendingTemplate ? "Sending..." : "Send"}
             </Button>
           </DialogFooter>
         </DialogContent>
