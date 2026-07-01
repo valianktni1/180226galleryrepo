@@ -236,28 +236,50 @@ export default function AdminDashboard() {
 
         {/* Live Visitors Panel */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-          className="mb-8 border rounded-sm overflow-hidden" style={{ borderColor: liveVisitors.length > 0 ? 'rgba(212,175,55,0.3)' : '#F5F2EB' }}
+          className="mb-8 rounded-sm overflow-hidden shadow-sm"
+          style={{ border: liveVisitors.length > 0 ? '1px solid rgba(212,175,55,0.35)' : '1px solid #E8E4DC' }}
           data-testid="live-visitors-panel">
-          <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: liveVisitors.length > 0 ? 'rgba(212,175,55,0.06)' : '#FAFAF9' }}>
+          {/* Header */}
+          <div className="px-6 py-4 flex items-center justify-between"
+            style={{ backgroundColor: liveVisitors.length > 0 ? '#1C1917' : '#FAFAF9' }}>
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <Eye className="w-4 h-4" style={{ color: liveVisitors.length > 0 ? '#D4AF37' : '#A8A29E' }} />
-                {liveVisitors.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                )}
+              {liveVisitors.length > 0 ? (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(74,222,128,0.15)' }}>
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+                  </span>
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+                  <Eye className="w-4 h-4" style={{ color: '#A8A29E' }} />
+                </div>
+              )}
+              <div>
+                <span className="text-sm font-semibold tracking-wide"
+                  style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#FDFCF8' : '#57534E' }}>
+                  {liveVisitors.length > 0 ? `${liveVisitors.length} Visitor${liveVisitors.length !== 1 ? 's' : ''} Online` : 'No Active Visitors'}
+                </span>
+                <p className="text-[10px] mt-0.5 tracking-wider uppercase"
+                  style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#A8A29E' : '#D4D4D8' }}>
+                  {liveVisitors.length > 0 ? 'Viewing your galleries right now' : 'Gallery visitors will appear here'}
+                </p>
               </div>
-              <span className="text-xs font-semibold tracking-[0.12em] uppercase" style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#1C1917' : '#A8A29E' }}>
-                {liveVisitors.length > 0 ? `${liveVisitors.length} Visitor${liveVisitors.length !== 1 ? 's' : ''} Live Now` : 'No Active Visitors'}
-              </span>
             </div>
             {liveVisitors.length > 0 && (
-              <span className="flex items-center gap-1.5 text-[10px] font-medium" style={{ color: '#4ADE80' }}>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Live
+              <span className="flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase"
+                style={{ backgroundColor: 'rgba(74,222,128,0.12)', color: '#4ADE80', letterSpacing: '0.15em' }}>
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                </span>
+                Live
               </span>
             )}
           </div>
+          {/* Visitor rows */}
           {liveVisitors.length > 0 && (
-            <div className="divide-y" style={{ divideColor: '#F5F2EB' }}>
+            <div className="divide-y" style={{ borderColor: '#F5F2EB' }}>
               {liveVisitors.map((v) => {
                 const mins = Math.floor(v.duration_seconds / 60);
                 const actionIcon = v.action === 'watching_video' ? <Film className="w-3.5 h-3.5 text-purple-500" /> 
@@ -270,40 +292,46 @@ export default function AdminDashboard() {
                   : v.action === 'downloading' ? 'Downloading'
                   : v.action === 'selecting_favourites' ? 'Picking Favourites'
                   : 'Browsing';
-                const deviceIcon = v.device === 'Mobile' ? <Smartphone className="w-3 h-3" /> 
-                  : v.device === 'Tablet' ? <Tablet className="w-3 h-3" /> 
-                  : <Monitor className="w-3 h-3" />;
+                const deviceIcon = v.device === 'Mobile' ? <Smartphone className="w-3.5 h-3.5" /> 
+                  : v.device === 'Tablet' ? <Tablet className="w-3.5 h-3.5" /> 
+                  : <Monitor className="w-3.5 h-3.5" />;
                 return (
-                  <div key={v.session_id} className="px-5 py-3 flex items-center gap-4 bg-white hover:bg-[#FAFAF9] transition-colors" data-testid={`visitor-${v.session_id}`}>
-                    <div className="w-2 h-2 rounded-full bg-green-500 shrink-0 animate-pulse" />
+                  <div key={v.session_id} className="px-6 py-3.5 flex items-center gap-4 bg-white hover:bg-[#FDFCF8] transition-colors" data-testid={`visitor-${v.session_id}`}>
+                    <div className="relative shrink-0">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                      </span>
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium truncate" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                        <span className="text-sm font-semibold truncate" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917', fontSize: '15px' }}>
                           {v.gallery_name}
                         </span>
                         {v.subfolder && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded truncate" style={{ backgroundColor: '#F5F2EB', color: '#57534E' }}>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full truncate font-medium" style={{ backgroundColor: '#F5F2EB', color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
                             {v.subfolder}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 mt-0.5">
-                        <span className="flex items-center gap-1 text-xs" style={{ color: '#57534E' }}>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="flex items-center gap-1.5 text-xs" style={{ color: '#57534E' }}>
                           {actionIcon}
                           <span style={{ fontFamily: 'Manrope, sans-serif' }}>{actionLabel}</span>
                         </span>
                         {v.detail && (
-                          <span className="text-[10px] truncate max-w-[200px]" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                          <span className="text-[11px] truncate max-w-[200px] italic" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
                             {v.detail}
                           </span>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="flex items-center gap-1 text-[10px]" style={{ color: '#A8A29E' }}>
+                    <div className="flex items-center gap-4 shrink-0">
+                      <span className="flex items-center gap-1.5 text-[11px]" style={{ color: '#78716C', fontFamily: 'Manrope, sans-serif' }}>
                         {deviceIcon} {v.device}
                       </span>
-                      <span className="text-[10px] font-medium tabular-nums" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                      <span className="text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: mins > 0 ? '#F5F2EB' : 'rgba(74,222,128,0.1)', color: mins > 0 ? '#57534E' : '#16A34A', fontFamily: 'Manrope, sans-serif' }}>
                         {mins > 0 ? `${mins} min` : 'Just joined'}
                       </span>
                     </div>
