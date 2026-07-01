@@ -920,7 +920,7 @@ async def delete_subfolder(gallery_id: str, subfolder_name: str, admin=Depends(g
     return {"success": True, "subfolders": new_subs}
 
 @api_router.delete("/admin/galleries/{gallery_id}")
-async def delete_gallery(gallery_id: str, admin=Depends(get_admin)):
+async def delete_gallery(gallery_id: str, delete_backup: bool = Query(False), admin=Depends(get_admin)):
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
@@ -930,11 +930,17 @@ async def delete_gallery(gallery_id: str, admin=Depends(get_admin)):
     cache_path = CACHE_DIR / gallery_id
     if cache_path.exists():
         shutil.rmtree(cache_path)
+    # Delete backup if requested
+    if delete_backup:
+        backup_path = BACKUP_DIR / gallery["folder_name"]
+        if backup_path.exists():
+            shutil.rmtree(backup_path)
+            logger.info(f"Deleted backup for gallery '{gallery['folder_name']}'")
     await db.files.delete_many({"gallery_id": gallery_id})
     await db.shares.delete_many({"gallery_id": gallery_id})
     await db.favourites.delete_many({"gallery_id": gallery_id})
     await db.galleries.delete_one({"id": gallery_id})
-    return {"success": True}
+    return {"success": True, "backup_deleted": delete_backup}
 
 # ─── File Upload & Management ───
 @api_router.post("/admin/galleries/{gallery_id}/upload")
@@ -1050,7 +1056,7 @@ async def transcode_status(gallery_id: str, admin=Depends(get_admin)):
     return {"active": len(active_files) > 0, "files": active_files}
 
 @api_router.delete("/admin/galleries/{gallery_id}/files/{file_id}")
-async def delete_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
+async def delete_file(gallery_id: str, file_id: str, delete_backup: bool = Query(False), admin=Depends(get_admin)):
     f = await db.files.find_one({"id": file_id, "gallery_id": gallery_id}, {"_id": 0})
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
@@ -1068,6 +1074,13 @@ async def delete_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
         if tp.exists():
             tp.unlink()
 
+    # Delete backup copy if requested
+    if delete_backup:
+        backup_file = BACKUP_DIR / gallery["folder_name"] / f["subfolder"] / f["filename"]
+        if backup_file.exists():
+            backup_file.unlink()
+            logger.info(f"Deleted backup for file '{f['filename']}' in gallery '{gallery['folder_name']}'")
+
     await db.files.delete_one({"id": file_id})
     await db.favourites.delete_many({"file_id": file_id})
 
@@ -1076,7 +1089,7 @@ async def delete_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
         {"id": gallery_id},
         {"$set": {f"file_counts.{f['subfolder']}": count}}
     )
-    return {"success": True}
+    return {"success": True, "backup_deleted": delete_backup}
 
 # ─── Copy to Album Favourites ───
 class CopyToSubfolder(BaseModel):

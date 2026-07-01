@@ -69,7 +69,7 @@ export const listGalleries = getGalleries;  // Alias
 export const getGallery = (id) => apiClient.get(`/admin/galleries/${id}`);
 export const createGallery = (data) => apiClient.post('/admin/galleries', data);
 export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}`, data);
-export const deleteGallery = (id) => apiClient.delete(`/admin/galleries/${id}`);
+export const deleteGallery = (id, deleteBackup = false) => apiClient.delete(`/admin/galleries/${id}?delete_backup=${deleteBackup}`);
 export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/stats`);
 export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats');
 export const sendGalleryNotification = (id) => apiClient.post(`/admin/galleries/${id}/notify`);
@@ -109,8 +109,8 @@ export const uploadFiles = (galleryId, subfolder, files, onProgress) => {
     timeout: 600000,
   });
 };
-export const deleteFile = (galleryId, fileId) =>
-  apiClient.delete(`/admin/galleries/${galleryId}/files/${fileId}`);
+export const deleteFile = (galleryId, fileId, deleteBackup = false) =>
+  apiClient.delete(`/admin/galleries/${galleryId}/files/${fileId}?delete_backup=${deleteBackup}`);
 export const deleteSubfolder = (galleryId, subfolderName) =>
   apiClient.delete(`/admin/galleries/${galleryId}/subfolders/${encodeURIComponent(subfolderName)}`);
 export const setSubfolderCover = (galleryId, subfolderName, fileId) =>

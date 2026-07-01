@@ -37,6 +37,7 @@ export default function AdminDashboard() {
   const [broadcastForm, setBroadcastForm] = useState({ subject: "", body: "" });
   const [broadcastRecipients, setBroadcastRecipients] = useState([]);
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null, name: "", deleteBackup: false });
 
   const load = useCallback(async () => {
     try {
@@ -140,12 +141,17 @@ export default function AdminDashboard() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Delete "${name}" and ALL its files permanently?`)) return;
+    setDeleteConfirm({ open: true, id, name, deleteBackup: false });
+  };
+
+  const confirmDelete = async () => {
+    const { id, deleteBackup } = deleteConfirm;
     try {
-      await deleteGallery(id);
-      toast.success("Gallery deleted");
+      await deleteGallery(id, deleteBackup);
+      toast.success(deleteBackup ? "Gallery and backup deleted" : "Gallery deleted");
       load();
     } catch { toast.error("Failed to delete"); }
+    setDeleteConfirm({ open: false, id: null, name: "", deleteBackup: false });
   };
 
   const handleCreateTemplate = async () => {
@@ -507,6 +513,41 @@ export default function AdminDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Delete Gallery Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => !open && setDeleteConfirm({ open: false, id: null, name: "", deleteBackup: false })}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Delete Gallery</DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              Are you sure you want to delete <strong>"{deleteConfirm.name}"</strong> and ALL its files permanently?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2">
+            <label className="flex items-start gap-3 p-3 rounded-sm border cursor-pointer hover:bg-amber-50/50 transition-colors" style={{ borderColor: '#E8E4DC' }}>
+              <input data-testid="delete-backup-checkbox" type="checkbox" checked={deleteConfirm.deleteBackup}
+                onChange={e => setDeleteConfirm(d => ({...d, deleteBackup: e.target.checked}))}
+                className="mt-0.5 w-4 h-4 rounded accent-[#D4AF37]" />
+              <div>
+                <span className="text-sm font-semibold" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>Also delete from backup</span>
+                <p className="text-xs mt-0.5" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                  This will permanently remove the backup copy too, freeing up storage space
+                </p>
+              </div>
+            </label>
+          </div>
+          <DialogFooter className="mt-4 flex gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirm({ open: false, id: null, name: "", deleteBackup: false })}
+              className="flex-1 rounded-sm border-[#D4D4D8] text-xs tracking-wider">
+              Cancel
+            </Button>
+            <Button data-testid="confirm-delete-gallery" onClick={confirmDelete}
+              className="flex-1 bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm text-xs tracking-wider">
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete{deleteConfirm.deleteBackup ? " + Backup" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Broadcast Email Dialog */}
       <Dialog open={showBroadcast} onOpenChange={setShowBroadcast}>
         <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>

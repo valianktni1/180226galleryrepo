@@ -71,6 +71,9 @@ export default function AdminGalleryDetail() {
   // Subfolder delete confirmation
   const [deleteSubfolderTarget, setDeleteSubfolderTarget] = useState(null);
 
+  // File/bulk delete confirmation with backup option
+  const [fileDeleteConfirm, setFileDeleteConfirm] = useState({ open: false, fileId: null, filename: "", deleteBackup: false, isBulk: false });
+
   const loadGallery = useCallback(async () => {
     try {
       const res = await getGallery(id);
@@ -191,21 +194,30 @@ export default function AdminGalleryDetail() {
   };
 
   const handleDeleteFile = async (fileId) => {
-    try {
-      await deleteFile(id, fileId);
-      toast.success("File deleted");
-      loadGallery();
-    } catch { toast.error("Failed to delete"); }
+    const file = files.find(f => f.id === fileId);
+    setFileDeleteConfirm({ open: true, fileId, filename: file?.filename || "this file", deleteBackup: false, isBulk: false });
   };
 
   const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selectedFiles.size} selected files?`)) return;
-    for (const fid of selectedFiles) {
-      try { await deleteFile(id, fid); } catch {}
+    setFileDeleteConfirm({ open: true, fileId: null, filename: `${selectedFiles.size} selected files`, deleteBackup: false, isBulk: true });
+  };
+
+  const confirmFileDelete = async () => {
+    const { fileId, deleteBackup, isBulk } = fileDeleteConfirm;
+    if (isBulk) {
+      for (const fid of selectedFiles) {
+        try { await deleteFile(id, fid, deleteBackup); } catch {}
+      }
+      toast.success(`${selectedFiles.size} files deleted${deleteBackup ? " (+ backups)" : ""}`);
+      setSelectedFiles(new Set());
+      setSelectMode(false);
+    } else {
+      try {
+        await deleteFile(id, fileId, deleteBackup);
+        toast.success(deleteBackup ? "File and backup deleted" : "File deleted");
+      } catch { toast.error("Failed to delete"); }
     }
-    toast.success(`${selectedFiles.size} files deleted`);
-    setSelectedFiles(new Set());
-    setSelectMode(false);
+    setFileDeleteConfirm({ open: false, fileId: null, filename: "", deleteBackup: false, isBulk: false });
     loadGallery();
   };
 
@@ -1054,6 +1066,43 @@ export default function AdminGalleryDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* File Delete Confirmation Dialog */}
+      <Dialog open={fileDeleteConfirm.open} onOpenChange={(open) => !open && setFileDeleteConfirm({ open: false, fileId: null, filename: "", deleteBackup: false, isBulk: false })}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+              Delete {fileDeleteConfirm.isBulk ? "Files" : "File"}
+            </DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              Are you sure you want to delete <strong>{fileDeleteConfirm.filename}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2">
+            <label className="flex items-start gap-3 p-3 rounded-sm border cursor-pointer hover:bg-amber-50/50 transition-colors" style={{ borderColor: '#E8E4DC' }}>
+              <input data-testid="delete-file-backup-checkbox" type="checkbox" checked={fileDeleteConfirm.deleteBackup}
+                onChange={e => setFileDeleteConfirm(d => ({...d, deleteBackup: e.target.checked}))}
+                className="mt-0.5 w-4 h-4 rounded accent-[#D4AF37]" />
+              <div>
+                <span className="text-sm font-semibold" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>Also delete from backup</span>
+                <p className="text-xs mt-0.5" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                  Removes the backup copy too, freeing up storage space
+                </p>
+              </div>
+            </label>
+          </div>
+          <DialogFooter className="mt-4 flex gap-2">
+            <Button variant="outline" onClick={() => setFileDeleteConfirm({ open: false, fileId: null, filename: "", deleteBackup: false, isBulk: false })}
+              className="flex-1 rounded-sm border-[#D4D4D8] text-xs tracking-wider">
+              Cancel
+            </Button>
+            <Button data-testid="confirm-delete-file" onClick={confirmFileDelete}
+              className="flex-1 bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm text-xs tracking-wider">
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete{fileDeleteConfirm.deleteBackup ? " + Backup" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
