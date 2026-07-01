@@ -519,7 +519,7 @@ export default function AdminDashboard() {
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Delete Gallery</DialogTitle>
             <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-              Are you sure you want to delete <strong>"{deleteConfirm.name}"</strong> and ALL its files permanently?
+              Are you sure you want to delete <strong>&ldquo;{deleteConfirm.name}&rdquo;</strong> and ALL its files permanently?
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2">

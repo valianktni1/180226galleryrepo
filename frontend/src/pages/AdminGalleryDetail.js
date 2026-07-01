@@ -206,7 +206,7 @@ export default function AdminGalleryDetail() {
     const { fileId, deleteBackup, isBulk } = fileDeleteConfirm;
     if (isBulk) {
       for (const fid of selectedFiles) {
-        try { await deleteFile(id, fid, deleteBackup); } catch {}
+        try { await deleteFile(id, fid, deleteBackup); } catch (e) { /* skip */ }
       }
       toast.success(`${selectedFiles.size} files deleted${deleteBackup ? " (+ backups)" : ""}`);
       setSelectedFiles(new Set());
@@ -1045,7 +1045,7 @@ export default function AdminGalleryDetail() {
         <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
-              Remove "{deleteSubfolderTarget}"?
+              Remove &ldquo;{deleteSubfolderTarget}&rdquo;?
             </AlertDialogTitle>
             <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
               {((gallery?.file_counts || {})[deleteSubfolderTarget] || 0) > 0
