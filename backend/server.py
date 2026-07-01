@@ -1617,6 +1617,17 @@ async def serve_original(gallery_id: str, subfolder: str, filename: str):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path)
 
+# ─── Public Email Assets ───
+EMAIL_ASSETS_DIR = Path(__file__).parent / "assets"
+
+@api_router.get("/public/email-assets/{filename}")
+async def get_email_asset(filename: str):
+    """Serve email assets (like awards badges) publicly for email clients."""
+    file_path = EMAIL_ASSETS_DIR / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return FileResponse(file_path, media_type="image/png", headers={"Cache-Control": "public, max-age=31536000"})
+
 # ─── Public Share Access ───
 @api_router.get("/share/{token}")
 async def get_share_info(token: str):
@@ -3143,10 +3154,10 @@ async def get_smtp_settings(admin=Depends(get_admin)):
     """Get SMTP settings (password masked)."""
     doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
     if not doc:
-        return {"smtp_server": "", "smtp_port": 465, "smtp_email": "", "smtp_password": "", "sender_name": ""}
+        return {"smtp_server": "", "smtp_port": 465, "smtp_email": "", "smtp_password": "", "sender_name": "", "site_url": ""}
     data = doc.get("value", {})
     masked_pw = "••••••••" if data.get("smtp_password") else ""
-    return {**data, "smtp_password": masked_pw}
+    return {**data, "smtp_password": masked_pw, "site_url": data.get("site_url", "")}
 
 class SMTPSettings(BaseModel):
     smtp_server: str
@@ -3154,6 +3165,7 @@ class SMTPSettings(BaseModel):
     smtp_email: str
     smtp_password: Optional[str] = None
     sender_name: str = ""
+    site_url: str = ""
 
 @api_router.post("/admin/settings/smtp")
 async def save_smtp_settings(data: SMTPSettings, admin=Depends(get_admin)):
@@ -3164,6 +3176,7 @@ async def save_smtp_settings(data: SMTPSettings, admin=Depends(get_admin)):
         "smtp_port": data.smtp_port,
         "smtp_email": data.smtp_email,
         "sender_name": data.sender_name,
+        "site_url": data.site_url.rstrip("/") if data.site_url else "",
     }
     # Only update password if not the masked placeholder
     if data.smtp_password and data.smtp_password != "••••••••":
@@ -3334,6 +3347,12 @@ Best Regards<br>
 
 </td></tr>
 
+<!-- Awards -->
+{f'''<tr><td style="padding:25px 40px 10px;text-align:center;">
+<p style="font-size:11px;color:#A8A29E;margin:0 0 12px 0;letter-spacing:1.5px;text-transform:uppercase;">Award-Winning Photography</p>
+<img src="{smtp.get("site_url", "")}/api/public/email-assets/awards-badges.png" alt="Awards" style="max-width:480px;width:100%;height:auto;" />
+</td></tr>''' if smtp.get("site_url") else ''}
+
 <!-- Footer -->
 <tr><td style="background-color:#1C1917;padding:20px 40px;text-align:center;">
 <p style="color:#A8A29E;font-size:12px;margin:0;letter-spacing:1px;">
@@ -3445,8 +3464,22 @@ def send_smtp_email(smtp: dict, to_email: str, subject: str, html_body: str):
     server.send_message(msg)
     server.quit()
 
-def build_branded_email(content_html: str) -> str:
+def get_awards_url(smtp: dict) -> str:
+    """Construct the awards badge image URL from site_url in SMTP settings."""
+    site_url = smtp.get("site_url", "")
+    if site_url:
+        return f"{site_url}/api/public/email-assets/awards-badges.png"
+    return ""
+
+def build_branded_email(content_html: str, awards_url: str = "") -> str:
     """Wrap content in the branded Weddings By Mark email template."""
+    awards_section = ""
+    if awards_url:
+        awards_section = f"""
+<tr><td style="padding:25px 40px 10px;text-align:center;">
+<p style="font-size:11px;color:#A8A29E;margin:0 0 12px 0;letter-spacing:1.5px;text-transform:uppercase;">Award-Winning Photography</p>
+<img src="{awards_url}" alt="Awards" style="max-width:480px;width:100%;height:auto;" />
+</td></tr>"""
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -3461,7 +3494,7 @@ Weddings By Mark
 </td></tr>
 <tr><td style="padding:40px;">
 {content_html}
-</td></tr>
+</td></tr>{awards_section}
 <tr><td style="background-color:#1C1917;padding:20px 40px;text-align:center;">
 <p style="color:#A8A29E;font-size:12px;margin:0;letter-spacing:1px;">
 WEDDINGS BY MARK &bull; CAPTURING YOUR STORY
@@ -3516,7 +3549,7 @@ async def send_broadcast_email(data: BroadcastEmailBody, admin=Depends(get_admin
         else:
             body_html += f'<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">{stripped}</p>\n'
 
-    html_content = build_branded_email(body_html)
+    html_content = build_branded_email(body_html, get_awards_url(smtp))
 
     sent = 0
     failed = []
@@ -3644,7 +3677,7 @@ async def send_template_email(gallery_id: str, data: SendTemplateEmailBody, admi
         else:
             body_html += f'<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">{stripped}</p>\n'
 
-    html_content = build_branded_email(body_html)
+    html_content = build_branded_email(body_html, get_awards_url(smtp))
 
     try:
         send_smtp_email(smtp, client_email, subject, html_content)
@@ -3739,7 +3772,7 @@ Speak soon,<br><br>
 <em>Weddings by Mark</em>
 </p>"""
 
-            html_body = build_branded_email(reminder_html)
+            html_body = build_branded_email(reminder_html, get_awards_url(smtp))
             send_smtp_email(smtp, client_email, "Your Wedding Gallery Expires Soon", html_body)
 
             # Mark as sent so we don't send again

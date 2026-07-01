@@ -64,7 +64,7 @@ export default function AdminSettings() {
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
 
   // SMTP / Email
-  const [smtpForm, setSMTPForm] = useState({ smtp_server: "", smtp_port: 465, smtp_email: "", smtp_password: "", sender_name: "" });
+  const [smtpForm, setSMTPForm] = useState({ smtp_server: "", smtp_port: 465, smtp_email: "", smtp_password: "", sender_name: "", site_url: "" });
   const [loadingSMTP, setLoadingSMTP] = useState(false);
   const [savingSMTP, setSavingSMTP] = useState(false);
   const [testingSMTP, setTestingSMTP] = useState(false);
@@ -676,6 +676,15 @@ export default function AdminSettings() {
                       <Input data-testid="smtp-sender" value={smtpForm.sender_name}
                         onChange={e => setSMTPForm(f => ({...f, sender_name: e.target.value}))}
                         placeholder="Weddings By Mark" className="border-[#D4D4D8] rounded-sm" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Gallery Site URL</Label>
+                      <Input data-testid="smtp-site-url" value={smtpForm.site_url}
+                        onChange={e => setSMTPForm(f => ({...f, site_url: e.target.value}))}
+                        placeholder="https://gallery.weddingsbymark.co.uk" className="border-[#D4D4D8] rounded-sm" />
+                      <p className="text-[11px]" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                        Your gallery domain — used to display your awards badge in emails
+                      </p>
                     </div>
                     <div className="flex gap-3 pt-2">
                       <Button onClick={handleSaveSMTP} disabled={savingSMTP} data-testid="save-smtp-btn"
