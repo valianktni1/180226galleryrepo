@@ -45,6 +45,10 @@ User deploys on TrueNAS via Dockge:
 - [x] Activity Log Auto-Archiving (>6 months), manual clear, Archive Tab
 - [x] Live Visitors Panel on AdminDashboard (30s heartbeats from ShareView, real-time active session tracking)
 - [x] BUG FIX: Temporal dead zone crash in ShareView.js — useEffect referenced displayFiles before declaration, breaking all share links (fixed 2026-06-30)
+- [x] BUG FIX: ProgressiveImage blur in grid cards — FileCard now uses direct preview img tag, ProgressiveImage only in lightbox (fixed 2026-06-30)
+- [x] Broadcast Email system — Dashboard button opens dialog with recipients preview, subject/body fields, sends branded HTML to all couples with emails (2026-06-30)
+- [x] Automated Expiry Reminder Emails — Daily background task checks for main share links expiring within 7 days, auto-sends branded reminder email to couples (2026-06-30)
+- [x] Reusable SMTP helper (send_smtp_email) and branded email template wrapper (build_branded_email)
 
 ## In Progress
 None
