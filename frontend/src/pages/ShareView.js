@@ -916,10 +916,9 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
       {file.file_type === 'photo' ? (
         file.has_preview ? (
           <div className="relative">
-            <ProgressiveImage
-              thumbSrc={thumbUrl(galleryId, file.subfolder || file._subfolder, file.filename)}
-              fullSrc={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)}
-              alt={file.filename} className="w-full block" />
+            <img
+              src={previewUrl(galleryId, file.subfolder || file._subfolder, file.filename)}
+              alt={file.filename} className="w-full block" loading="lazy" />
             <img src="/watermark-logo.png" alt="" className="absolute pointer-events-none" 
               style={{ bottom: '10px', right: '10px', width: '80px', opacity: 0.72 }} />
           </div>
