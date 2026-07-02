@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Heart, Download, X, ChevronLeft, ChevronRight, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, Printer, FileText, Play, PlayCircle, Moon, Sun
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun
 } from "lucide-react";
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl
@@ -500,31 +500,34 @@ function ShareViewFull() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.9 }}
-            className="mx-auto max-w-2xl text-left p-6 rounded-lg border-2"
-            style={{ backgroundColor: t.bgInstructions, borderColor: '#D4AF37' }}
+            className="mx-auto max-w-3xl text-center px-8 py-10"
           >
-            <h3 className="text-xl font-medium mb-4 flex items-center gap-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>
-              <Heart className="w-5 h-5" fill="#D4AF37" stroke="#D4AF37" />
-              Your Wedding Album (If Included in Your Package)
+            <h3 className="text-2xl font-medium mb-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>
+              Your Wedding Album
             </h3>
-            <div className="space-y-3 text-sm" style={{ color: t.text, fontFamily: 'Manrope, sans-serif' }}>
-              <p>To choose your album images, simply go to your <strong>Wedding Images</strong> folder.</p>
-              <ul className="list-disc list-inside space-y-1 pl-2">
-                <li>Click the heart icon on each image to select your 40 favourites</li>
-                <li>Don't forget to choose one image for your front cover</li>
-              </ul>
-              <p>At the top of the gallery, you'll see a <span className="inline-flex items-center"><Heart className="w-4 h-4 mx-1" fill="#D4AF37" stroke="#D4AF37" /></span> gold heart showing how many images you've selected.</p>
-              <p className="font-medium pt-2">Once you're happy:</p>
-              <ol className="list-decimal list-inside space-y-1 pl-2">
-                <li>Click the gold heart</li>
-                <li>Press <strong>"Submit for Album"</strong></li>
-              </ol>
-              <p>Your selections will then appear in your <strong>Album Favourites</strong> folder.</p>
-              <p className="pt-3 border-t" style={{ borderColor: t.border }}>
-                Please email me at <a href="mailto:mark@perfectweddingsbymark.uk" className="underline" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a> to let me know you've submitted your choices, and include the image number of your chosen front cover.
-              </p>
-              <p className="text-center pt-2">Thank you 😊</p>
+            <p className="text-sm mb-10" style={{ fontFamily: 'Manrope, sans-serif', color: t.textMuted || '#A8A29E' }}>
+              If your package includes an album, follow these three simple steps
+            </p>
+
+            <div className="grid grid-cols-3 gap-6 mb-10">
+              {[
+                { step: "1", icon: <Heart className="w-6 h-6" fill="#D4AF37" stroke="#D4AF37" />, title: "Heart Your Favourites", desc: "Open your Wedding Images folder and tap the heart on your 40 favourite photos" },
+                { step: "2", icon: <ImageIcon className="w-6 h-6" style={{ color: '#D4AF37' }} />, title: "Choose Your Cover", desc: "Pick one special image for the front cover of your album" },
+                { step: "3", icon: <CheckCircle className="w-6 h-6" style={{ color: '#D4AF37' }} />, title: "Submit Your Album", desc: "Tap the gold heart at the top, then press Submit for Album" },
+              ].map(({ step, icon, title, desc }) => (
+                <div key={step} className="flex flex-col items-center text-center p-6 rounded-sm border" style={{ borderColor: t.border || 'rgba(212,175,55,0.2)', backgroundColor: t.bgInstructions || 'rgba(212,175,55,0.03)' }}>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'rgba(212,175,55,0.1)' }}>
+                    {icon}
+                  </div>
+                  <h4 className="text-base font-medium mb-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>{title}</h4>
+                  <p className="text-xs leading-relaxed" style={{ fontFamily: 'Manrope, sans-serif', color: t.text }}>{desc}</p>
+                </div>
+              ))}
             </div>
+
+            <p className="text-xs" style={{ fontFamily: 'Manrope, sans-serif', color: t.textMuted || '#A8A29E' }}>
+              Your selections will appear in your <strong style={{ color: t.headingColor }}>Album Favourites</strong> folder. Please email <a href="mailto:mark@perfectweddingsbymark.uk" className="underline" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a> once submitted, including your chosen cover image number.
+            </p>
           </motion.div>
         </section>
 
