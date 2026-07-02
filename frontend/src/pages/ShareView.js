@@ -438,7 +438,7 @@ function ShareViewFull() {
                 style={{
                   backgroundImage: `url(${heroImageUrl})`,
                   backgroundSize: 'cover',
-                  backgroundPosition: 'center',
+                  backgroundPosition: 'center 25%',
                   filter: 'blur(2px) brightness(0.55)',
                   transform: 'scale(1.05)',
                 }} />
@@ -563,11 +563,10 @@ function ShareViewFull() {
                           src={thumbUrl(galleryId, sf.name, displayFile.filename)}
                           alt={sf.name}
                           className="w-full h-full object-cover"
-                          style={{ transition: 'transform 0.6s ease' }}
+                          style={{ objectPosition: 'center 25%', transition: 'transform 0.6s ease' }}
                           onMouseOver={e => e.target.style.transform = 'scale(1.06)'}
                           onMouseOut={e => e.target.style.transform = 'scale(1)'}
                         />
-                        {/* Gradient overlay at bottom of image */}
                         <div className="absolute inset-x-0 bottom-0 h-20" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5), transparent)' }} />
                         <div className="absolute bottom-3 left-4 right-4">
                           <p className="font-medium text-sm text-white" style={{ fontFamily: 'Manrope, sans-serif', textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{sf.name}</p>
