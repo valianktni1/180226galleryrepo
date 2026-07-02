@@ -12,10 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats
 } from "@/lib/api";
 
 export default function AdminDashboard() {
@@ -33,6 +33,7 @@ export default function AdminDashboard() {
   const [newTemplate, setNewTemplate] = useState({ name: "", subfolders: "" });
   const [backingUp, setBackingUp] = useState(false);
   const [liveVisitors, setLiveVisitors] = useState([]);
+  const [dashStats, setDashStats] = useState({ active_galleries: 0, expiring_soon: 0, downloads_this_week: 0, pending_albums: 0, storage_used_bytes: 0 });
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [broadcastForm, setBroadcastForm] = useState({ subject: "", body: "" });
   const [broadcastRecipients, setBroadcastRecipients] = useState([]);
@@ -47,7 +48,10 @@ export default function AdminDashboard() {
       // Load stats separately (don't block main load)
       getAllGalleriesStats().then(statsRes => {
         setGalleriesStats(statsRes.data);
-      }).catch(() => {}); // Silently fail if stats unavailable
+      }).catch(() => {});
+      getDashboardStats().then(res => {
+        setDashStats(res.data);
+      }).catch(() => {});
     } catch {
       toast.error("Failed to load data");
     } finally {
@@ -220,16 +224,21 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-screen-xl mx-auto px-6 py-10">
-        {/* Stats */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-3 gap-6 mb-12">
+        {/* Dashboard Stats */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-5 gap-4 mb-10" data-testid="dashboard-stats">
           {[
-            { label: "Galleries", value: galleries.length },
-            { label: "Total Files", value: totalFiles },
-            { label: "Templates", value: templates.length },
-          ].map(({ label, value }) => (
-            <div key={label} className="p-6 border" style={{ borderColor: '#F5F2EB' }}>
-              <span className="text-xs tracking-[0.15em] uppercase font-semibold block mb-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{label}</span>
-              <span className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>{value}</span>
+            { label: "Active Galleries", value: dashStats.active_galleries, icon: Camera, color: '#D4AF37' },
+            { label: "Expiring Soon", value: dashStats.expiring_soon, icon: AlertCircle, color: dashStats.expiring_soon > 0 ? '#F59E0B' : '#A8A29E' },
+            { label: "Downloads This Week", value: dashStats.downloads_this_week, icon: Download, color: '#22C55E' },
+            { label: "Pending Albums", value: dashStats.pending_albums, icon: FolderHeart, color: dashStats.pending_albums > 0 ? '#EC4899' : '#A8A29E' },
+            { label: "Storage Used", value: dashStats.storage_used_bytes >= 1099511627776 ? `${(dashStats.storage_used_bytes / 1099511627776).toFixed(2)} TB` : `${(dashStats.storage_used_bytes / 1073741824).toFixed(1)} GB`, icon: HardDrive, color: '#6366F1' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="p-5 border bg-white rounded-sm" style={{ borderColor: '#F5F2EB' }} data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <Icon className="w-4 h-4" style={{ color }} />
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{label}</span>
+              </div>
+              <span className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>{value}</span>
             </div>
           ))}
         </motion.div>
@@ -258,11 +267,11 @@ export default function AdminDashboard() {
               <div>
                 <span className="text-sm font-semibold tracking-wide"
                   style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#FDFCF8' : '#57534E' }}>
-                  {liveVisitors.length > 0 ? `${liveVisitors.length} Visitor${liveVisitors.length !== 1 ? 's' : ''} Online` : 'No Active Visitors'}
+                  Live Gallery Visitors
                 </span>
                 <p className="text-[10px] mt-0.5 tracking-wider uppercase"
                   style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#A8A29E' : '#D4D4D8' }}>
-                  {liveVisitors.length > 0 ? 'Viewing your galleries right now' : 'Gallery visitors will appear here'}
+                  {liveVisitors.length > 0 ? `${liveVisitors.length} couple${liveVisitors.length !== 1 ? 's' : ''} viewing right now` : 'No couples are currently viewing galleries'}
                 </p>
               </div>
             </div>
@@ -287,11 +296,11 @@ export default function AdminDashboard() {
                   : v.action === 'downloading' ? <Download className="w-3.5 h-3.5 text-green-500" />
                   : v.action === 'selecting_favourites' ? <Heart className="w-3.5 h-3.5 text-pink-500" />
                   : <Eye className="w-3.5 h-3.5 text-gray-400" />;
-                const actionLabel = v.action === 'watching_video' ? 'Watching Video'
-                  : v.action === 'viewing_photo' ? 'Viewing Photo'
-                  : v.action === 'downloading' ? 'Downloading'
-                  : v.action === 'selecting_favourites' ? 'Picking Favourites'
-                  : 'Browsing';
+                const actionLabel = v.action === 'watching_video' ? 'watching Video'
+                  : v.action === 'viewing_photo' ? 'viewing Photos'
+                  : v.action === 'downloading' ? 'downloading files'
+                  : v.action === 'selecting_favourites' ? 'picking Favourites'
+                  : 'browsing gallery';
                 const deviceIcon = v.device === 'Mobile' ? <Smartphone className="w-3.5 h-3.5" /> 
                   : v.device === 'Tablet' ? <Tablet className="w-3.5 h-3.5" /> 
                   : <Monitor className="w-3.5 h-3.5" />;
@@ -308,23 +317,16 @@ export default function AdminDashboard() {
                         <span className="text-sm font-semibold truncate" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917', fontSize: '15px' }}>
                           {v.gallery_name}
                         </span>
-                        {v.subfolder && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full truncate font-medium" style={{ backgroundColor: '#F5F2EB', color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-                            {v.subfolder}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="flex items-center gap-1.5 text-xs" style={{ color: '#57534E' }}>
-                          {actionIcon}
-                          <span style={{ fontFamily: 'Manrope, sans-serif' }}>{actionLabel}</span>
+                        <span className="text-xs" style={{ color: '#A8A29E' }}>&mdash;</span>
+                        <span className="flex items-center gap-1.5 text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                          {actionIcon} {actionLabel}{v.subfolder ? ` ${v.subfolder}` : ''}
                         </span>
-                        {v.detail && (
-                          <span className="text-[11px] truncate max-w-[200px] italic" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-                            {v.detail}
-                          </span>
-                        )}
                       </div>
+                      {v.detail && (
+                        <span className="text-[11px] truncate block max-w-[300px] mt-0.5 italic" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                          {v.detail}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-4 shrink-0">
                       <span className="flex items-center gap-1.5 text-[11px]" style={{ color: '#78716C', fontFamily: 'Manrope, sans-serif' }}>

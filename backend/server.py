@@ -2923,6 +2923,52 @@ async def get_gallery_stats(gallery_id: str, admin=Depends(get_admin)):
         "daily_activity": activity
     }
 
+@api_router.get("/admin/dashboard-stats")
+async def get_dashboard_stats(admin=Depends(get_admin)):
+    """Get the 5 key dashboard stats."""
+    now = datetime.now(timezone.utc)
+    week_ago = (now - timedelta(days=7)).isoformat()
+    soon = (now + timedelta(days=14)).isoformat()
+
+    # Active galleries
+    active_galleries = await db.galleries.count_documents({})
+
+    # Expiring soon — active main shares expiring within 14 days
+    expiring_shares = await db.shares.find({
+        "is_active": True,
+        "guest_upload_mode": {"$ne": True},
+        "expires_at": {"$exists": True, "$ne": None, "$lte": soon, "$gte": now.isoformat()}
+    }).to_list(500)
+    expiring_gallery_ids = list(set(s["gallery_id"] for s in expiring_shares))
+    expiring_soon = len(expiring_gallery_ids)
+
+    # Downloads this week
+    downloads_this_week = await db.activity_log.count_documents({
+        "action": {"$in": ["download", "download_file", "download_all"]},
+        "timestamp": {"$gte": week_ago}
+    })
+
+    # Pending albums — galleries where Album Favourites subfolder has 0 files
+    all_galleries = await db.galleries.find({}, {"_id": 0, "id": 1}).to_list(1000)
+    pending_albums = 0
+    for g in all_galleries:
+        has_favourites = await db.files.count_documents({"gallery_id": g["id"], "subfolder": "Album Favourites"})
+        if has_favourites == 0:
+            pending_albums += 1
+
+    # Storage used — sum of all file sizes
+    pipeline = [{"$group": {"_id": None, "total": {"$sum": "$file_size"}}}]
+    result = await db.files.aggregate(pipeline).to_list(1)
+    total_bytes = result[0]["total"] if result else 0
+
+    return {
+        "active_galleries": active_galleries,
+        "expiring_soon": expiring_soon,
+        "downloads_this_week": downloads_this_week,
+        "pending_albums": pending_albums,
+        "storage_used_bytes": total_bytes
+    }
+
 @api_router.get("/admin/galleries-stats")
 async def get_all_galleries_stats(admin=Depends(get_admin)):
     """Get summary stats for all galleries (for dashboard cards)."""

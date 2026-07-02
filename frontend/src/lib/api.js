@@ -72,6 +72,7 @@ export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}
 export const deleteGallery = (id, deleteBackup = false) => apiClient.delete(`/admin/galleries/${id}?delete_backup=${deleteBackup}`);
 export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/stats`);
 export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats');
+export const getDashboardStats = () => apiClient.get('/admin/dashboard-stats');
 export const sendGalleryNotification = (id) => apiClient.post(`/admin/galleries/${id}/notify`);
 
 // SMTP / Email Settings
