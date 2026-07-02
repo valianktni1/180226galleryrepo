@@ -52,6 +52,9 @@ User deploys on TrueNAS via Dockge:
 - [x] Email Log tracking — all sent emails (broadcast, gallery-ready, expiry reminders) logged to db.email_log with "Emails" tab on Activity page (2026-06-30)
 - [x] Backup-aware delete — Gallery and file deletion now shows confirmation dialog with "Also delete from backup?" checkbox (2026-06-30)
 - [x] Email Templates system — Create reusable templates in Settings with {couple_name} and {gallery_link} tokens. "Send Email" button on each gallery for 3-click personalised emails (2026-07-01)
+- [x] Awards badge in all branded emails via public endpoint + site_url setting (2026-07-01)
+- [x] Dashboard stats redesign — 5 cards: Active Galleries, Expiring Soon, Downloads This Week, Pending Albums, Storage Used (2026-07-01)
+- [x] Live visitors wording improved — "Live Gallery Visitors" with couple-friendly descriptions (2026-07-01)
 
 ## In Progress
 None
