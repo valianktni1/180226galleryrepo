@@ -509,7 +509,7 @@ function ShareViewFull() {
               If your package includes an album, follow these three simple steps
             </p>
 
-            <div className="grid grid-cols-3 gap-6 mb-10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-10">
               {[
                 { step: "1", icon: <Heart className="w-6 h-6" fill="#D4AF37" stroke="#D4AF37" />, title: "Heart Your Favourites", desc: "Open your Wedding Images folder and tap the heart on your 40 favourite photos" },
                 { step: "2", icon: <ImageIcon className="w-6 h-6" style={{ color: '#D4AF37' }} />, title: "Choose Your Cover", desc: "Pick one special image for the front cover of your album" },
