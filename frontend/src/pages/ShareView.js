@@ -78,6 +78,8 @@ function ShareViewFull() {
   };
   // Theme colours — driven by gallery theme preset + dark mode
   const t = getTheme(galleryThemeId, darkMode);
+  // Dark Elegance forces dark mode — override toggle
+  const effectiveDarkMode = t.forceDarkMode ? true : darkMode;
 
   // ─── Live Heartbeat (silent background ping every 30s) ───
   const sessionIdRef = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -437,7 +439,7 @@ function ShareViewFull() {
                   filter: 'blur(2px) brightness(0.55)',
                   transform: 'scale(1.05)',
                 }} />
-              <div className="absolute inset-0 z-[1]" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.4) 100%)' }} />
+              <div className="absolute inset-0 z-[1]" style={{ background: `linear-gradient(to bottom, ${t.heroGradientTop} 0%, transparent 40%, ${t.heroGradientBottom} 100%)` }} />
             </>
           )}
 
@@ -451,11 +453,11 @@ function ShareViewFull() {
             >
               Welcome
             </motion.p>
-            {heroImageUrl && (
+            {heroImageUrl && t.showGradientLines && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
                 className="flex items-center justify-center gap-4 mb-4">
                 <div className="h-px w-12 md:w-20" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }} />
-                <span className="text-sm" style={{ color: t.accent, lineHeight: 1 }}>&#10022;</span>
+                {t.showDiamondDividers && <span className="text-sm" style={{ color: t.accent, lineHeight: 1 }}>&#10022;</span>}
                 <div className="h-px w-12 md:w-20" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }} />
               </motion.div>
             )}
@@ -463,17 +465,17 @@ function ShareViewFull() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="text-5xl md:text-7xl lg:text-8xl font-light italic mb-3"
-              style={{ fontFamily: t.headingFont, color: heroImageUrl ? 'white' : t.headingColor, textShadow: heroImageUrl ? '0 2px 30px rgba(0,0,0,0.4)' : 'none' }}
+              className="text-5xl md:text-7xl lg:text-8xl mb-3"
+              style={{ fontFamily: t.headingFont, fontStyle: t.headingStyle, fontWeight: t.headingWeight, color: heroImageUrl ? 'white' : t.headingColor, textShadow: heroImageUrl ? '0 2px 30px rgba(0,0,0,0.4)' : 'none' }}
               data-testid="couple-name-heading"
             >
               {coupleName}
             </motion.h1>
-            {heroImageUrl && (
+            {heroImageUrl && t.showGradientLines && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
                 className="flex items-center justify-center gap-4 mb-4">
                 <div className="h-px w-12 md:w-20" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }} />
-                <span className="text-sm" style={{ color: t.accent, lineHeight: 1 }}>&#10022;</span>
+                {t.showDiamondDividers && <span className="text-sm" style={{ color: t.accent, lineHeight: 1 }}>&#10022;</span>}
                 <div className="h-px w-12 md:w-20" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }} />
               </motion.div>
             )}
@@ -510,11 +512,15 @@ function ShareViewFull() {
                 { step: "2", icon: <ImageIcon className="w-6 h-6" style={{ color: t.accent }} />, title: "Choose Your Cover", desc: "Pick one special image for the front cover of your album" },
                 { step: "3", icon: <CheckCircle className="w-6 h-6" style={{ color: t.accent }} />, title: "Submit Your Album", desc: "Tap the gold heart at the top, then press Submit for Album" },
               ].map(({ step, icon, title, desc }) => (
-                <div key={step} className="flex flex-col items-center text-center p-6 rounded-sm border" style={{ borderColor: t.border, backgroundColor: t.bgInstructions }}>
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: `${t.accent}18` }}>
-                    {icon}
-                  </div>
-                  <h4 className="text-base font-medium mb-2" style={{ fontFamily: t.headingFont, color: t.headingColor }}>{title}</h4>
+                <div key={step} className="flex flex-col items-center text-center p-6 border" style={{ borderColor: t.border, backgroundColor: t.bgInstructions, borderRadius: t.cardRadius, borderWidth: t.cardBorderWidth }}>
+                  {t.instructionIconBg ? (
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: t.accentLight || `${t.accent}18` }}>
+                      {icon}
+                    </div>
+                  ) : (
+                    <div className="mb-4">{icon}</div>
+                  )}
+                  <h4 className="text-base font-medium mb-2" style={{ fontFamily: t.headingFont, fontStyle: t.headingStyle, color: t.headingColor }}>{title}</h4>
                   <p className="text-xs leading-relaxed" style={{ fontFamily: t.bodyFont, color: t.text }}>{desc}</p>
                 </div>
               ))}
@@ -529,9 +535,9 @@ function ShareViewFull() {
         {/* Albums Section */}
         <section className="max-w-screen-xl mx-auto px-6 py-12 md:py-16">
           <div className="flex items-center justify-center gap-4 mb-10">
-            <div className="h-px flex-1 max-w-[80px]" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }} />
-            <h2 className="text-xl font-light tracking-wide" style={{ fontFamily: t.headingFont, color: t.headingColor }}>Your Albums</h2>
-            <div className="h-px flex-1 max-w-[80px]" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }} />
+            {t.showGradientLines && <div className="h-px flex-1 max-w-[80px]" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }} />}
+            <h2 className="text-xl tracking-wide" style={{ fontFamily: t.headingFont, fontWeight: t.headingWeight, fontStyle: t.albumNameStyle, color: t.headingColor }}>Your Albums</h2>
+            {t.showGradientLines && <div className="h-px flex-1 max-w-[80px]" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }} />}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-12">
@@ -542,9 +548,9 @@ function ShareViewFull() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 + i * 0.08 }}
                 onClick={() => { setActiveAlbum(sf.name); setShowFavourites(false); }}
-                className="group text-left rounded-lg overflow-hidden"
-                style={{ boxShadow: t.cardShadow, transition: 'box-shadow 0.4s ease, transform 0.4s ease', backgroundColor: t.bgCard }}
-                onMouseOver={e => { e.currentTarget.style.boxShadow = darkMode ? '0 8px 30px rgba(0,0,0,0.4)' : '0 8px 30px rgba(0,0,0,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                className="group text-left overflow-hidden"
+                style={{ boxShadow: t.cardShadow, transition: 'box-shadow 0.4s ease, transform 0.4s ease', backgroundColor: t.bgCard, borderRadius: t.cardRadius, border: `${t.cardBorderWidth} solid ${t.border}` }}
+                onMouseOver={e => { e.currentTarget.style.boxShadow = effectiveDarkMode ? '0 8px 30px rgba(0,0,0,0.4)' : '0 8px 30px rgba(0,0,0,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                 onMouseOut={e => { e.currentTarget.style.boxShadow = t.cardShadow; e.currentTarget.style.transform = 'translateY(0)'; }}
                 data-testid={`album-card-${sf.name.replace(/\s/g, '-')}`}
               >
@@ -562,7 +568,7 @@ function ShareViewFull() {
                           alt={sf.name}
                           className="w-full h-full object-cover"
                           style={{ objectPosition: 'center 25%', transition: 'transform 0.6s ease' }}
-                          onMouseOver={e => e.target.style.transform = 'scale(1.06)'}
+                          onMouseOver={e => e.target.style.transform = `scale(${t.cardHoverScale})`}
                           onMouseOut={e => e.target.style.transform = 'scale(1)'}
                         />
                         <div className="absolute inset-x-0 bottom-0 h-20" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5), transparent)' }} />
@@ -635,12 +641,18 @@ function ShareViewFull() {
         {/* Elegant Footer */}
         <footer className="mt-16 mb-8">
           <div className="max-w-screen-xl mx-auto px-6">
-            <div className="border-t pt-8 text-center" style={{ borderColor: 'rgba(212,175,55,0.3)' }}>
-              <div className="flex items-center justify-center gap-3 mb-3">
-                <div className="h-px w-12" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }}></div>
-                <span className="text-lg" style={{ color: t.accent }}>✦</span>
-                <div className="h-px w-12" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }}></div>
-              </div>
+            <div className="border-t pt-8 text-center" style={{ borderColor: `${t.accent}40` }}>
+              {t.showDiamondDividers ? (
+                <div className="flex items-center justify-center gap-3 mb-3">
+                  <div className="h-px w-12" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }}></div>
+                  <span className="text-lg" style={{ color: t.accent }}>✦</span>
+                  <div className="h-px w-12" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }}></div>
+                </div>
+              ) : t.showGradientLines ? (
+                <div className="flex items-center justify-center mb-3">
+                  <div className="h-px w-24" style={{ background: `linear-gradient(to right, transparent, ${t.accent}, transparent)` }}></div>
+                </div>
+              ) : <div className="mb-3" />}
               <p className="text-sm tracking-wide" style={{ fontFamily: t.headingFont, color: t.text }}>
                 Site Designed &amp; Maintained by
               </p>
@@ -797,14 +809,15 @@ function ShareViewFull() {
                 data-testid="download-all-images-btn"
                 onClick={handleDownloadAlbum}
                 disabled={downloading}
-                className="mt-4 w-full flex items-center justify-center gap-3 py-3.5 rounded-sm text-sm font-bold tracking-[0.15em] uppercase transition-all duration-200"
+                className={`mt-4 w-full flex items-center justify-center gap-3 py-3.5 text-sm font-bold tracking-[0.15em] uppercase transition-all duration-200`}
                 style={{
                   backgroundColor: t.accent,
-                  color: '#1C1917',
+                  color: 'white',
                   fontFamily: t.bodyFont,
                   opacity: downloading ? 0.7 : 1,
+                  borderRadius: t.buttonStyle === 'pill' ? '9999px' : t.buttonStyle === 'rounded' ? '8px' : '2px',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#C4A030'; }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = t.accentHover; }}
                 onMouseLeave={e => { e.currentTarget.style.backgroundColor = t.accent; }}
               >
                 <Download className="w-5 h-5" />
@@ -836,12 +849,18 @@ function ShareViewFull() {
       {/* Elegant Footer */}
       <footer className="mt-16 mb-8">
         <div className="max-w-screen-xl mx-auto px-6">
-          <div className="border-t pt-8 text-center" style={{ borderColor: 'rgba(212,175,55,0.3)' }}>
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <div className="h-px w-12" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }}></div>
-              <span className="text-lg" style={{ color: t.accent }}>✦</span>
-              <div className="h-px w-12" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }}></div>
-            </div>
+          <div className="border-t pt-8 text-center" style={{ borderColor: `${t.accent}40` }}>
+            {t.showDiamondDividers ? (
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <div className="h-px w-12" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }}></div>
+                <span className="text-lg" style={{ color: t.accent }}>✦</span>
+                <div className="h-px w-12" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }}></div>
+              </div>
+            ) : t.showGradientLines ? (
+              <div className="flex items-center justify-center mb-3">
+                <div className="h-px w-24" style={{ background: `linear-gradient(to right, transparent, ${t.accent}, transparent)` }}></div>
+              </div>
+            ) : <div className="mb-3" />}
             <p className="text-sm tracking-wide" style={{ fontFamily: t.headingFont, color: t.text }}>
               Site Designed &amp; Maintained by
             </p>
