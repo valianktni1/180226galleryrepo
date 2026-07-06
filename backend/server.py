@@ -1184,6 +1184,11 @@ async def download_subfolder_zip(gallery_id: str, subfolder: str = Query(...), a
             yield chunk
 
     zip_name = f"{gallery['folder_name']} - {subfolder}.zip".replace(' ', '_')
+
+    # Track download bandwidth
+    total_dl_bytes = sum(f.get("file_size", 0) for f in files)
+    await log_bandwidth_event("file_download", total_dl_bytes, f"Admin ZIP: {subfolder} ({len(files)} files)")
+
     return StreamingResponse(
         iter_zip(),
         media_type="application/zip",
@@ -1204,6 +1209,7 @@ async def admin_download_file(gallery_id: str, file_id: str, admin=Depends(get_a
     file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
+    await log_bandwidth_event("file_download", file_path.stat().st_size, f"Admin: {f['filename']}")
     return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
 
 # ─── Shares ───
@@ -1984,12 +1990,12 @@ async def get_video_playback_token(token: str, file_id: str, t: str = Query(None
         url = generate_nginx_video_url(gallery["folder_name"], f["subfolder"], stream_filename)
         # Log estimated video bandwidth (file size of streamed version)
         stream_path = web_path if web_path.exists() else file_path
-        log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
+        await log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
         return {"url": url, "mode": "nginx"}
     
     # Fallback: Python streaming with JWT token (zero DB calls during playback)
     stream_path = web_path if web_path.exists() else file_path
-    log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
+    await log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
     vtoken = create_jwt({"role": "video", "path": str(stream_path)}, expires_hours=2)
     return {"url": f"/api/v/{vtoken}", "mode": "direct"}
 
@@ -2123,7 +2129,7 @@ async def download_share_file(token: str, file_id: str, request: Request, sessio
                         "single", [f["filename"]], f["subfolder"], 1, 1)
     
     # Track download bandwidth
-    log_bandwidth_event("file_download", file_path.stat().st_size if file_path.exists() else f.get("file_size", 0), f["filename"])
+    await log_bandwidth_event("file_download", file_path.stat().st_size if file_path.exists() else f.get("file_size", 0), f["filename"])
     
     return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
 
@@ -2189,7 +2195,7 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
 
     # Track download bandwidth (sum of all file sizes)
     total_dl_bytes = sum(f.get("file_size", 0) for f in files)
-    log_bandwidth_event("file_download", total_dl_bytes, f"ZIP: {len(files)} files")
+    await log_bandwidth_event("file_download", total_dl_bytes, f"ZIP: {len(files)} files")
 
     zip_name = f"{gallery['folder_name'].replace(' ', '_')}.zip"
     return StreamingResponse(
@@ -2252,6 +2258,11 @@ async def download_share_album_direct(token: str, request: Request, subfolder: s
 
     folder_name = subfolder if subfolder else gallery['folder_name']
     zip_name = f"{folder_name.replace(' ', '_')}.zip"
+
+    # Track download bandwidth
+    total_dl_bytes = sum(f.get("file_size", 0) for f in files)
+    await log_bandwidth_event("file_download", total_dl_bytes, f"Album ZIP: {len(files)} files")
+
     return StreamingResponse(
         iter_zip(),
         media_type="application/zip",
@@ -2318,6 +2329,11 @@ async def download_share_favourites_direct(token: str, request: Request, jwt_tok
             yield chunk
 
     zip_name = f"{gallery['folder_name'].replace(' ', '_')}_favourites.zip"
+
+    # Track download bandwidth
+    total_dl_bytes = sum(f.get("file_size", 0) for f in files)
+    await log_bandwidth_event("file_download", total_dl_bytes, f"Favourites ZIP: {len(files)} files")
+
     return StreamingResponse(
         iter_zip(),
         media_type="application/zip",
@@ -2987,8 +3003,8 @@ async def get_dashboard_stats(admin=Depends(get_admin)):
         "storage_used_bytes": total_bytes
     }
 
-async def _log_bandwidth_insert(event_type: str, bytes_size: int, detail: str):
-    """Internal: actual DB insert for bandwidth logging."""
+async def log_bandwidth_event(event_type: str, bytes_size: int, detail: str = ""):
+    """Log a bandwidth event for application-level tracking."""
     try:
         await db.bandwidth_log.insert_one({
             "type": event_type,
@@ -2996,13 +3012,6 @@ async def _log_bandwidth_insert(event_type: str, bytes_size: int, detail: str):
             "detail": detail,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
-    except Exception:
-        pass
-
-def log_bandwidth_event(event_type: str, bytes_size: int, detail: str = ""):
-    """Fire-and-forget bandwidth logging — never blocks the request."""
-    try:
-        asyncio.get_event_loop().create_task(_log_bandwidth_insert(event_type, bytes_size, detail))
     except Exception:
         pass
 
