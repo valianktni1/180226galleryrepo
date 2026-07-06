@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 import time
 import jwt
+import psutil
 import bcrypt
 from PIL import Image
 import aiofiles
@@ -2969,6 +2970,71 @@ async def get_dashboard_stats(admin=Depends(get_admin)):
         "storage_used_bytes": total_bytes
     }
 
+@api_router.get("/admin/network-stats")
+async def get_network_stats(admin=Depends(get_admin)):
+    """Get network bandwidth usage: daily and weekly totals from stored snapshots."""
+    now = datetime.now(timezone.utc)
+    day_ago = (now - timedelta(hours=24)).isoformat()
+    week_ago = (now - timedelta(days=7)).isoformat()
+
+    # Get current live reading
+    counters = psutil.net_io_counters()
+    current = {
+        "bytes_sent": counters.bytes_sent,
+        "bytes_recv": counters.bytes_recv,
+        "timestamp": now.isoformat()
+    }
+
+    # Store current snapshot
+    await db.network_snapshots.insert_one({
+        "bytes_sent": counters.bytes_sent,
+        "bytes_recv": counters.bytes_recv,
+        "timestamp": now.isoformat()
+    })
+
+    # Get oldest snapshot within last 24h
+    day_snapshots = await db.network_snapshots.find(
+        {"timestamp": {"$gte": day_ago}}
+    ).sort("timestamp", 1).limit(1).to_list(1)
+
+    # Get oldest snapshot within last 7 days
+    week_snapshots = await db.network_snapshots.find(
+        {"timestamp": {"$gte": week_ago}}
+    ).sort("timestamp", 1).limit(1).to_list(1)
+
+    daily_sent = 0
+    daily_recv = 0
+    weekly_sent = 0
+    weekly_recv = 0
+
+    if day_snapshots:
+        oldest_day = day_snapshots[0]
+        daily_sent = max(0, counters.bytes_sent - oldest_day["bytes_sent"])
+        daily_recv = max(0, counters.bytes_recv - oldest_day["bytes_recv"])
+
+    if week_snapshots:
+        oldest_week = week_snapshots[0]
+        weekly_sent = max(0, counters.bytes_sent - oldest_week["bytes_sent"])
+        weekly_recv = max(0, counters.bytes_recv - oldest_week["bytes_recv"])
+
+    # Clean up snapshots older than 8 days
+    cutoff = (now - timedelta(days=8)).isoformat()
+    await db.network_snapshots.delete_many({"timestamp": {"$lt": cutoff}})
+
+    return {
+        "daily": {
+            "sent_bytes": daily_sent,
+            "recv_bytes": daily_recv,
+            "total_bytes": daily_sent + daily_recv
+        },
+        "weekly": {
+            "sent_bytes": weekly_sent,
+            "recv_bytes": weekly_recv,
+            "total_bytes": weekly_sent + weekly_recv
+        },
+        "current": current
+    }
+
 @api_router.get("/admin/galleries-stats")
 async def get_all_galleries_stats(admin=Depends(get_admin)):
     """Get summary stats for all galleries (for dashboard cards)."""
@@ -3855,6 +3921,20 @@ Speak soon,<br><br>
         logger.info(f"Sent {sent_count} expiry reminder email(s)")
     return sent_count
 
+async def network_snapshot_loop():
+    """Background loop that records network stats every 15 minutes."""
+    while True:
+        try:
+            counters = psutil.net_io_counters()
+            await db.network_snapshots.insert_one({
+                "bytes_sent": counters.bytes_sent,
+                "bytes_recv": counters.bytes_recv,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+        except Exception as e:
+            logger.warning(f"Network snapshot failed: {e}")
+        await asyncio.sleep(900)  # Every 15 minutes
+
 async def expiry_reminder_loop():
     """Background loop that checks for expiring shares once daily."""
     while True:
@@ -3879,6 +3959,18 @@ async def startup_auto_archive():
         logger.warning(f"Startup expiry reminder check failed: {e}")
     # Start daily background loop
     asyncio.create_task(expiry_reminder_loop())
+    # Start network monitoring snapshots (every 15 minutes)
+    asyncio.create_task(network_snapshot_loop())
+    # Record initial network snapshot
+    try:
+        counters = psutil.net_io_counters()
+        await db.network_snapshots.insert_one({
+            "bytes_sent": counters.bytes_sent,
+            "bytes_recv": counters.bytes_recv,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+    except Exception as e:
+        logger.warning(f"Initial network snapshot failed: {e}")
 
 app.include_router(api_router)
 

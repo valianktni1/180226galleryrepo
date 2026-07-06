@@ -54,7 +54,7 @@ services:
     build: ./backend
     restart: unless-stopped
     devices:
-      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri:/dev/dri
     environment:
       - MONGO_URL=mongodb://mongodb:27017
       - DB_NAME=studioapp

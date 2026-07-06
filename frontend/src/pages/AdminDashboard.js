@@ -12,10 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats
 } from "@/lib/api";
 
 export default function AdminDashboard() {
@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   const [backingUp, setBackingUp] = useState(false);
   const [liveVisitors, setLiveVisitors] = useState([]);
   const [dashStats, setDashStats] = useState({ active_galleries: 0, expiring_soon: 0, downloads_this_week: 0, pending_albums: 0, storage_used_bytes: 0 });
+  const [networkStats, setNetworkStats] = useState(null);
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [broadcastForm, setBroadcastForm] = useState({ subject: "", body: "" });
   const [broadcastRecipients, setBroadcastRecipients] = useState([]);
@@ -51,6 +52,9 @@ export default function AdminDashboard() {
       }).catch(() => {});
       getDashboardStats().then(res => {
         setDashStats(res.data);
+      }).catch(() => {});
+      getNetworkStats().then(res => {
+        setNetworkStats(res.data);
       }).catch(() => {});
     } catch {
       toast.error("Failed to load data");
@@ -241,6 +245,78 @@ export default function AdminDashboard() {
               <span className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>{value}</span>
             </div>
           ))}
+        </motion.div>
+
+        {/* Network & Storage Monitor */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+          className="mb-8 rounded-sm overflow-hidden shadow-sm border"
+          style={{ borderColor: '#E8E4DC' }}
+          data-testid="network-storage-panel">
+          <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: '#FAFAF9' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(99,102,241,0.1)' }}>
+                <Activity className="w-4 h-4" style={{ color: '#6366F1' }} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>Network &amp; Storage Monitor</h3>
+                <p className="text-[10px]" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Bandwidth usage &amp; total storage</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x" style={{ borderTop: '1px solid #E8E4DC', divideColor: '#E8E4DC' }}>
+            {/* Total Storage */}
+            <div className="p-5" data-testid="storage-total">
+              <div className="flex items-center gap-2 mb-2">
+                <HardDrive className="w-3.5 h-3.5" style={{ color: '#6366F1' }} />
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Total Storage</span>
+              </div>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+                {dashStats.storage_used_bytes >= 1099511627776 ? `${(dashStats.storage_used_bytes / 1099511627776).toFixed(2)} TB` : `${(dashStats.storage_used_bytes / 1073741824).toFixed(1)} GB`}
+              </span>
+              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                {(dashStats.storage_used_bytes / (1024*1024)).toFixed(0)} MB total
+              </p>
+            </div>
+            {/* Daily Bandwidth - Upload */}
+            <div className="p-5" data-testid="daily-bandwidth">
+              <div className="flex items-center gap-2 mb-2">
+                <ArrowUpFromLine className="w-3.5 h-3.5" style={{ color: '#22C55E' }} />
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Today (Sent)</span>
+              </div>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+                {networkStats ? (networkStats.daily.sent_bytes >= 1073741824 ? `${(networkStats.daily.sent_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.sent_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
+              </span>
+              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                {networkStats ? (networkStats.daily.recv_bytes >= 1073741824 ? `${(networkStats.daily.recv_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.recv_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} received
+              </p>
+            </div>
+            {/* Daily Total */}
+            <div className="p-5" data-testid="daily-total">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity className="w-3.5 h-3.5" style={{ color: '#F59E0B' }} />
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Today (Total)</span>
+              </div>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+                {networkStats ? (networkStats.daily.total_bytes >= 1073741824 ? `${(networkStats.daily.total_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.total_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
+              </span>
+              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                Daily bandwidth
+              </p>
+            </div>
+            {/* Weekly Total */}
+            <div className="p-5" data-testid="weekly-total">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity className="w-3.5 h-3.5" style={{ color: '#EC4899' }} />
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>This Week (Total)</span>
+              </div>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+                {networkStats ? (networkStats.weekly.total_bytes >= 1073741824 ? `${(networkStats.weekly.total_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.weekly.total_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
+              </span>
+              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                {networkStats ? (networkStats.weekly.sent_bytes >= 1073741824 ? `${(networkStats.weekly.sent_bytes / 1073741824).toFixed(2)} GB sent` : `${(networkStats.weekly.sent_bytes / (1024*1024)).toFixed(1)} MB sent`) : '...'} / {networkStats ? (networkStats.weekly.recv_bytes >= 1073741824 ? `${(networkStats.weekly.recv_bytes / 1073741824).toFixed(2)} GB recv` : `${(networkStats.weekly.recv_bytes / (1024*1024)).toFixed(1)} MB recv`) : '...'}
+              </p>
+            </div>
+          </div>
         </motion.div>
 
         {/* Live Visitors Panel */}
