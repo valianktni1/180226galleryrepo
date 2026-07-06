@@ -50,8 +50,14 @@ User deploys on TrueNAS via Dockge:
 - [x] Dashboard stats redesign — 5 cards
 - [x] Live visitors wording improved
 - [x] Network & Storage Monitor panel — Total storage (GB/TB), Daily & Weekly bandwidth, Video streaming bandwidth, Download bandwidth (2026-07-06)
-- [x] Application-level bandwidth tracking — logs video stream file sizes and download sizes for accurate monitoring (2026-07-06)
+- [x] Application-level bandwidth tracking — logs video stream file sizes and download sizes (2026-07-06)
 - [x] Background network snapshot task (every 15 minutes) with auto-cleanup (2026-07-06)
+- [x] **Gallery Visual Themes** — 5 presets: Classic Gold, Modern Minimal, Dark Elegance, Soft Romantic, Earthy Botanical (2026-07-06)
+  - Theme picker in Create Gallery dialog (5 colour-dot buttons)
+  - Theme picker dropdown on Gallery Detail page header
+  - ShareView dynamically renders using selected theme (colours, fonts, accents)
+  - All themes have full light + dark mode palettes
+  - Existing galleries default to Classic Gold (backwards compatible)
 
 ## In Progress
 None
@@ -61,11 +67,12 @@ None — all previous backlog items cancelled per user request.
 
 ## Key Files
 - `/app/backend/server.py` — All APIs, FFmpeg, SMTP email, NGINX signed URLs, network monitoring
-- `/app/frontend/src/pages/AdminDashboard.js` — Dashboard with stats, network monitor, live visitors
+- `/app/frontend/src/lib/themes.js` — Gallery theme presets (5 themes with light/dark modes)
+- `/app/frontend/src/pages/AdminDashboard.js` — Dashboard with stats, network monitor, live visitors, theme picker in create dialog
+- `/app/frontend/src/pages/AdminGalleryDetail.js` — Gallery management, theme picker dropdown, notify, transcode
 - `/app/frontend/src/pages/AdminSettings.js` — Settings page with Email Settings tab
-- `/app/frontend/src/pages/AdminGalleryDetail.js` — Gallery management, notify, transcode
 - `/app/frontend/src/pages/AdminActivity.js` — Activity log with name search
-- `/app/frontend/src/pages/ShareView.js` — Client-facing view
+- `/app/frontend/src/pages/ShareView.js` — Client-facing view (theme-driven colours/fonts)
 - `/app/frontend/src/lib/api.js` — API client
 
 ## Key API Endpoints
@@ -74,14 +81,24 @@ None — all previous backlog items cancelled per user request.
 - `POST /api/admin/broadcast-email` — Mass email
 - `GET/POST/PUT/DELETE /api/admin/email-templates` — Template CRUD
 - `GET /api/admin/email-log` — Email history
+- `PUT /api/admin/galleries/{id}` — Accepts `theme` field for gallery theme updates
 
 ## Database Collections
-- `admin`, `galleries`, `files`, `shares`, `favourites`, `activity_log`, `activity_log_archive`
+- `admin`, `galleries` (now includes `theme` field), `files`, `shares`, `favourites`, `activity_log`, `activity_log_archive`
 - `email_log`, `email_templates` (custom email templates), `templates` (gallery templates)
 - `settings` (SMTP, compression, site_url)
 - `print_sizes`, `print_orders`
 - `network_snapshots` — periodic network counter readings for bandwidth calculation
 - `bandwidth_log` — application-level bandwidth events (video streams, file downloads)
+
+## Gallery Themes
+| Theme | Accent | Heading Font | Body Font |
+|-------|--------|-------------|-----------|
+| Classic Gold | #D4AF37 | Cormorant Garamond | Manrope |
+| Modern Minimal | #0A0A0A | Manrope | Manrope |
+| Dark Elegance | #C9A96E | Cormorant Garamond | Manrope |
+| Soft Romantic | #C77D8A | Cormorant Garamond | Manrope |
+| Earthy Botanical | #6B8F71 | Cormorant Garamond | Manrope |
 
 ## 3rd Party Integrations
 - PayPal (Payments) — Direct link redirect
