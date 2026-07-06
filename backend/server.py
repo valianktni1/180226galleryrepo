@@ -1976,10 +1976,14 @@ async def get_video_playback_token(token: str, file_id: str, t: str = Query(None
     # If nginx video server is configured, use it (zero Python involvement in streaming)
     if NGINX_VIDEO_URL:
         url = generate_nginx_video_url(gallery["folder_name"], f["subfolder"], stream_filename)
+        # Log estimated video bandwidth (file size of streamed version)
+        stream_path = web_path if web_path.exists() else file_path
+        await log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
         return {"url": url, "mode": "nginx"}
     
     # Fallback: Python streaming with JWT token (zero DB calls during playback)
     stream_path = web_path if web_path.exists() else file_path
+    await log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
     vtoken = create_jwt({"role": "video", "path": str(stream_path)}, expires_hours=2)
     return {"url": f"/api/v/{vtoken}", "mode": "direct"}
 
@@ -2112,6 +2116,9 @@ async def download_share_file(token: str, file_id: str, request: Request, sessio
                         share.get("label", token) if share else token, client_ip,
                         "single", [f["filename"]], f["subfolder"], 1, 1)
     
+    # Track download bandwidth
+    await log_bandwidth_event("file_download", file_path.stat().st_size if file_path.exists() else f.get("file_size", 0), f["filename"])
+    
     return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
 
 @api_router.post("/share/{token}/download-zip")
@@ -2173,6 +2180,10 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
             if not chunk:
                 break
             yield chunk
+
+    # Track download bandwidth (sum of all file sizes)
+    total_dl_bytes = sum(f.get("file_size", 0) for f in files)
+    await log_bandwidth_event("file_download", total_dl_bytes, f"ZIP: {len(files)} files")
 
     zip_name = f"{gallery['folder_name'].replace(' ', '_')}.zip"
     return StreamingResponse(
@@ -2970,6 +2981,18 @@ async def get_dashboard_stats(admin=Depends(get_admin)):
         "storage_used_bytes": total_bytes
     }
 
+async def log_bandwidth_event(event_type: str, bytes_size: int, detail: str = ""):
+    """Log a bandwidth event for application-level tracking (video streams, downloads)."""
+    try:
+        await db.bandwidth_log.insert_one({
+            "type": event_type,
+            "bytes": bytes_size,
+            "detail": detail,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+    except Exception:
+        pass  # Silent — don't break transfers if logging fails
+
 @api_router.get("/admin/network-stats")
 async def get_network_stats(admin=Depends(get_admin)):
     """Get network bandwidth usage: daily and weekly totals from stored snapshots."""
@@ -3021,6 +3044,25 @@ async def get_network_stats(admin=Depends(get_admin)):
     cutoff = (now - timedelta(days=8)).isoformat()
     await db.network_snapshots.delete_many({"timestamp": {"$lt": cutoff}})
 
+    # App-level bandwidth: video streams + file downloads tracked by the app
+    daily_video_pipeline = [{"$match": {"type": "video_stream", "timestamp": {"$gte": day_ago}}}, {"$group": {"_id": None, "total": {"$sum": "$bytes"}}}]
+    daily_download_pipeline = [{"$match": {"type": "file_download", "timestamp": {"$gte": day_ago}}}, {"$group": {"_id": None, "total": {"$sum": "$bytes"}}}]
+    weekly_video_pipeline = [{"$match": {"type": "video_stream", "timestamp": {"$gte": week_ago}}}, {"$group": {"_id": None, "total": {"$sum": "$bytes"}}}]
+    weekly_download_pipeline = [{"$match": {"type": "file_download", "timestamp": {"$gte": week_ago}}}, {"$group": {"_id": None, "total": {"$sum": "$bytes"}}}]
+
+    dv = await db.bandwidth_log.aggregate(daily_video_pipeline).to_list(1)
+    dd = await db.bandwidth_log.aggregate(daily_download_pipeline).to_list(1)
+    wv = await db.bandwidth_log.aggregate(weekly_video_pipeline).to_list(1)
+    wd = await db.bandwidth_log.aggregate(weekly_download_pipeline).to_list(1)
+
+    daily_video = dv[0]["total"] if dv else 0
+    daily_downloads = dd[0]["total"] if dd else 0
+    weekly_video = wv[0]["total"] if wv else 0
+    weekly_downloads = wd[0]["total"] if wd else 0
+
+    # Clean up old bandwidth logs
+    await db.bandwidth_log.delete_many({"timestamp": {"$lt": cutoff}})
+
     return {
         "daily": {
             "sent_bytes": daily_sent,
@@ -3031,6 +3073,14 @@ async def get_network_stats(admin=Depends(get_admin)):
             "sent_bytes": weekly_sent,
             "recv_bytes": weekly_recv,
             "total_bytes": weekly_sent + weekly_recv
+        },
+        "video": {
+            "daily_bytes": daily_video,
+            "weekly_bytes": weekly_video
+        },
+        "downloads": {
+            "daily_bytes": daily_downloads,
+            "weekly_bytes": weekly_downloads
         },
         "current": current
     }

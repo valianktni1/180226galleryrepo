@@ -263,7 +263,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x" style={{ borderTop: '1px solid #E8E4DC', divideColor: '#E8E4DC' }}>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-0 divide-x" style={{ borderTop: '1px solid #E8E4DC', divideColor: '#E8E4DC' }}>
             {/* Total Storage */}
             <div className="p-5" data-testid="storage-total">
               <div className="flex items-center gap-2 mb-2">
@@ -277,19 +277,6 @@ export default function AdminDashboard() {
                 {(dashStats.storage_used_bytes / (1024*1024)).toFixed(0)} MB total
               </p>
             </div>
-            {/* Daily Bandwidth - Upload */}
-            <div className="p-5" data-testid="daily-bandwidth">
-              <div className="flex items-center gap-2 mb-2">
-                <ArrowUpFromLine className="w-3.5 h-3.5" style={{ color: '#22C55E' }} />
-                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Today (Sent)</span>
-              </div>
-              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
-                {networkStats ? (networkStats.daily.sent_bytes >= 1073741824 ? `${(networkStats.daily.sent_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.sent_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
-              </span>
-              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-                {networkStats ? (networkStats.daily.recv_bytes >= 1073741824 ? `${(networkStats.daily.recv_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.recv_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} received
-              </p>
-            </div>
             {/* Daily Total */}
             <div className="p-5" data-testid="daily-total">
               <div className="flex items-center gap-2 mb-2">
@@ -300,7 +287,7 @@ export default function AdminDashboard() {
                 {networkStats ? (networkStats.daily.total_bytes >= 1073741824 ? `${(networkStats.daily.total_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.total_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
               </span>
               <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-                Daily bandwidth
+                {networkStats ? (networkStats.daily.sent_bytes >= 1073741824 ? `${(networkStats.daily.sent_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.sent_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} sent / {networkStats ? (networkStats.daily.recv_bytes >= 1073741824 ? `${(networkStats.daily.recv_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.recv_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} recv
               </p>
             </div>
             {/* Weekly Total */}
@@ -313,7 +300,33 @@ export default function AdminDashboard() {
                 {networkStats ? (networkStats.weekly.total_bytes >= 1073741824 ? `${(networkStats.weekly.total_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.weekly.total_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
               </span>
               <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
-                {networkStats ? (networkStats.weekly.sent_bytes >= 1073741824 ? `${(networkStats.weekly.sent_bytes / 1073741824).toFixed(2)} GB sent` : `${(networkStats.weekly.sent_bytes / (1024*1024)).toFixed(1)} MB sent`) : '...'} / {networkStats ? (networkStats.weekly.recv_bytes >= 1073741824 ? `${(networkStats.weekly.recv_bytes / 1073741824).toFixed(2)} GB recv` : `${(networkStats.weekly.recv_bytes / (1024*1024)).toFixed(1)} MB recv`) : '...'}
+                {networkStats ? (networkStats.weekly.sent_bytes >= 1073741824 ? `${(networkStats.weekly.sent_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.weekly.sent_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} sent / {networkStats ? (networkStats.weekly.recv_bytes >= 1073741824 ? `${(networkStats.weekly.recv_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.weekly.recv_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} recv
+              </p>
+            </div>
+            {/* Video Streaming */}
+            <div className="p-5" data-testid="video-bandwidth">
+              <div className="flex items-center gap-2 mb-2">
+                <Film className="w-3.5 h-3.5" style={{ color: '#8B5CF6' }} />
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Video Streams</span>
+              </div>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+                {networkStats?.video ? (networkStats.video.daily_bytes >= 1073741824 ? `${(networkStats.video.daily_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.video.daily_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
+              </span>
+              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                today / {networkStats?.video ? (networkStats.video.weekly_bytes >= 1073741824 ? `${(networkStats.video.weekly_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.video.weekly_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} this week
+              </p>
+            </div>
+            {/* File Downloads */}
+            <div className="p-5" data-testid="download-bandwidth">
+              <div className="flex items-center gap-2 mb-2">
+                <ArrowDownToLine className="w-3.5 h-3.5" style={{ color: '#22C55E' }} />
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Downloads</span>
+              </div>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+                {networkStats?.downloads ? (networkStats.downloads.daily_bytes >= 1073741824 ? `${(networkStats.downloads.daily_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.downloads.daily_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
+              </span>
+              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                today / {networkStats?.downloads ? (networkStats.downloads.weekly_bytes >= 1073741824 ? `${(networkStats.downloads.weekly_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.downloads.weekly_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} this week
               </p>
             </div>
           </div>
