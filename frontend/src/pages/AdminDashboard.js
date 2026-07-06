@@ -17,6 +17,7 @@ import {
 import {
   listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats
 } from "@/lib/api";
+import { THEME_LIST } from "@/lib/themes";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ export default function AdminDashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ folder_name: "", template_id: "", client_email: "" });
+  const [form, setForm] = useState({ folder_name: "", template_id: "", client_email: "", theme: "classic_gold" });
   const [newTemplate, setNewTemplate] = useState({ name: "", subfolders: "" });
   const [backingUp, setBackingUp] = useState(false);
   const [liveVisitors, setLiveVisitors] = useState([]);
@@ -135,11 +136,12 @@ export default function AdminDashboard() {
       const res = await createGallery({
         folder_name: form.folder_name.trim(),
         template_id: form.template_id || null,
-        client_email: form.client_email.trim() || null
+        client_email: form.client_email.trim() || null,
+        theme: form.theme || "classic_gold"
       });
       toast.success("Gallery created");
       setShowCreate(false);
-      setForm({ folder_name: "", template_id: "", client_email: "" });
+      setForm({ folder_name: "", template_id: "", client_email: "", theme: "classic_gold" });
       navigate(`/admin/gallery/${res.data.id}`);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to create");
@@ -579,6 +581,26 @@ export default function AdminDashboard() {
                 onChange={e => setForm(f => ({...f, client_email: e.target.value}))}
                 placeholder="e.g. couple@email.com" className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]" />
               <p className="text-xs" style={{ color: '#A8A29E' }}>Used to send gallery-ready notifications</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Gallery Theme</Label>
+              <div className="grid grid-cols-5 gap-2">
+                {THEME_LIST.map(th => (
+                  <button type="button" key={th.id} data-testid={`create-theme-${th.id}`}
+                    onClick={() => setForm(f => ({...f, theme: th.id}))}
+                    className={`flex flex-col items-center gap-1.5 p-2.5 rounded-sm border transition-all cursor-pointer ${form.theme === th.id ? 'border-[#1C1917] shadow-sm' : 'border-[#E5E5E5] hover:border-[#A8A29E]'}`}
+                    style={{ backgroundColor: form.theme === th.id ? '#F5F2EB' : 'transparent' }}>
+                    <div className="flex gap-0.5">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: th.preview.bg, border: '1px solid #D4D4D8' }} />
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: th.preview.accent }} />
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: th.preview.text }} />
+                    </div>
+                    <span className="text-[9px] font-medium leading-tight text-center" style={{ color: form.theme === th.id ? '#1C1917' : '#78716C' }}>
+                      {th.name.split(' ')[0]}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
             <DialogFooter>
               <Button data-testid="create-gallery-submit" type="submit" disabled={creating}

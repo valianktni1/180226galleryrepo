@@ -110,10 +110,12 @@ class GalleryCreate(BaseModel):
     folder_name: str  # e.g. "Gina & Mark 30.11.22"
     template_id: Optional[str] = None
     client_email: Optional[str] = None
+    theme: Optional[str] = "classic_gold"
 
 class GalleryUpdate(BaseModel):
     folder_name: Optional[str] = None
     client_email: Optional[str] = None
+    theme: Optional[str] = None
 
 class ShareCreate(BaseModel):
     gallery_id: str
@@ -788,6 +790,7 @@ async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
         "subfolders": subfolders,
         "template_id": data.template_id,
         "client_email": data.client_email or "",
+        "theme": data.theme or "classic_gold",
         "file_counts": {sf: 0 for sf in subfolders},
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
@@ -859,6 +862,8 @@ async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get
         update["folder_name"] = data.folder_name
     if data.client_email is not None:
         update["client_email"] = data.client_email
+    if data.theme is not None:
+        update["theme"] = data.theme
     await db.galleries.update_one({"id": gallery_id}, {"$set": update})
     updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     return updated
@@ -1766,6 +1771,7 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
     return {
         "gallery_id": gallery_id,
         "gallery_name": gallery["folder_name"],
+        "theme": gallery.get("theme", "classic_gold"),
         "subfolders": subfolders_data,
         "covers": gallery.get("covers", {}),
         "access_level": session.get("access_level", "download"),

@@ -22,13 +22,14 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send
+  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
   updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail
 } from "@/lib/api";
+import { THEME_LIST } from "@/lib/themes";
 
 export default function AdminGalleryDetail() {
   const { id } = useParams();
@@ -53,6 +54,7 @@ export default function AdminGalleryDetail() {
   const [sendingNotification, setSendingNotification] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [clientEmail, setClientEmail] = useState("");
+  const [galleryTheme, setGalleryTheme] = useState("classic_gold");
   const thumbPollingRef = useRef(null);
 
   // Send Template Email
@@ -87,6 +89,7 @@ export default function AdminGalleryDetail() {
       setFiles(res.data.files || []);
       setShares(res.data.shares || []);
       setClientEmail(res.data.client_email || "");
+      setGalleryTheme(res.data.theme || "classic_gold");
       if (!activeTab && res.data.subfolders?.length) {
         setActiveTab(res.data.subfolders[0]);
       }
@@ -411,6 +414,14 @@ export default function AdminGalleryDetail() {
     } catch { toast.error("Failed to save email"); }
   };
 
+  const handleThemeChange = async (themeId) => {
+    setGalleryTheme(themeId);
+    try {
+      await updateGallery(id, { theme: themeId });
+      toast.success("Gallery theme updated");
+    } catch { toast.error("Failed to update theme"); }
+  };
+
   const handleNotifyCouple = async () => {
     if (!clientEmail) {
       setEditingEmail(true);
@@ -500,6 +511,30 @@ export default function AdminGalleryDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button data-testid="theme-picker-btn" variant="outline"
+                  className="rounded-sm px-3 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#57534E]/30 text-[#57534E] hover:bg-[#57534E]/5">
+                  <Palette className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{THEME_LIST.find(th => th.id === galleryTheme)?.name || 'Theme'}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 p-2">
+                {THEME_LIST.map(th => (
+                  <DropdownMenuItem key={th.id} data-testid={`theme-${th.id}`}
+                    onClick={() => handleThemeChange(th.id)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-sm cursor-pointer ${galleryTheme === th.id ? 'bg-stone-100' : ''}`}>
+                    <div className="flex gap-0.5">
+                      <div className="w-4 h-4 rounded-full border border-gray-200" style={{ backgroundColor: th.preview.bg }} />
+                      <div className="w-4 h-4 rounded-full border border-gray-200" style={{ backgroundColor: th.preview.accent }} />
+                      <div className="w-4 h-4 rounded-full border border-gray-200" style={{ backgroundColor: th.preview.text }} />
+                    </div>
+                    <span className="text-xs font-medium" style={{ fontFamily: 'Manrope, sans-serif' }}>{th.name}</span>
+                    {galleryTheme === th.id && <Check className="w-3.5 h-3.5 ml-auto text-green-600" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button data-testid="notify-couple-btn" onClick={handleNotifyCouple} disabled={sendingNotification}
               variant="outline" className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37]/10">
               <Mail className="w-3.5 h-3.5" /> {sendingNotification ? "Sending..." : "Notify Couple"}

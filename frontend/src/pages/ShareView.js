@@ -18,6 +18,7 @@ import {
 import GuestUploadView from "@/pages/GuestUploadView";
 import Slideshow from "@/pages/Slideshow";
 import VideoPlayer from "@/components/VideoPlayer";
+import { getTheme } from "@/lib/themes";
 
 export default function ShareView() {
   const { token } = useParams();
@@ -43,6 +44,7 @@ function ShareViewFull() {
 
   const [galleryName, setGalleryName] = useState("");
   const [galleryId, setGalleryId] = useState(null);
+  const [galleryThemeId, setGalleryThemeId] = useState("classic_gold");
   const [subfolders, setSubfolders] = useState([]);
   const [covers, setCovers] = useState({});
   const [permissions, setPermissions] = useState({
@@ -74,18 +76,8 @@ function ShareViewFull() {
       return !prev;
     });
   };
-  // Theme colours
-  const t = darkMode ? {
-    bg: '#1A1A1A', bgAlt: '#252525', bgCard: '#2A2A2A', bgInstructions: '#222222',
-    text: '#E8E4DF', textSub: '#A8A29E', textMuted: '#78716C', headingColor: '#F5F2EB',
-    border: '#333333', borderGold: '#D4AF37', cardShadow: '0 2px 12px rgba(0,0,0,0.3)',
-    emptyBg: '#252525',
-  } : {
-    bg: '#FDFCF8', bgAlt: '#F5F2EB', bgCard: 'white', bgInstructions: 'white',
-    text: '#57534E', textSub: '#A8A29E', textMuted: '#78716C', headingColor: '#1C1917',
-    border: '#F5F2EB', borderGold: '#D4AF37', cardShadow: '0 2px 12px rgba(0,0,0,0.06)',
-    emptyBg: '#F5F2EB',
-  };
+  // Theme colours — driven by gallery theme preset + dark mode
+  const t = getTheme(galleryThemeId, darkMode);
 
   // ─── Live Heartbeat (silent background ping every 30s) ───
   const sessionIdRef = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -128,6 +120,7 @@ function ShareViewFull() {
       const res = await getShareFiles(token);
       setGalleryName(res.data.gallery_name);
       setGalleryId(res.data.gallery_id);
+      setGalleryThemeId(res.data.theme || "classic_gold");
       setSubfolders(res.data.subfolders);
       setCovers(res.data.covers || {});
       setPermissions({
@@ -351,7 +344,7 @@ function ShareViewFull() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: t.bg }}>
-      <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: t.accent, borderTopColor: 'transparent' }} />
     </div>
   );
 
@@ -367,7 +360,8 @@ function ShareViewFull() {
               localStorage.removeItem("share_url_token"); 
               navigate(`/s/${token}`); 
             }}
-            className="text-[#D4AF37] underline"
+            className="underline"
+            style={{ color: t.accent }}
           >
             Try again
           </button>
@@ -406,17 +400,18 @@ function ShareViewFull() {
                 className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer"
                 style={{ backgroundColor: heroImageUrl ? 'rgba(255,255,255,0.15)' : (darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'), transition: 'background-color 0.3s ease' }}
                 title={darkMode ? 'Light mode' : 'Dark mode'}>
-                {darkMode ? <Sun className="w-3.5 h-3.5" style={{ color: heroImageUrl ? 'white' : '#D4AF37' }} /> : <Moon className="w-3.5 h-3.5" style={{ color: heroImageUrl ? 'white' : '#78716C' }} />}
+                {darkMode ? <Sun className="w-3.5 h-3.5" style={{ color: heroImageUrl ? 'white' : t.accent }} /> : <Moon className="w-3.5 h-3.5" style={{ color: heroImageUrl ? 'white' : '#78716C' }} />}
               </button>
               <Button data-testid="order-prints-btn" onClick={() => navigate(`/s/${token}/prints`)}
-                className={`rounded-sm gap-2 text-xs tracking-wider uppercase font-bold px-4 py-2 shadow-md ${heroImageUrl ? 'bg-white/20 backdrop-blur-md hover:bg-white/30 text-white border border-white/20' : 'bg-[#D4AF37] hover:bg-[#B8962E] text-white'}`}>
+                className={`rounded-sm gap-2 text-xs tracking-wider uppercase font-bold px-4 py-2 shadow-md ${heroImageUrl ? 'bg-white/20 backdrop-blur-md hover:bg-white/30 text-white border border-white/20' : 'text-white'}`}
+                style={heroImageUrl ? {} : { backgroundColor: t.accent }}>
                 <Printer className="w-4 h-4" /> Order Prints
               </Button>
               {favCount > 0 && (
                 <Button data-testid="show-favourites-landing" variant="ghost" onClick={() => setShowFavourites(true)}
                   className={`rounded-sm gap-2 text-xs tracking-wider ${heroImageUrl ? 'text-white/90 hover:text-white' : ''}`}
                   style={heroImageUrl ? {} : { color: t.text }}>
-                  <Heart className="w-3.5 h-3.5" fill="#D4AF37" stroke="#D4AF37" /> Favourites ({favCount})
+                  <Heart className="w-3.5 h-3.5" fill={t.accent} stroke={t.accent} /> Favourites ({favCount})
                 </Button>
               )}
             </div>
@@ -452,16 +447,16 @@ function ShareViewFull() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               className="text-sm tracking-[0.3em] uppercase mb-2"
-              style={{ color: heroImageUrl ? 'rgba(255,255,255,0.7)' : t.textSub, fontFamily: 'Manrope, sans-serif' }}
+              style={{ color: heroImageUrl ? 'rgba(255,255,255,0.7)' : t.textSub, fontFamily: t.bodyFont }}
             >
               Welcome
             </motion.p>
             {heroImageUrl && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
                 className="flex items-center justify-center gap-4 mb-4">
-                <div className="h-px w-12 md:w-20" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
-                <span className="text-[#D4AF37] text-sm" style={{ lineHeight: 1 }}>&#10022;</span>
-                <div className="h-px w-12 md:w-20" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
+                <div className="h-px w-12 md:w-20" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }} />
+                <span className="text-sm" style={{ color: t.accent, lineHeight: 1 }}>&#10022;</span>
+                <div className="h-px w-12 md:w-20" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }} />
               </motion.div>
             )}
             <motion.h1
@@ -469,7 +464,7 @@ function ShareViewFull() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
               className="text-5xl md:text-7xl lg:text-8xl font-light italic mb-3"
-              style={{ fontFamily: 'Cormorant Garamond, serif', color: heroImageUrl ? 'white' : t.headingColor, textShadow: heroImageUrl ? '0 2px 30px rgba(0,0,0,0.4)' : 'none' }}
+              style={{ fontFamily: t.headingFont, color: heroImageUrl ? 'white' : t.headingColor, textShadow: heroImageUrl ? '0 2px 30px rgba(0,0,0,0.4)' : 'none' }}
               data-testid="couple-name-heading"
             >
               {coupleName}
@@ -477,9 +472,9 @@ function ShareViewFull() {
             {heroImageUrl && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
                 className="flex items-center justify-center gap-4 mb-4">
-                <div className="h-px w-12 md:w-20" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
-                <span className="text-[#D4AF37] text-sm" style={{ lineHeight: 1 }}>&#10022;</span>
-                <div className="h-px w-12 md:w-20" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
+                <div className="h-px w-12 md:w-20" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }} />
+                <span className="text-sm" style={{ color: t.accent, lineHeight: 1 }}>&#10022;</span>
+                <div className="h-px w-12 md:w-20" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }} />
               </motion.div>
             )}
             <motion.p
@@ -487,7 +482,7 @@ function ShareViewFull() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.7 }}
               className="text-base md:text-lg"
-              style={{ color: heroImageUrl ? 'rgba(255,255,255,0.8)' : t.text, fontFamily: 'Manrope, sans-serif' }}
+              style={{ color: heroImageUrl ? 'rgba(255,255,255,0.8)' : t.text, fontFamily: t.bodyFont }}
             >
               Your special memories, beautifully captured
             </motion.p>
@@ -502,31 +497,31 @@ function ShareViewFull() {
             transition={{ delay: 0.9 }}
             className="mx-auto max-w-3xl text-center px-8 py-10"
           >
-            <h3 className="text-2xl font-medium mb-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>
+            <h3 className="text-2xl font-medium mb-2" style={{ fontFamily: t.headingFont, color: t.headingColor }}>
               Your Wedding Album
             </h3>
-            <p className="text-sm mb-10" style={{ fontFamily: 'Manrope, sans-serif', color: t.textMuted || '#A8A29E' }}>
+            <p className="text-sm mb-10" style={{ fontFamily: t.bodyFont, color: t.textMuted || '#A8A29E' }}>
               If your package includes an album, follow these three simple steps
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-10">
               {[
-                { step: "1", icon: <Heart className="w-6 h-6" fill="#D4AF37" stroke="#D4AF37" />, title: "Heart Your Favourites", desc: "Open your Wedding Images folder and tap the heart on your 40 favourite photos" },
-                { step: "2", icon: <ImageIcon className="w-6 h-6" style={{ color: '#D4AF37' }} />, title: "Choose Your Cover", desc: "Pick one special image for the front cover of your album" },
-                { step: "3", icon: <CheckCircle className="w-6 h-6" style={{ color: '#D4AF37' }} />, title: "Submit Your Album", desc: "Tap the gold heart at the top, then press Submit for Album" },
+                { step: "1", icon: <Heart className="w-6 h-6" fill={t.accent} stroke={t.accent} />, title: "Heart Your Favourites", desc: "Open your Wedding Images folder and tap the heart on your 40 favourite photos" },
+                { step: "2", icon: <ImageIcon className="w-6 h-6" style={{ color: t.accent }} />, title: "Choose Your Cover", desc: "Pick one special image for the front cover of your album" },
+                { step: "3", icon: <CheckCircle className="w-6 h-6" style={{ color: t.accent }} />, title: "Submit Your Album", desc: "Tap the gold heart at the top, then press Submit for Album" },
               ].map(({ step, icon, title, desc }) => (
-                <div key={step} className="flex flex-col items-center text-center p-6 rounded-sm border" style={{ borderColor: t.border || 'rgba(212,175,55,0.2)', backgroundColor: t.bgInstructions || 'rgba(212,175,55,0.03)' }}>
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'rgba(212,175,55,0.1)' }}>
+                <div key={step} className="flex flex-col items-center text-center p-6 rounded-sm border" style={{ borderColor: t.border, backgroundColor: t.bgInstructions }}>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: `${t.accent}18` }}>
                     {icon}
                   </div>
-                  <h4 className="text-base font-medium mb-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>{title}</h4>
-                  <p className="text-xs leading-relaxed" style={{ fontFamily: 'Manrope, sans-serif', color: t.text }}>{desc}</p>
+                  <h4 className="text-base font-medium mb-2" style={{ fontFamily: t.headingFont, color: t.headingColor }}>{title}</h4>
+                  <p className="text-xs leading-relaxed" style={{ fontFamily: t.bodyFont, color: t.text }}>{desc}</p>
                 </div>
               ))}
             </div>
 
-            <p className="text-xs" style={{ fontFamily: 'Manrope, sans-serif', color: t.textMuted || '#A8A29E' }}>
-              Your selections will appear in your <strong style={{ color: t.headingColor }}>Album Favourites</strong> folder. Please email <a href="mailto:mark@perfectweddingsbymark.uk" className="underline" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a> once submitted, including your chosen cover image number.
+            <p className="text-xs" style={{ fontFamily: t.bodyFont, color: t.textMuted || '#A8A29E' }}>
+              Your selections will appear in your <strong style={{ color: t.headingColor }}>Album Favourites</strong> folder. Please email <a href="mailto:mark@perfectweddingsbymark.uk" className="underline" style={{ color: t.accent }}>mark@perfectweddingsbymark.uk</a> once submitted, including your chosen cover image number.
             </p>
           </motion.div>
         </section>
@@ -534,9 +529,9 @@ function ShareViewFull() {
         {/* Albums Section */}
         <section className="max-w-screen-xl mx-auto px-6 py-12 md:py-16">
           <div className="flex items-center justify-center gap-4 mb-10">
-            <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }} />
-            <h2 className="text-xl font-light tracking-wide" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>Your Albums</h2>
-            <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }} />
+            <div className="h-px flex-1 max-w-[80px]" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }} />
+            <h2 className="text-xl font-light tracking-wide" style={{ fontFamily: t.headingFont, color: t.headingColor }}>Your Albums</h2>
+            <div className="h-px flex-1 max-w-[80px]" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-12">
@@ -572,8 +567,8 @@ function ShareViewFull() {
                         />
                         <div className="absolute inset-x-0 bottom-0 h-20" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5), transparent)' }} />
                         <div className="absolute bottom-3 left-4 right-4">
-                          <p className="font-medium text-sm text-white" style={{ fontFamily: 'Manrope, sans-serif', textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{sf.name}</p>
-                          <p className="text-xs text-white/70" style={{ fontFamily: 'Manrope, sans-serif' }}>{sf.files.length} {sf.files.length === 1 ? 'file' : 'files'}</p>
+                          <p className="font-medium text-sm text-white" style={{ fontFamily: t.bodyFont, textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{sf.name}</p>
+                          <p className="text-xs text-white/70" style={{ fontFamily: t.bodyFont }}>{sf.files.length} {sf.files.length === 1 ? 'file' : 'files'}</p>
                         </div>
                       </div>
                     );
@@ -581,8 +576,8 @@ function ShareViewFull() {
                   return (
                     <div className="w-full aspect-[4/3] flex flex-col items-center justify-center" style={{ backgroundColor: t.emptyBg }}>
                       <FolderOpen className="w-10 h-10 mb-3" strokeWidth={1.5} style={{ color: t.textMuted }} />
-                      <p className="font-medium text-sm mb-0.5" style={{ fontFamily: 'Manrope, sans-serif', color: t.headingColor }}>{sf.name}</p>
-                      <p className="text-xs" style={{ color: t.textSub, fontFamily: 'Manrope, sans-serif' }}>{sf.files.length} {sf.files.length === 1 ? 'file' : 'files'}</p>
+                      <p className="font-medium text-sm mb-0.5" style={{ fontFamily: t.bodyFont, color: t.headingColor }}>{sf.name}</p>
+                      <p className="text-xs" style={{ color: t.textSub, fontFamily: t.bodyFont }}>{sf.files.length} {sf.files.length === 1 ? 'file' : 'files'}</p>
                     </div>
                   );
                 })()}
@@ -598,12 +593,12 @@ function ShareViewFull() {
               transition={{ delay: 0.5 }}
             >
               <div className="flex items-center gap-2 mb-4">
-                <Upload className="w-5 h-5 text-[#D4AF37]" strokeWidth={1.5} />
-                <h2 className="text-xl font-semibold" style={{ fontFamily: 'Manrope, sans-serif', color: t.headingColor }}>
+                <Upload className="w-5 h-5" style={{ color: t.accent }} strokeWidth={1.5} />
+                <h2 className="text-xl font-semibold" style={{ fontFamily: t.bodyFont, color: t.headingColor }}>
                   {permissions.allowAllFileTypes ? "Upload Files" : "Upload Photos & Videos"}
                 </h2>
               </div>
-              <p className="text-sm mb-4" style={{ color: t.text, fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-sm mb-4" style={{ color: t.text, fontFamily: t.bodyFont }}>
                 {permissions.allowAllFileTypes 
                   ? "Upload RAW files, photos, videos and any other files"
                   : "Share your photos and videos from the event"
@@ -619,16 +614,16 @@ function ShareViewFull() {
                   onChange={e => handleGuestUpload(e.target.files)} data-testid="guest-file-input" />
                 {uploading ? (
                   <div className="w-full max-w-xs">
-                    <p className="text-sm mb-2" style={{ color: t.text, fontFamily: 'Manrope, sans-serif' }}>Uploading... {uploadProgress}%</p>
+                    <p className="text-sm mb-2" style={{ color: t.text, fontFamily: t.bodyFont }}>Uploading... {uploadProgress}%</p>
                     <Progress value={uploadProgress} className="h-1.5" />
                   </div>
                 ) : (
                   <>
-                    <Upload className="w-8 h-8 mb-3 text-[#D4AF37]" strokeWidth={1.5} />
-                    <p className="text-sm font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                    <Upload className="w-8 h-8 mb-3" style={{ color: t.accent }} strokeWidth={1.5} />
+                    <p className="text-sm font-medium mb-1" style={{ fontFamily: t.bodyFont }}>
                       Click to choose files or drag & drop
                     </p>
-                    <p className="text-xs" style={{ color: t.textSub, fontFamily: 'Manrope, sans-serif' }}>
+                    <p className="text-xs" style={{ color: t.textSub, fontFamily: t.bodyFont }}>
                     </p>
                   </>
                 )}
@@ -642,14 +637,14 @@ function ShareViewFull() {
           <div className="max-w-screen-xl mx-auto px-6">
             <div className="border-t pt-8 text-center" style={{ borderColor: 'rgba(212,175,55,0.3)' }}>
               <div className="flex items-center justify-center gap-3 mb-3">
-                <div className="h-px w-12" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }}></div>
-                <span className="text-[#D4AF37] text-lg">✦</span>
-                <div className="h-px w-12" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }}></div>
+                <div className="h-px w-12" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }}></div>
+                <span className="text-lg" style={{ color: t.accent }}>✦</span>
+                <div className="h-px w-12" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }}></div>
               </div>
-              <p className="text-sm tracking-wide" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.text }}>
-                Site Designed & Maintained by
+              <p className="text-sm tracking-wide" style={{ fontFamily: t.headingFont, color: t.text }}>
+                Site Designed &amp; Maintained by
               </p>
-              <p className="text-xl font-medium italic mt-1" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>
+              <p className="text-xl font-medium italic mt-1" style={{ fontFamily: t.headingFont, color: t.headingColor }}>
                 Weddings By Mark
               </p>
             </div>
@@ -670,13 +665,13 @@ function ShareViewFull() {
                 style={{ color: t.text, transition: 'color 0.2s ease' }}>
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <h1 className="text-lg font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>Your Favourites</h1>
+              <h1 className="text-lg font-medium" style={{ fontFamily: t.headingFont, color: t.headingColor }}>Your Favourites</h1>
               <span className="text-xs" style={{ color: t.textSub }}>({favCount})</span>
             </div>
             <div className="flex items-center gap-2">
               {favCount > 0 && (
                 <Button data-testid="submit-favourites-btn" variant="default" onClick={handleSubmitFavourites} disabled={submittingFavourites}
-                  className="rounded-sm gap-2 text-xs tracking-wider" style={{ backgroundColor: '#D4AF37', color: 'white' }}>
+                  className="rounded-sm gap-2 text-xs tracking-wider" style={{ backgroundColor: t.accent, color: 'white' }}>
                   <Heart className="w-3.5 h-3.5" /> {submittingFavourites ? "Submitting..." : "Submit for Album"}
                 </Button>
               )}
@@ -691,15 +686,15 @@ function ShareViewFull() {
         </header>
         <main className="max-w-screen-xl mx-auto px-6 py-8">
           <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: t.bgAlt }}>
-            <p className="text-sm" style={{ color: t.text, fontFamily: 'Manrope, sans-serif' }}>
-              <Heart className="w-4 h-4 inline mr-2" fill="#D4AF37" stroke="#D4AF37" />
-              Heart your favourite photos, then click <strong>"Submit for Album"</strong> to send them for your wedding album.
+            <p className="text-sm" style={{ color: t.text, fontFamily: t.bodyFont }}>
+              <Heart className="w-4 h-4 inline mr-2" fill={t.accent} stroke={t.accent} />
+              Heart your favourite photos, then click <strong>&quot;Submit for Album&quot;</strong> to send them for your wedding album.
             </p>
           </div>
           {displayFiles.length === 0 ? (
             <div className="text-center py-20">
               <Heart className="w-12 h-12 mx-auto mb-4 text-[#D4D4D8]" strokeWidth={1} />
-              <p className="text-xl" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.text }}>No favourites yet</p>
+              <p className="text-xl" style={{ fontFamily: t.headingFont, color: t.text }}>No favourites yet</p>
               <p className="text-sm mt-2" style={{ color: t.textSub }}>Heart the photos you love to see them here</p>
             </div>
           ) : (
@@ -716,7 +711,7 @@ function ShareViewFull() {
         <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
           setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
           galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
-          downloadProgress={downloadProgress} />
+          downloadProgress={downloadProgress} theme={t} />
         <ThankYouModal show={showThankYou} onClose={() => setShowThankYou(false)} count={submittedCount} galleryName={galleryName} theme={t} />
       </div>
     );
@@ -733,8 +728,8 @@ function ShareViewFull() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-lg font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>{activeAlbum}</h1>
-              <p className="text-xs" style={{ color: t.textSub, fontFamily: 'Manrope, sans-serif' }}>{coupleName} &middot; {currentAlbumFiles.length} files</p>
+              <h1 className="text-lg font-medium" style={{ fontFamily: t.headingFont, color: t.headingColor }}>{activeAlbum}</h1>
+              <p className="text-xs" style={{ color: t.textSub, fontFamily: t.bodyFont }}>{coupleName} &middot; {currentAlbumFiles.length} files</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -742,7 +737,7 @@ function ShareViewFull() {
               <Button data-testid="select-mode-btn" variant={selectMode ? "default" : "ghost"} 
                 onClick={() => { setSelectMode(m => !m); setSelectedFiles(new Set()); }}
                 className={`rounded-sm text-xs tracking-wider gap-1.5 ${selectMode ? (darkMode ? 'bg-white/10 text-white' : 'bg-[#1C1917] text-[#FDFCF8]') : ''}`}
-                style={selectMode ? { fontFamily: 'Manrope, sans-serif' } : { fontFamily: 'Manrope, sans-serif', color: t.text }}>
+                style={selectMode ? { fontFamily: t.bodyFont } : { fontFamily: t.bodyFont, color: t.text }}>
                 <Check className="w-3.5 h-3.5" /> {selectMode ? "Cancel" : "Select"}
               </Button>
             )}
@@ -754,13 +749,13 @@ function ShareViewFull() {
             {favCount > 0 && !selectMode && (
               <Button data-testid="show-favourites-album" variant="ghost" onClick={() => setShowFavourites(true)}
                 className="rounded-sm gap-2 text-xs tracking-wider" style={{ color: t.text }}>
-                <Heart className="w-3.5 h-3.5" fill="#D4AF37" stroke="#D4AF37" /> ({favCount})
+                <Heart className="w-3.5 h-3.5" fill={t.accent} stroke={t.accent} /> ({favCount})
               </Button>
             )}
             {activeAlbum && activeAlbum.toLowerCase().includes('wedding') && !selectMode && currentAlbumFiles.filter(f => f.file_type === 'photo').length > 0 && (
               <Button data-testid="slideshow-btn" variant="ghost" onClick={() => setShowSlideshow(true)}
                 className="rounded-sm gap-2 text-xs tracking-wider"
-                style={{ color: '#D4AF37', fontFamily: 'Manrope, sans-serif' }}>
+                style={{ color: t.accent, fontFamily: t.bodyFont }}>
                 <PlayCircle className="w-3.5 h-3.5" /> Slideshow
               </Button>
             )}
@@ -780,8 +775,8 @@ function ShareViewFull() {
             backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)', 
             borderColor: 'rgba(212,175,55,0.25)' 
           }}>
-            <p className="text-sm leading-relaxed" style={{ fontFamily: 'Manrope, sans-serif', color: t.text }}>
-              <Film className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: '#D4AF37' }} />
+            <p className="text-sm leading-relaxed" style={{ fontFamily: t.bodyFont, color: t.text }}>
+              <Film className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: t.accent }} />
               Your videos are ready for online viewing, optimised for smooth streaming on all your devices. 
               You can also download the full high-quality original — perfect for watching on your big screen at home.
             </p>
@@ -792,8 +787,8 @@ function ShareViewFull() {
             backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)', 
             borderColor: 'rgba(212,175,55,0.25)' 
           }}>
-            <p className="text-sm leading-relaxed" style={{ fontFamily: 'Manrope, sans-serif', color: t.text }}>
-              <ImageIcon className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: '#D4AF37' }} />
+            <p className="text-sm leading-relaxed" style={{ fontFamily: t.bodyFont, color: t.text }}>
+              <ImageIcon className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: t.accent }} />
               The small logo you see on your images is only visible here in your online gallery. 
               When you download your photos, they are completely watermark-free and in full quality.
             </p>
@@ -804,13 +799,13 @@ function ShareViewFull() {
                 disabled={downloading}
                 className="mt-4 w-full flex items-center justify-center gap-3 py-3.5 rounded-sm text-sm font-bold tracking-[0.15em] uppercase transition-all duration-200"
                 style={{
-                  backgroundColor: '#D4AF37',
+                  backgroundColor: t.accent,
                   color: '#1C1917',
-                  fontFamily: 'Manrope, sans-serif',
+                  fontFamily: t.bodyFont,
                   opacity: downloading ? 0.7 : 1,
                 }}
                 onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#C4A030'; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#D4AF37'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = t.accent; }}
               >
                 <Download className="w-5 h-5" />
                 {downloading ? "Preparing Download..." : "Download All Images"}
@@ -821,7 +816,7 @@ function ShareViewFull() {
         {currentAlbumFiles.length === 0 ? (
           <div className="text-center py-20">
             <FolderOpen className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" strokeWidth={1} />
-            <p className="text-xl" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.text }}>No files in {activeAlbum}</p>
+            <p className="text-xl" style={{ fontFamily: t.headingFont, color: t.text }}>No files in {activeAlbum}</p>
           </div>
         ) : (
           <div className="masonry-grid">
@@ -843,14 +838,14 @@ function ShareViewFull() {
         <div className="max-w-screen-xl mx-auto px-6">
           <div className="border-t pt-8 text-center" style={{ borderColor: 'rgba(212,175,55,0.3)' }}>
             <div className="flex items-center justify-center gap-3 mb-3">
-              <div className="h-px w-12" style={{ background: 'linear-gradient(to right, transparent, #D4AF37)' }}></div>
-              <span className="text-[#D4AF37] text-lg">✦</span>
-              <div className="h-px w-12" style={{ background: 'linear-gradient(to left, transparent, #D4AF37)' }}></div>
+              <div className="h-px w-12" style={{ background: `linear-gradient(to right, transparent, ${t.accent})` }}></div>
+              <span className="text-lg" style={{ color: t.accent }}>✦</span>
+              <div className="h-px w-12" style={{ background: `linear-gradient(to left, transparent, ${t.accent})` }}></div>
             </div>
-            <p className="text-sm tracking-wide" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.text }}>
-              Site Designed & Maintained by
+            <p className="text-sm tracking-wide" style={{ fontFamily: t.headingFont, color: t.text }}>
+              Site Designed &amp; Maintained by
             </p>
-            <p className="text-xl font-medium italic mt-1" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>
+            <p className="text-xl font-medium italic mt-1" style={{ fontFamily: t.headingFont, color: t.headingColor }}>
               Weddings By Mark
             </p>
           </div>
@@ -860,26 +855,26 @@ function ShareViewFull() {
       <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
         setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
         galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
-        downloadProgress={downloadProgress} />
+        downloadProgress={downloadProgress} theme={t} />
       
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: t.bgCard, color: t.text }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: t.headingColor }}>
+            <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: t.headingFont, color: t.headingColor }}>
               Delete {selectedFiles.size} file(s)?
             </AlertDialogTitle>
-            <AlertDialogDescription style={{ color: t.text, fontFamily: 'Manrope, sans-serif' }}>
+            <AlertDialogDescription style={{ color: t.text, fontFamily: t.bodyFont }}>
               This will permanently delete the selected files. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-sm" style={{ fontFamily: 'Manrope, sans-serif' }}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-sm" style={{ fontFamily: t.bodyFont }}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               data-testid="confirm-delete-files"
               onClick={handleBulkDelete}
               className="bg-[#9F1239] text-white hover:bg-[#9F1239]/90 rounded-sm text-xs tracking-wider uppercase font-bold"
-              style={{ fontFamily: 'Manrope, sans-serif' }}
+              style={{ fontFamily: t.bodyFont }}
             >
               Delete Files
             </AlertDialogAction>
@@ -911,7 +906,8 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.02 }}
-      className={`masonry-item photo-card cursor-pointer ${isSelected ? 'ring-2 ring-[#D4AF37]' : ''}`}
+      className={`masonry-item photo-card cursor-pointer`}
+      style={isSelected ? { boxShadow: `0 0 0 2px ${theme.accent}` } : {}}
       onClick={onClick}
       data-testid={`share-file-${file.id}`}
     >
@@ -957,7 +953,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
       {/* Selection checkbox - visible in select mode */}
       {selectMode && (
         <div className="absolute top-2 left-2 w-6 h-6 rounded-sm border flex items-center justify-center"
-          style={{ backgroundColor: isSelected ? '#D4AF37' : 'rgba(255,255,255,0.9)', borderColor: isSelected ? '#D4AF37' : '#D4D4D8' }}>
+          style={{ backgroundColor: isSelected ? theme.accent : 'rgba(255,255,255,0.9)', borderColor: isSelected ? theme.accent : '#D4D4D8' }}>
           {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
         </div>
       )}
@@ -967,7 +963,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           data-testid={`fav-btn-${file.id}`} 
           onClick={e => { e.stopPropagation(); onFav(file.id); }}
           className="absolute bottom-2 left-2 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 z-10"
-          style={{ backgroundColor: file.is_favourite ? '#D4AF37' : 'rgba(255,255,255,0.95)' }}
+          style={{ backgroundColor: file.is_favourite ? theme.accent : 'rgba(255,255,255,0.95)' }}
         >
           <Heart className="w-5 h-5" fill={file.is_favourite ? 'white' : 'none'} stroke={file.is_favourite ? 'white' : '#1C1917'} />
         </button>
@@ -991,9 +987,9 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
           <Download className="w-6 h-6 text-white mb-2 animate-bounce" />
           <div className="w-3/4 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
             <div className="h-full rounded-full transition-all duration-300" 
-              style={{ width: `${downloadProgress.percent}%`, backgroundColor: '#D4AF37' }} />
+              style={{ width: `${downloadProgress.percent}%`, backgroundColor: theme.accent }} />
           </div>
-          <span className="text-white text-xs mt-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          <span className="text-white text-xs mt-2" style={{ fontFamily: theme.bodyFont }}>
             {downloadProgress.percent}%
           </span>
         </div>
@@ -1002,7 +998,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
   );
 }
 
-function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload, permissions = {}, shareToken, downloadProgress }) {
+function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload, permissions = {}, shareToken, downloadProgress, theme = {} }) {
   const isVideo = currentPhoto && currentPhoto.file_type === 'video';
   const isDownloading = downloadProgress && currentPhoto && downloadProgress.fileId === currentPhoto.id;
   return (
@@ -1016,7 +1012,7 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
           <div className="absolute top-6 left-6 flex items-center gap-3 z-10">
             <button data-testid="lightbox-fav" onClick={e => { e.stopPropagation(); onFav(currentPhoto.id); }}
               className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
-              <Heart className="w-5 h-5" fill={currentPhoto.is_favourite ? '#D4AF37' : 'none'} stroke={currentPhoto.is_favourite ? '#D4AF37' : 'white'} />
+              <Heart className="w-5 h-5" fill={currentPhoto.is_favourite ? theme.accent : 'none'} stroke={currentPhoto.is_favourite ? theme.accent : 'white'} />
             </button>
             {permissions.allowDownloads && (
               <button data-testid="lightbox-download" onClick={e => { e.stopPropagation(); if (!isDownloading) onDownload(currentPhoto); }}
@@ -1024,7 +1020,7 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
                 {isDownloading ? (
                   <>
                     <Download className="w-5 h-5 text-white animate-bounce" />
-                    <span className="text-white text-xs font-medium" style={{ fontFamily: 'Manrope, sans-serif' }}>{downloadProgress.percent}%</span>
+                    <span className="text-white text-xs font-medium" style={{ fontFamily: theme.bodyFont }}>{downloadProgress.percent}%</span>
                   </>
                 ) : (
                   <Download className="w-5 h-5 text-white" />
@@ -1032,7 +1028,7 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
               </button>
             )}
           </div>
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/60 text-sm z-10" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/60 text-sm z-10" style={{ fontFamily: theme.bodyFont }}>
             {lightboxIndex + 1} / {total}
           </div>
           {lightboxIndex > 0 && (
@@ -1124,24 +1120,24 @@ function ThankYouModal({ show, onClose, count, galleryName, theme = {} }) {
           style={{ backgroundColor: bg }}
           onClick={e => e.stopPropagation()}
         >
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: '#D4AF37' }}>
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.accent || '#D4AF37' }}>
             <Heart className="w-8 h-8 text-white" fill="white" />
           </div>
-          <h2 className="text-2xl font-semibold mb-3" style={{ fontFamily: 'Cormorant Garamond, serif', color: heading }}>
+          <h2 className="text-2xl font-semibold mb-3" style={{ fontFamily: theme.headingFont || 'Cormorant Garamond, serif', color: heading }}>
             Thank You!
           </h2>
-          <p className="text-base mb-4" style={{ fontFamily: 'Manrope, sans-serif', color: text }}>
+          <p className="text-base mb-4" style={{ fontFamily: theme.bodyFont || 'Manrope, sans-serif', color: text }}>
             Your {count} favourite {count === 1 ? 'photo has' : 'photos have'} been submitted for your wedding album.
           </p>
-          <p className="text-sm mb-6 p-3 rounded-lg" style={{ fontFamily: 'Manrope, sans-serif', color: text, backgroundColor: theme.bgAlt || '#FEF9E7' }}>
-            <strong>Guys... please don't forget!</strong><br />
+          <p className="text-sm mb-6 p-3 rounded-lg" style={{ fontFamily: theme.bodyFont || 'Manrope, sans-serif', color: text, backgroundColor: theme.bgAlt || '#FEF9E7' }}>
+            <strong>Guys... please don&apos;t forget!</strong><br />
             Email Mark your chosen image for your front cover at{' '}
-            <a href="mailto:mark@perfectweddingsbymark.uk" className="underline font-medium" style={{ color: '#D4AF37' }}>mark@perfectweddingsbymark.uk</a>
+            <a href="mailto:mark@perfectweddingsbymark.uk" className="underline font-medium" style={{ color: theme.accent || '#D4AF37' }}>mark@perfectweddingsbymark.uk</a>
           </p>
           <button
             onClick={onClose}
             className="px-8 py-3 rounded-sm text-sm font-medium tracking-wider transition-colors"
-            style={{ backgroundColor: '#D4AF37', color: 'white', fontFamily: 'Manrope, sans-serif' }}
+            style={{ backgroundColor: theme.accent || '#D4AF37', color: 'white', fontFamily: theme.bodyFont || 'Manrope, sans-serif' }}
           >
             Close
           </button>
