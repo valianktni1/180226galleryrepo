@@ -1984,12 +1984,12 @@ async def get_video_playback_token(token: str, file_id: str, t: str = Query(None
         url = generate_nginx_video_url(gallery["folder_name"], f["subfolder"], stream_filename)
         # Log estimated video bandwidth (file size of streamed version)
         stream_path = web_path if web_path.exists() else file_path
-        await log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
+        log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
         return {"url": url, "mode": "nginx"}
     
     # Fallback: Python streaming with JWT token (zero DB calls during playback)
     stream_path = web_path if web_path.exists() else file_path
-    await log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
+    log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
     vtoken = create_jwt({"role": "video", "path": str(stream_path)}, expires_hours=2)
     return {"url": f"/api/v/{vtoken}", "mode": "direct"}
 
@@ -2123,7 +2123,7 @@ async def download_share_file(token: str, file_id: str, request: Request, sessio
                         "single", [f["filename"]], f["subfolder"], 1, 1)
     
     # Track download bandwidth
-    await log_bandwidth_event("file_download", file_path.stat().st_size if file_path.exists() else f.get("file_size", 0), f["filename"])
+    log_bandwidth_event("file_download", file_path.stat().st_size if file_path.exists() else f.get("file_size", 0), f["filename"])
     
     return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
 
@@ -2189,7 +2189,7 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
 
     # Track download bandwidth (sum of all file sizes)
     total_dl_bytes = sum(f.get("file_size", 0) for f in files)
-    await log_bandwidth_event("file_download", total_dl_bytes, f"ZIP: {len(files)} files")
+    log_bandwidth_event("file_download", total_dl_bytes, f"ZIP: {len(files)} files")
 
     zip_name = f"{gallery['folder_name'].replace(' ', '_')}.zip"
     return StreamingResponse(
@@ -2987,8 +2987,8 @@ async def get_dashboard_stats(admin=Depends(get_admin)):
         "storage_used_bytes": total_bytes
     }
 
-async def log_bandwidth_event(event_type: str, bytes_size: int, detail: str = ""):
-    """Log a bandwidth event for application-level tracking (video streams, downloads)."""
+async def _log_bandwidth_insert(event_type: str, bytes_size: int, detail: str):
+    """Internal: actual DB insert for bandwidth logging."""
     try:
         await db.bandwidth_log.insert_one({
             "type": event_type,
@@ -2997,7 +2997,14 @@ async def log_bandwidth_event(event_type: str, bytes_size: int, detail: str = ""
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
     except Exception:
-        pass  # Silent — don't break transfers if logging fails
+        pass
+
+def log_bandwidth_event(event_type: str, bytes_size: int, detail: str = ""):
+    """Fire-and-forget bandwidth logging — never blocks the request."""
+    try:
+        asyncio.get_event_loop().create_task(_log_bandwidth_insert(event_type, bytes_size, detail))
+    except Exception:
+        pass
 
 @api_router.get("/admin/network-stats")
 async def get_network_stats(admin=Depends(get_admin)):
@@ -3013,13 +3020,6 @@ async def get_network_stats(admin=Depends(get_admin)):
         "bytes_recv": counters.bytes_recv,
         "timestamp": now.isoformat()
     }
-
-    # Store current snapshot
-    await db.network_snapshots.insert_one({
-        "bytes_sent": counters.bytes_sent,
-        "bytes_recv": counters.bytes_recv,
-        "timestamp": now.isoformat()
-    })
 
     # Get oldest snapshot within last 24h
     day_snapshots = await db.network_snapshots.find(
@@ -4027,6 +4027,18 @@ async def startup_auto_archive():
         })
     except Exception as e:
         logger.warning(f"Initial network snapshot failed: {e}")
+
+    # Create indexes for performance
+    try:
+        await db.network_snapshots.create_index("timestamp")
+        await db.bandwidth_log.create_index("timestamp")
+        await db.bandwidth_log.create_index([("type", 1), ("timestamp", 1)])
+        await db.activity_log.create_index("timestamp")
+        await db.files.create_index("gallery_id")
+        await db.shares.create_index("gallery_id")
+        await db.shares.create_index("token", unique=True)
+    except Exception as e:
+        logger.warning(f"Index creation: {e}")
 
 app.include_router(api_router)
 
