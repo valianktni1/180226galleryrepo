@@ -269,7 +269,7 @@ export default function AdminDashboard() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5" style={{ borderTop: '1px solid #E8E4DC' }}>
             {/* Total Storage */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC' }} data-testid="storage-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC', backgroundColor: 'rgba(99,102,241,0.06)' }} data-testid="storage-total">
               <div className="flex items-center gap-2 mb-2">
                 <HardDrive className="w-3.5 h-3.5" style={{ color: '#6366F1' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Total Storage</span>
@@ -282,7 +282,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Daily Total */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC' }} data-testid="daily-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC', backgroundColor: 'rgba(245,158,11,0.06)' }} data-testid="daily-total">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-3.5 h-3.5" style={{ color: '#F59E0B' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Today (Total)</span>
@@ -295,7 +295,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Weekly Total */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC' }} data-testid="weekly-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC', backgroundColor: 'rgba(236,72,153,0.06)' }} data-testid="weekly-total">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-3.5 h-3.5" style={{ color: '#EC4899' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>This Week (Total)</span>
@@ -308,7 +308,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Video Streaming */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC' }} data-testid="video-bandwidth">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC', backgroundColor: 'rgba(139,92,246,0.06)' }} data-testid="video-bandwidth">
               <div className="flex items-center gap-2 mb-2">
                 <Film className="w-3.5 h-3.5" style={{ color: '#8B5CF6' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Video Streams</span>
@@ -321,7 +321,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* File Downloads */}
-            <div className="p-5" data-testid="download-bandwidth">
+            <div className="p-5" style={{ backgroundColor: 'rgba(34,197,94,0.06)' }} data-testid="download-bandwidth">
               <div className="flex items-center gap-2 mb-2">
                 <ArrowDownToLine className="w-3.5 h-3.5" style={{ color: '#22C55E' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Downloads</span>
