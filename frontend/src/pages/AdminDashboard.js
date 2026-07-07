@@ -423,6 +423,11 @@ export default function AdminDashboard() {
                       )}
                     </div>
                     <div className="flex items-center gap-4 shrink-0">
+                      {v.ip && (
+                        <span className="text-[10px] tabular-nums px-2 py-0.5 rounded-sm" style={{ backgroundColor: '#F5F2EB', color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                          {v.ip}
+                        </span>
+                      )}
                       <span className="flex items-center gap-1.5 text-[11px]" style={{ color: '#78716C', fontFamily: 'Manrope, sans-serif' }}>
                         {deviceIcon} {v.device}
                       </span>

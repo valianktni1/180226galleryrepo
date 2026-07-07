@@ -2863,6 +2863,7 @@ async def get_live_visitors(admin=Depends(get_admin)):
             "subfolder": v["subfolder"],
             "detail": v["detail"],
             "device": v["device"],
+            "ip": v.get("ip", ""),
             "duration_seconds": int(now - v["first_seen"]),
         })
     return {"count": len(visitors), "visitors": visitors}
