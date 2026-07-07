@@ -3355,21 +3355,52 @@ def compress_video_ffmpeg(input_path: Path, output_path: Path) -> bool:
     """
     Compress video using FFmpeg with high-quality settings.
     Returns True if successful, False otherwise.
-    Uses H.264 codec with CRF 23 (visually lossless) and same resolution.
+    Tries GPU (VAAPI) first, falls back to CPU (libx264).
     """
+    # Try GPU first (VAAPI)
     try:
-        cmd = [
-            'ffmpeg', '-y', '-i', str(input_path),
-            '-c:v', 'libx264',      # H.264 codec (universal compatibility)
-            '-crf', '23',           # Quality setting (18-23 is visually lossless)
-            '-preset', 'medium',    # Balance between speed and compression
-            '-c:a', 'aac',          # Audio codec
-            '-b:a', '128k',         # Audio bitrate
-            '-movflags', '+faststart',  # Enable streaming
+        gpu_cmd = [
+            'ffmpeg', '-y',
+            '-hwaccel', 'vaapi',
+            '-hwaccel_device', '/dev/dri/renderD128',
+            '-hwaccel_output_format', 'vaapi',
+            '-i', str(input_path),
+            '-vf', 'format=nv12|vaapi',
+            '-c:v', 'h264_vaapi',
+            '-qp', '23',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
             str(output_path)
         ]
-        result = subprocess.run(cmd, capture_output=True, timeout=600)  # 10 min timeout
-        return result.returncode == 0
+        result = subprocess.run(gpu_cmd, capture_output=True, timeout=600)
+        if result.returncode == 0:
+            logger.info(f"Guest video compressed via GPU: {input_path.name}")
+            return True
+        logger.warning(f"GPU compression failed for {input_path.name}, falling back to CPU")
+    except Exception as e:
+        logger.warning(f"GPU compression error for {input_path.name}: {e}, falling back to CPU")
+
+    if output_path.exists():
+        output_path.unlink()
+
+    # Fallback: CPU encoding
+    try:
+        cpu_cmd = [
+            'ffmpeg', '-y', '-i', str(input_path),
+            '-c:v', 'libx264',
+            '-crf', '23',
+            '-preset', 'medium',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            '-threads', '2',
+            str(output_path)
+        ]
+        result = subprocess.run(cpu_cmd, capture_output=True, timeout=600)
+        if result.returncode == 0:
+            logger.info(f"Guest video compressed via CPU: {input_path.name}")
+            return True
+        logger.error(f"CPU compression also failed for {input_path.name}: {result.stderr[:500]}")
+        return False
     except Exception as e:
         logger.error(f"Video compression failed: {e}")
         return False
