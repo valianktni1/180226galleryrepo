@@ -1610,14 +1610,14 @@ async def serve_thumb(gallery_id: str, subfolder_slug: str, filename: str):
     file_path = CACHE_DIR / gallery_id / subfolder_slug / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not found")
-    return FileResponse(file_path, media_type="image/jpeg")
+    return FileResponse(file_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=2592000, immutable"})
 
 @api_router.get("/media/preview/{gallery_id}/{subfolder_slug}/{filename}")
 async def serve_preview(gallery_id: str, subfolder_slug: str, filename: str):
     file_path = CACHE_DIR / gallery_id / subfolder_slug / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Preview not found")
-    return FileResponse(file_path, media_type="image/jpeg")
+    return FileResponse(file_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=2592000, immutable"})
 
 @api_router.get("/media/original/{gallery_id}/{subfolder}/{filename}")
 async def serve_original(gallery_id: str, subfolder: str, filename: str):
@@ -1757,11 +1757,12 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
             "files": files
         }]
     else:
-        # All subfolders except Guest Uploads for gallery shares
-        subfolders_data = []
-        for sf in gallery["subfolders"]:
-            sf_files = await db.files.find({"gallery_id": gallery_id, "subfolder": sf}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
-            subfolders_data.append({"name": sf, "files": sf_files})
+        # Single query for ALL files, then group by subfolder
+        all_files = await db.files.find({"gallery_id": gallery_id}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
+        files_by_sf = {}
+        for f in all_files:
+            files_by_sf.setdefault(f["subfolder"], []).append(f)
+        subfolders_data = [{"name": sf, "files": files_by_sf.get(sf, [])} for sf in gallery["subfolders"]]
 
     # Get favourites
     favs = await db.favourites.find({"session_id": session["sub"], "gallery_id": gallery_id}, {"_id": 0}).to_list(50000)
@@ -2983,13 +2984,10 @@ async def get_dashboard_stats(admin=Depends(get_admin)):
         "timestamp": {"$gte": week_ago}
     })
 
-    # Pending albums — galleries where Album Favourites subfolder has 0 files
-    all_galleries = await db.galleries.find({}, {"_id": 0, "id": 1}).to_list(1000)
-    pending_albums = 0
-    for g in all_galleries:
-        has_favourites = await db.files.count_documents({"gallery_id": g["id"], "subfolder": "Album Favourites"})
-        if has_favourites == 0:
-            pending_albums += 1
+    # Pending albums — galleries where Album Favourites subfolder has 0 files (single aggregation)
+    galleries_with_album_files = await db.files.distinct("gallery_id", {"subfolder": "Album Favourites"})
+    active_galleries_count = await db.galleries.count_documents({})
+    pending_albums = active_galleries_count - len(galleries_with_album_files)
 
     # Storage used — sum of all file sizes
     pipeline = [{"$group": {"_id": None, "total": {"$sum": "$file_size"}}}]
@@ -4044,9 +4042,15 @@ async def startup_auto_archive():
         await db.bandwidth_log.create_index("timestamp")
         await db.bandwidth_log.create_index([("type", 1), ("timestamp", 1)])
         await db.activity_log.create_index("timestamp")
+        await db.activity_log.create_index([("action", 1), ("timestamp", 1)])
         await db.files.create_index("gallery_id")
+        await db.files.create_index([("gallery_id", 1), ("subfolder", 1)])
         await db.shares.create_index("gallery_id")
         await db.shares.create_index("token", unique=True)
+        await db.favourites.create_index([("session_id", 1), ("gallery_id", 1)])
+        await db.favourites.create_index([("session_id", 1), ("file_id", 1)])
+        await db.email_log.create_index("timestamp")
+        await db.galleries.create_index("id", unique=True)
     except Exception as e:
         logger.warning(f"Index creation: {e}")
 
