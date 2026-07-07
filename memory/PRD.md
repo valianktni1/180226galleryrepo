@@ -62,6 +62,13 @@ User deploys on TrueNAS via Dockge:
 ## In Progress
 None
 
+## Recently Completed (2026-07-07)
+- [x] P0 Download Bug Investigation — Code logic verified correct, all downloads work in preview (13/13 backend tests pass). Issue is environment-specific to TrueNAS production.
+- [x] Added comprehensive diagnostic logging to ALL download endpoints (album ZIP, POST ZIP, admin ZIP, favourites ZIP, single file) — logs file counts, missing files, parent directory contents
+- [x] Added `GET /api/admin/diagnose-gallery/{gallery_id}` diagnostic endpoint — compares DB file records vs actual disk files, shows mismatches
+- [x] Added startup logging showing UPLOAD_DIR and gallery directories on disk
+- [x] Fixed photo overlay pointer-events blocking image clicks in ShareView
+
 ## Backlog
 None — all previous backlog items cancelled per user request.
 
@@ -78,6 +85,7 @@ None — all previous backlog items cancelled per user request.
 ## Key API Endpoints
 - `GET /api/admin/dashboard-stats` — 5 key stats
 - `GET /api/admin/network-stats` — Network bandwidth (daily/weekly/video/downloads)
+- `GET /api/admin/diagnose-gallery/{gallery_id}` — **NEW** Diagnostic: compare DB files vs disk files for a gallery
 - `POST /api/admin/broadcast-email` — Mass email
 - `GET/POST/PUT/DELETE /api/admin/email-templates` — Template CRUD
 - `GET /api/admin/email-log` — Email history

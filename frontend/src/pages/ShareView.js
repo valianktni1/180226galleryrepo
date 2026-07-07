@@ -990,7 +990,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
       {/* Hover overlay for download button */}
       {!selectMode && permissions.allowDownloads && (
         <>
-          <div className="photo-overlay" />
+          <div className="photo-overlay pointer-events-none" />
           <div className="photo-actions flex items-center justify-end">
             <button data-testid={`download-btn-${file.id}`} onClick={e => { e.stopPropagation(); onDownload(file); }}
               className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.9)' }}>
