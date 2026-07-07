@@ -234,13 +234,12 @@ export default function AdminDashboard() {
 
       <main className="max-w-screen-xl mx-auto px-6 py-10">
         {/* Dashboard Stats */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-5 gap-4 mb-10" data-testid="dashboard-stats">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" data-testid="dashboard-stats">
           {[
             { label: "Active Galleries", value: dashStats.active_galleries, icon: Camera, color: '#D4AF37', bg: 'rgba(212,175,55,0.08)' },
             { label: "Expiring Soon", value: dashStats.expiring_soon, icon: AlertCircle, color: dashStats.expiring_soon > 0 ? '#F59E0B' : '#A8A29E', bg: dashStats.expiring_soon > 0 ? 'rgba(245,158,11,0.08)' : 'rgba(168,162,158,0.06)' },
             { label: "Downloads This Week", value: dashStats.downloads_this_week, icon: Download, color: '#22C55E', bg: 'rgba(34,197,94,0.08)' },
             { label: "Pending Albums", value: dashStats.pending_albums, icon: FolderHeart, color: dashStats.pending_albums > 0 ? '#EC4899' : '#A8A29E', bg: dashStats.pending_albums > 0 ? 'rgba(236,72,153,0.08)' : 'rgba(168,162,158,0.06)' },
-            { label: "Storage Used", value: dashStats.storage_used_bytes >= 1099511627776 ? `${(dashStats.storage_used_bytes / 1099511627776).toFixed(2)} TB` : `${(dashStats.storage_used_bytes / 1073741824).toFixed(1)} GB`, icon: HardDrive, color: '#6366F1', bg: 'rgba(99,102,241,0.08)' },
           ].map(({ label, value, icon: Icon, color, bg }) => (
             <div key={label} className="p-5 border rounded-sm" style={{ borderColor: '#F5F2EB', backgroundColor: bg }} data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
               <div className="flex items-center gap-2 mb-2">
@@ -268,9 +267,9 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-0 divide-x" style={{ borderTop: '1px solid #E8E4DC', divideColor: '#E8E4DC' }}>
+          <div className="grid grid-cols-2 md:grid-cols-5" style={{ borderTop: '1px solid #E8E4DC' }}>
             {/* Total Storage */}
-            <div className="p-5" data-testid="storage-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC' }} data-testid="storage-total">
               <div className="flex items-center gap-2 mb-2">
                 <HardDrive className="w-3.5 h-3.5" style={{ color: '#6366F1' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Total Storage</span>
@@ -283,7 +282,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Daily Total */}
-            <div className="p-5" data-testid="daily-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC' }} data-testid="daily-total">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-3.5 h-3.5" style={{ color: '#F59E0B' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Today (Total)</span>
@@ -296,7 +295,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Weekly Total */}
-            <div className="p-5" data-testid="weekly-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC' }} data-testid="weekly-total">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-3.5 h-3.5" style={{ color: '#EC4899' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>This Week (Total)</span>
@@ -309,7 +308,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Video Streaming */}
-            <div className="p-5" data-testid="video-bandwidth">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC' }} data-testid="video-bandwidth">
               <div className="flex items-center gap-2 mb-2">
                 <Film className="w-3.5 h-3.5" style={{ color: '#8B5CF6' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Video Streams</span>
