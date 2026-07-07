@@ -158,6 +158,11 @@ function ShareViewFull() {
     trackGalleryView(token);
   }, [token, navigate, loadFiles]);
 
+  // Scroll to top when entering or leaving an album
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [activeAlbum, showFavourites]);
+
   const handleFavourite = async (fileId) => {
     try {
       const res = await toggleShareFavourite(token, fileId);
@@ -721,7 +726,7 @@ function ShareViewFull() {
           ) : (
             <div className="masonry-grid">
               {displayFiles.map((file, i) => (
-                <FileCard key={file.id} file={file} index={i} galleryId={galleryId}
+                <LazyFileCard key={file.id} file={file} index={i} galleryId={galleryId}
                   onFav={handleFavourite} onDownload={handleDownloadSingle}
                   onClick={() => setLightboxIndex(i)} permissions={permissions} theme={t}
                   downloadProgress={downloadProgress} />
@@ -863,7 +868,7 @@ function ShareViewFull() {
         ) : (
           <div className="masonry-grid">
             {currentAlbumFiles.map((file, i) => (
-              <FileCard key={file.id} file={file} index={i} galleryId={galleryId}
+              <LazyFileCard key={file.id} file={file} index={i} galleryId={galleryId}
                 onFav={handleFavourite} onDownload={handleDownloadSingle}
                 onClick={selectMode ? () => toggleSelect(file.id) : () => setLightboxIndex(i)} 
                 permissions={permissions}
@@ -959,6 +964,27 @@ function ShareViewFull() {
       )}
     </div>
   );
+}
+
+// ─── Lazy visibility wrapper — only renders full card when near viewport ───
+function LazyFileCard(props) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
+      { rootMargin: '400px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  if (!visible) {
+    const aspect = props.file?.file_type === 'video' ? 'aspect-video' : 'aspect-square';
+    return <div ref={ref} className={`masonry-item ${aspect}`} style={{ backgroundColor: props.theme?.emptyBg || '#F5F5F0' }} />;
+  }
+  return <FileCard {...props} />;
 }
 
 // ─── Reusable Components ───
