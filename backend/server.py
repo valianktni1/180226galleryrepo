@@ -2118,6 +2118,7 @@ async def download_share_file(token: str, file_id: str, request: Request, sessio
     gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
     file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
     if not file_path.exists():
+        logger.error(f"Download single: file not on disk: {file_path} | UPLOAD_DIR={UPLOAD_DIR} | gallery={gallery['folder_name']} | subfolder={f['subfolder']} | file={f['filename']}")
         raise HTTPException(status_code=404, detail="File not found on disk")
     
     # Log detailed download
@@ -2181,12 +2182,18 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
     # Use ZIP_STORED for speed (same as admin panel)
     def iter_zip():
         buf = io.BytesIO()
+        added = 0
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
                 fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
                 if fp.exists():
                     arcname = f"{f['subfolder']}/{f['filename']}"
                     zf.write(fp, arcname)
+                    added += 1
+                else:
+                    logger.warning(f"Download ZIP: file not found: {fp}")
+        if added == 0:
+            logger.error(f"Download ZIP: 0 files found for gallery '{gallery['folder_name']}'. UPLOAD_DIR={UPLOAD_DIR}, gallery_path={get_gallery_path(gallery['folder_name'])}")
         buf.seek(0)
         while True:
             chunk = buf.read(1024 * 1024)  # 1MB chunks
