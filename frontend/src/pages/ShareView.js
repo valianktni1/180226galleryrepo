@@ -928,7 +928,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.02 }}
+      transition={{ delay: Math.min(index * 0.02, 0.4), duration: 0.3 }}
       className={`masonry-item photo-card cursor-pointer`}
       style={isSelected ? { boxShadow: `0 0 0 2px ${theme.accent}` } : {}}
       onClick={onClick}
