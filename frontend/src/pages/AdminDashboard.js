@@ -12,10 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats, getEmailTemplates
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 
@@ -40,6 +40,7 @@ export default function AdminDashboard() {
   const [broadcastForm, setBroadcastForm] = useState({ subject: "", body: "" });
   const [broadcastRecipients, setBroadcastRecipients] = useState([]);
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
+  const [emailTemplates, setEmailTemplates] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null, name: "", deleteBackup: false });
 
   const load = useCallback(async () => {
@@ -94,10 +95,12 @@ export default function AdminDashboard() {
   const handleOpenBroadcast = async () => {
     setShowBroadcast(true);
     try {
-      const res = await getBroadcastPreview();
-      setBroadcastRecipients(res.data.recipients || []);
+      const [bRes, tRes] = await Promise.all([getBroadcastPreview(), getEmailTemplates()]);
+      setBroadcastRecipients(bRes.data.recipients || []);
+      setEmailTemplates(tRes.data || []);
     } catch {
       setBroadcastRecipients([]);
+      setEmailTemplates([]);
     }
   };
 
@@ -722,6 +725,33 @@ export default function AdminDashboard() {
                 </p>
               )}
             </div>
+            {/* Template picker */}
+            {emailTemplates.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Use a Template</Label>
+                <div className="grid gap-1.5">
+                  {emailTemplates.map(tmpl => (
+                    <button key={tmpl.id} type="button" data-testid={`broadcast-template-${tmpl.id}`}
+                      onClick={() => setBroadcastForm({ subject: tmpl.subject || '', body: tmpl.body || '' })}
+                      className="flex items-center gap-3 px-3 py-2.5 text-left border rounded-sm transition-all hover:shadow-sm"
+                      style={{ borderColor: '#E8E4DC', backgroundColor: '#FAFAF9', fontFamily: 'Manrope, sans-serif' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#D4AF37'; e.currentTarget.style.backgroundColor = '#FFFDF5'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E4DC'; e.currentTarget.style.backgroundColor = '#FAFAF9'; }}>
+                      <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#D4AF37' }} />
+                      <div className="min-w-0">
+                        <span className="text-xs font-semibold block truncate" style={{ color: '#1C1917' }}>{tmpl.name}</span>
+                        {tmpl.subject && <span className="text-[10px] block truncate" style={{ color: '#A8A29E' }}>{tmpl.subject}</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 my-2">
+                  <div className="h-px flex-1" style={{ backgroundColor: '#E8E4DC' }} />
+                  <span className="text-[10px] uppercase tracking-widest" style={{ color: '#A8A29E' }}>or compose manually</span>
+                  <div className="h-px flex-1" style={{ backgroundColor: '#E8E4DC' }} />
+                </div>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Subject</Label>
               <Input data-testid="broadcast-subject" value={broadcastForm.subject}
