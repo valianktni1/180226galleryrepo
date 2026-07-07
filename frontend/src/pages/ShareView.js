@@ -9,7 +9,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
-  Heart, Download, X, ChevronLeft, ChevronRight, Camera, FolderOpen, Film,
+  Heart, Download, X, ChevronLeft, ChevronRight, ChevronUp, Camera, FolderOpen, Film,
   ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun
 } from "lucide-react";
 import {
@@ -67,6 +67,15 @@ function ShareViewFull() {
   const [showThankYou, setShowThankYou] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [showSlideshow, setShowSlideshow] = useState(false);
+
+  // Back to top button — show when scrolled past 600px
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > 600);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Dark mode with localStorage persistence
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('gallery_dark_mode') === 'true');
@@ -720,6 +729,22 @@ function ShareViewFull() {
             </div>
           )}
         </main>
+        {/* Back to Top */}
+        <AnimatePresence>
+          {showBackToTop && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              onClick={scrollToTop}
+              className="fixed bottom-6 right-6 z-30 w-10 h-10 rounded-full flex items-center justify-center shadow-lg"
+              style={{ backgroundColor: t.accent, color: 'white' }}
+              data-testid="back-to-top-btn-fav"
+            >
+              <ChevronUp className="w-5 h-5" />
+            </motion.button>
+          )}
+        </AnimatePresence>
         <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
           setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
           galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
@@ -794,7 +819,7 @@ function ShareViewFull() {
             </p>
             <p className="text-sm leading-relaxed mt-3" style={{ fontFamily: t.bodyFont, color: t.text, opacity: 0.85 }}>
               <Download className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: t.accent }} />
-              Use "Download All" to grab every video in one go. Please allow 30–60 seconds while we prepare your files — the download will start automatically.
+              Use &ldquo;Download All&rdquo; to grab every video in one go. Please allow 30–60 seconds while we prepare your files — the download will start automatically.
             </p>
           </div>
         )}
@@ -849,6 +874,23 @@ function ShareViewFull() {
           </div>
         )}
       </main>
+
+      {/* Back to Top */}
+      <AnimatePresence>
+        {showBackToTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={scrollToTop}
+            className="fixed bottom-6 right-6 z-30 w-10 h-10 rounded-full flex items-center justify-center shadow-lg"
+            style={{ backgroundColor: t.accent, color: 'white' }}
+            data-testid="back-to-top-btn"
+          >
+            <ChevronUp className="w-5 h-5" />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Elegant Footer */}
       <footer className="mt-16 mb-8">
@@ -942,6 +984,10 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
               alt={file.filename} className="w-full block" loading="lazy" />
             <img src="/watermark-logo.png" alt="" className="absolute pointer-events-none" 
               style={{ bottom: '10px', right: '10px', width: '80px', opacity: 0.72 }} />
+            <span className="photo-filename absolute bottom-1.5 left-1.5 text-[10px] px-1.5 py-0.5 rounded pointer-events-none"
+              style={{ backgroundColor: 'rgba(0,0,0,0.55)', color: 'white', opacity: 0, transition: 'opacity 0.2s ease' }}>
+              {file.original_filename || file.filename}
+            </span>
           </div>
         ) : (
           <div className="aspect-square flex flex-col items-center justify-center file-card-empty">
@@ -1024,11 +1070,32 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
 function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext, goPrev, galleryId, onFav, onDownload, permissions = {}, shareToken, downloadProgress, theme = {} }) {
   const isVideo = currentPhoto && currentPhoto.file_type === 'video';
   const isDownloading = downloadProgress && currentPhoto && downloadProgress.fileId === currentPhoto.id;
+
+  // Swipe gesture support for mobile
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    // Only swipe if horizontal movement > 50px and dominates vertical
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0 && lightboxIndex < total - 1) goNext();
+      if (dx > 0 && lightboxIndex > 0) goPrev();
+    }
+  };
+
   return (
     <AnimatePresence>
       {currentPhoto && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="lightbox-overlay" onClick={() => setLightboxIndex(-1)} data-testid="lightbox-overlay">
+          className="lightbox-overlay" onClick={() => setLightboxIndex(-1)} data-testid="lightbox-overlay"
+          onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           <button className="absolute top-6 right-6 text-white/70 hover:text-white z-10" onClick={() => setLightboxIndex(-1)}>
             <X className="w-6 h-6" />
           </button>

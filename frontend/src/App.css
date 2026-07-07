@@ -75,6 +75,9 @@
   transform: translateY(0);
   opacity: 1;
 }
+.photo-card:hover .photo-filename {
+  opacity: 1 !important;
+}
 
 /* Admin sidebar */
 .admin-nav-item {
