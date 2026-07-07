@@ -85,6 +85,14 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Startup diagnostic: log UPLOAD_DIR contents so file path issues are visible in Docker logs
+logger.info(f"STARTUP: UPLOAD_DIR={UPLOAD_DIR} exists={UPLOAD_DIR.exists()}")
+try:
+    top_dirs = [d.name for d in UPLOAD_DIR.iterdir() if d.is_dir() and not d.name.startswith('.')]
+    logger.info(f"STARTUP: Galleries on disk: {top_dirs}")
+except Exception as e:
+    logger.error(f"STARTUP: Could not list UPLOAD_DIR: {e}")
+
 DEFAULT_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourites", "Guest Uploads"]
 
 # ─── Models ───
@@ -1169,16 +1177,31 @@ async def download_subfolder_zip(gallery_id: str, subfolder: str = Query(...), a
     if not files:
         raise HTTPException(status_code=404, detail="No files in this subfolder")
 
+    logger.info(f"Admin subfolder download: gallery='{gallery['folder_name']}', subfolder='{subfolder}', folder_path={folder_path}, exists={folder_path.exists()}, file_count={len(files)}")
+
     def iter_zip():
         buf = io.BytesIO()
+        added = 0
+        missing = []
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
                 fp = folder_path / f["filename"]
                 if fp.exists():
                     zf.write(fp, f["filename"])
+                    added += 1
+                else:
+                    missing.append(f["filename"])
+        if missing:
+            logger.error(f"Admin ZIP: {len(missing)}/{len(files)} files NOT found in '{folder_path}'. First 5: {missing[:5]}")
+            try:
+                disk_files = [x.name for x in folder_path.iterdir()][:10]
+                logger.error(f"  Actual disk contents (first 10): {disk_files}")
+            except Exception as e:
+                logger.error(f"  Could not list dir: {e}")
+        logger.info(f"Admin ZIP: added {added}/{len(files)} files")
         buf.seek(0)
         while True:
-            chunk = buf.read(1024 * 1024)  # 1MB chunks
+            chunk = buf.read(1024 * 1024)
             if not chunk:
                 break
             yield chunk
@@ -2118,7 +2141,16 @@ async def download_share_file(token: str, file_id: str, request: Request, sessio
     gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
     file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
     if not file_path.exists():
-        logger.error(f"Download single: file not on disk: {file_path} | UPLOAD_DIR={UPLOAD_DIR} | gallery={gallery['folder_name']} | subfolder={f['subfolder']} | file={f['filename']}")
+        # Enhanced diagnostic: show what IS on disk
+        parent = file_path.parent
+        parent_exists = parent.exists()
+        parent_contents = []
+        if parent_exists:
+            try:
+                parent_contents = [x.name for x in parent.iterdir()][:10]
+            except Exception:
+                pass
+        logger.error(f"Download single: file not on disk: {file_path} | UPLOAD_DIR={UPLOAD_DIR} | gallery='{gallery['folder_name']}' | subfolder='{f['subfolder']}' | file='{f['filename']}' | parent_exists={parent_exists} | parent_contents={parent_contents}")
         raise HTTPException(status_code=404, detail="File not found on disk")
     
     # Log detailed download
@@ -2180,9 +2212,13 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
         raise HTTPException(status_code=404, detail="No files to download")
 
     # Use ZIP_STORED for speed (same as admin panel)
+    gallery_path = get_gallery_path(gallery["folder_name"])
+    logger.info(f"Download ZIP (POST): gallery='{gallery['folder_name']}', gallery_path={gallery_path}, exists={gallery_path.exists()}, file_count={len(files)}")
+
     def iter_zip():
         buf = io.BytesIO()
         added = 0
+        missing = []
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
                 fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
@@ -2191,9 +2227,21 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
                     zf.write(fp, arcname)
                     added += 1
                 else:
-                    logger.warning(f"Download ZIP: file not found: {fp}")
-        if added == 0:
-            logger.error(f"Download ZIP: 0 files found for gallery '{gallery['folder_name']}'. UPLOAD_DIR={UPLOAD_DIR}, gallery_path={get_gallery_path(gallery['folder_name'])}")
+                    missing.append(f"{f['subfolder']}/{f['filename']}")
+        if missing:
+            logger.error(f"Download ZIP: {len(missing)}/{len(files)} files NOT found. First 5: {missing[:5]}")
+            try:
+                gp = get_gallery_path(gallery["folder_name"])
+                if gp.exists():
+                    for sd in gp.iterdir():
+                        if sd.is_dir():
+                            contents = list(sd.iterdir())[:5]
+                            logger.error(f"  Subfolder '{sd.name}': {len(list(sd.iterdir()))} files, first 5: {[x.name for x in contents]}")
+                else:
+                    logger.error(f"  Gallery dir does NOT exist: {gp}")
+            except Exception as e:
+                logger.error(f"  Could not list gallery dir: {e}")
+        logger.info(f"Download ZIP: added {added}/{len(files)} files to archive")
         buf.seek(0)
         while True:
             chunk = buf.read(1024 * 1024)  # 1MB chunks
@@ -2249,14 +2297,35 @@ async def download_share_album_direct(token: str, request: Request, subfolder: s
                         "album", [f["filename"] for f in files], subfolder,
                         len(files), total_available)
 
+    gallery_path = get_gallery_path(gallery["folder_name"])
+    logger.info(f"Download album: gallery='{gallery['folder_name']}', UPLOAD_DIR={UPLOAD_DIR}, gallery_path={gallery_path}, exists={gallery_path.exists()}, file_count={len(files)}")
+
     def iter_zip():
         buf = io.BytesIO()
+        added = 0
+        missing = []
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
                 fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
                 if fp.exists():
                     arcname = f["filename"] if subfolder else f"{f['subfolder']}/{f['filename']}"
                     zf.write(fp, arcname)
+                    added += 1
+                else:
+                    missing.append(str(fp))
+        if missing:
+            logger.error(f"Download album ZIP: {len(missing)}/{len(files)} files NOT found on disk. First 5 missing: {missing[:5]}")
+            # Also log what IS on disk at the gallery path for debugging
+            try:
+                gp = get_gallery_path(gallery["folder_name"])
+                if gp.exists():
+                    disk_contents = list(gp.iterdir())[:10]
+                    logger.error(f"  Gallery dir contents (first 10): {[str(x.name) for x in disk_contents]}")
+                else:
+                    logger.error(f"  Gallery dir does NOT exist: {gp}")
+            except Exception as e:
+                logger.error(f"  Could not list gallery dir: {e}")
+        logger.info(f"Download album ZIP: added {added}/{len(files)} files to archive")
         buf.seek(0)
         while True:
             chunk = buf.read(1024 * 1024)
@@ -2324,11 +2393,18 @@ async def download_share_favourites_direct(token: str, request: Request, jwt_tok
 
     def iter_zip():
         buf = io.BytesIO()
+        added = 0
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
                 fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
                 if fp.exists():
                     zf.write(fp, f["filename"])
+                    added += 1
+                else:
+                    logger.error(f"Favourites ZIP: file not found: {fp}")
+        if added == 0:
+            logger.error(f"Favourites ZIP: 0 files found. Gallery='{gallery['folder_name']}', UPLOAD_DIR={UPLOAD_DIR}")
+        logger.info(f"Favourites ZIP: added {added}/{len(files)} files")
         buf.seek(0)
         while True:
             chunk = buf.read(1024 * 1024)
@@ -3020,6 +3096,66 @@ async def log_bandwidth_event(event_type: str, bytes_size: int, detail: str = ""
         })
     except Exception:
         pass
+
+
+@api_router.get("/admin/diagnose-gallery/{gallery_id}")
+async def diagnose_gallery_files(gallery_id: str, admin=Depends(get_admin)):
+    """Diagnostic endpoint: check if DB files match what's on disk for a gallery."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    gallery_path = get_gallery_path(gallery["folder_name"])
+    db_files = await db.files.find({"gallery_id": gallery_id}, {"_id": 0}).to_list(50000)
+    
+    result = {
+        "gallery_name": gallery["folder_name"],
+        "upload_dir": str(UPLOAD_DIR),
+        "gallery_path": str(gallery_path),
+        "gallery_path_exists": gallery_path.exists(),
+        "db_file_count": len(db_files),
+        "subfolders_in_db": gallery.get("subfolders", []),
+        "disk_subfolders": [],
+        "files_found": 0,
+        "files_missing": 0,
+        "missing_samples": [],
+        "found_samples": [],
+    }
+    
+    # Check what's actually on disk
+    if gallery_path.exists():
+        try:
+            for item in sorted(gallery_path.iterdir()):
+                if item.is_dir() and not item.name.startswith('.'):
+                    disk_files = list(item.iterdir())
+                    result["disk_subfolders"].append({
+                        "name": item.name,
+                        "file_count": len(disk_files),
+                        "sample_files": [f.name for f in disk_files[:5]]
+                    })
+        except Exception as e:
+            result["disk_error"] = str(e)
+    
+    # Check each DB file against disk
+    for f in db_files:
+        fp = gallery_path / f["subfolder"] / f["filename"]
+        if fp.exists():
+            result["files_found"] += 1
+            if len(result["found_samples"]) < 3:
+                result["found_samples"].append({"path": str(fp), "size": fp.stat().st_size})
+        else:
+            result["files_missing"] += 1
+            if len(result["missing_samples"]) < 10:
+                result["missing_samples"].append({
+                    "expected_path": str(fp),
+                    "subfolder": f["subfolder"],
+                    "filename": f["filename"],
+                    "parent_exists": fp.parent.exists(),
+                    "parent_contents": [x.name for x in fp.parent.iterdir()][:5] if fp.parent.exists() else []
+                })
+    
+    return result
+
 
 @api_router.get("/admin/network-stats")
 async def get_network_stats(admin=Depends(get_admin)):
