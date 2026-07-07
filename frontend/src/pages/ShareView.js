@@ -792,6 +792,10 @@ function ShareViewFull() {
               Your videos are ready for online viewing, optimised for smooth streaming on all your devices. 
               You can also download the full high-quality original — perfect for watching on your big screen at home.
             </p>
+            <p className="text-sm leading-relaxed mt-3" style={{ fontFamily: t.bodyFont, color: t.text, opacity: 0.85 }}>
+              <Download className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: t.accent }} />
+              Use "Download All" to grab every video in one go. Please allow 30–60 seconds while we prepare your files — the download will start automatically.
+            </p>
           </div>
         )}
         {activeAlbum && activeAlbum.toLowerCase() !== 'video' && (
