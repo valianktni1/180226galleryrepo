@@ -502,6 +502,14 @@ function ShareViewFull() {
             >
               Your special memories, beautifully captured
             </motion.p>
+            <motion.img
+              src="/wbm-logo-white.png"
+              alt="Weddings By Mark"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.7 }}
+              transition={{ delay: 1.0 }}
+              className="mt-6 mx-auto w-48 md:w-56 pointer-events-none select-none"
+            />
           </div>
         </motion.section>
 
