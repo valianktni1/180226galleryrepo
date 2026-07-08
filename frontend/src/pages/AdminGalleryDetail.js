@@ -22,7 +22,7 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette
+  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
@@ -947,8 +947,20 @@ export default function AdminGalleryDetail() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password (leave empty for no password)</Label>
-              <Input data-testid="share-password-input" value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
-                placeholder="Optional - leave blank for open access" className="border-[#D4D4D8] rounded-sm" />
+              <div className="flex gap-2">
+                <Input data-testid="share-password-input" value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
+                  placeholder="Optional - leave blank for open access" className="border-[#D4D4D8] rounded-sm flex-1" />
+                <Button type="button" variant="outline" size="sm" data-testid="generate-password-btn"
+                  className="shrink-0 text-xs gap-1.5 border-[#D4D4D8] hover:bg-[#F5F2EB]"
+                  onClick={() => {
+                    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+                    let pw = '';
+                    for (let i = 0; i < 8; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+                    setShareForm(f => ({...f, password: pw}));
+                  }}>
+                  <RefreshCw className="w-3.5 h-3.5" /> Generate
+                </Button>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Access Level</Label>
