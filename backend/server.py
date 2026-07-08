@@ -821,19 +821,32 @@ async def list_galleries(admin=Depends(get_admin), sort_by: str = Query("date_de
         sort_dir = -1
     
     galleries = await db.galleries.find({}, {"_id": 0}).sort(sort_field, sort_dir).to_list(1000)
-    # Enrich with share count + first image for cover
+    # Enrich with share count + cover image for card
     for g in galleries:
         share_count = await db.shares.count_documents({"gallery_id": g["id"]})
         g["share_count"] = share_count
-        first_file = await db.files.find_one(
-            {"gallery_id": g["id"], "file_type": "photo"},
-            {"_id": 0}
-        )
         g["cover_thumb"] = None
-        if first_file:
-            tp = get_thumb_path(g["id"], first_file["subfolder"], first_file["filename"])
+        
+        # Prefer the chosen cover image (check Wedding Images first, then any subfolder)
+        covers = g.get("covers", {})
+        cover_file = None
+        if covers:
+            # Try Wedding Images cover first, then any other
+            cover_id = covers.get("Wedding Images") or next(iter(covers.values()), None)
+            if cover_id:
+                cover_file = await db.files.find_one({"id": cover_id, "gallery_id": g["id"]}, {"_id": 0})
+        
+        # Fall back to first photo if no cover set
+        if not cover_file:
+            cover_file = await db.files.find_one(
+                {"gallery_id": g["id"], "file_type": "photo"},
+                {"_id": 0}
+            )
+        
+        if cover_file:
+            tp = get_thumb_path(g["id"], cover_file["subfolder"], cover_file["filename"])
             if tp.exists():
-                g["cover_thumb"] = f"/api/media/thumb/{g['id']}/{slugify(first_file['subfolder'])}/{Path(first_file['filename']).stem}.thumb.jpg"
+                g["cover_thumb"] = f"/api/media/thumb/{g['id']}/{slugify(cover_file['subfolder'])}/{Path(cover_file['filename']).stem}.thumb.jpg"
     return galleries
 
 @api_router.get("/admin/galleries/{gallery_id}")
