@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Heart, Download, X, ChevronLeft, ChevronRight, ChevronUp, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun, Share2
 } from "lucide-react";
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl
@@ -423,11 +423,22 @@ function ShareViewFull() {
                 style={heroImageUrl ? {} : { backgroundColor: t.accent }}>
                 <Printer className="w-4 h-4" /> Order Prints
               </Button>
+              <Button data-testid="share-whatsapp-btn"
+                onClick={() => {
+                  const url = `${window.location.origin}/s/${token}`;
+                  const text = encodeURIComponent(`Have a look at our wedding photos! 💒\n${url}`);
+                  window.open(`https://wa.me/?text=${text}`, '_blank');
+                }}
+                className={`rounded-sm gap-2 text-xs tracking-wider uppercase font-bold px-4 py-2 shadow-md ${heroImageUrl ? 'bg-white/20 backdrop-blur-md hover:bg-white/30 text-white border border-white/20' : 'text-white'}`}
+                style={heroImageUrl ? {} : { backgroundColor: '#25D366' }}>
+                <Share2 className="w-4 h-4" /> Share
+              </Button>
               {favCount > 0 && (
                 <Button data-testid="show-favourites-landing" variant="ghost" onClick={() => setShowFavourites(true)}
                   className={`rounded-sm gap-2 text-xs tracking-wider ${heroImageUrl ? 'text-white/90 hover:text-white' : ''}`}
                   style={heroImageUrl ? {} : { color: t.text }}>
-                  <Heart className="w-3.5 h-3.5" fill={t.accent} stroke={t.accent} /> Favourites ({favCount})
+                  <Heart className="w-3.5 h-3.5" fill={t.accent} stroke={t.accent} />
+                  <span className="min-w-[1.25rem] h-5 flex items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: t.accent }}>{favCount}</span>
                 </Button>
               )}
             </div>
@@ -799,7 +810,8 @@ function ShareViewFull() {
             {favCount > 0 && !selectMode && (
               <Button data-testid="show-favourites-album" variant="ghost" onClick={() => setShowFavourites(true)}
                 className="rounded-sm gap-2 text-xs tracking-wider" style={{ color: t.text }}>
-                <Heart className="w-3.5 h-3.5" fill={t.accent} stroke={t.accent} /> ({favCount})
+                <Heart className="w-3.5 h-3.5" fill={t.accent} stroke={t.accent} />
+                <span className="min-w-[1.25rem] h-5 flex items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: t.accent }}>{favCount}</span>
               </Button>
             )}
             {activeAlbum && activeAlbum.toLowerCase().includes('wedding') && !selectMode && currentAlbumFiles.filter(f => f.file_type === 'photo').length > 0 && (
@@ -996,6 +1008,21 @@ function LazyFileCard(props) {
 }
 
 // ─── Reusable Components ───
+// ─── Blur-up thumbnail — starts blurred, transitions to sharp on load ───
+function BlurUpImage({ src, alt, className = '', style = {} }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`${className} transition-[filter] duration-500 ease-out`}
+      style={{ ...style, filter: loaded ? 'blur(0)' : 'blur(12px)', transform: 'translateZ(0)' }}
+      loading="lazy"
+      onLoad={() => setLoaded(true)}
+    />
+  );
+}
+
 function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false, theme = {}, downloadProgress = null }) {
   const emptyColor = theme.textSub || '#A8A29E';
   const mutedColor = theme.textMuted || '#C4C0B8';
@@ -1012,10 +1039,10 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
     >
       {file.file_type === 'photo' ? (
         file.has_preview ? (
-          <div className="relative">
-            <img
+          <div className="relative overflow-hidden">
+            <BlurUpImage
               src={thumbUrl(galleryId, file.subfolder || file._subfolder, file.filename)}
-              alt={file.filename} className="w-full block" loading="lazy" />
+              alt={file.filename} className="w-full block" />
             <img src="/watermark-logo.png" alt="" className="absolute pointer-events-none" 
               style={{ bottom: '10px', right: '10px', width: '80px', opacity: 0.72 }} />
             <span className="photo-filename absolute bottom-1.5 left-1.5 text-[10px] px-1.5 py-0.5 rounded pointer-events-none"
@@ -1031,8 +1058,8 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
         )
       ) : file.file_type === 'video' ? (
         file.has_thumb ? (
-          <div className="relative">
-            <img src={thumbUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" loading="lazy" />
+          <div className="relative overflow-hidden">
+            <BlurUpImage src={thumbUrl(galleryId, file.subfolder || file._subfolder, file.filename)} alt={file.filename} className="w-full block" />
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                 <Play className="w-5 h-5 text-white ml-0.5" fill="white" />
