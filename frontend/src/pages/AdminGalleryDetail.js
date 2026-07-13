@@ -22,11 +22,11 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw
+  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw, Pencil
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
-  createShare, deleteShare, toggleShare, updateShareExpiry, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
+  createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
   updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
@@ -75,6 +75,8 @@ export default function AdminGalleryDetail() {
 
   // QR display
   const [showQR, setShowQR] = useState(null);
+  const [editingShare, setEditingShare] = useState(null);
+  const [editForm, setEditForm] = useState({ password: '', label: '', access_level: '' });
 
   // Subfolder delete confirmation
   const [deleteSubfolderTarget, setDeleteSubfolderTarget] = useState(null);
@@ -350,6 +352,25 @@ export default function AdminGalleryDetail() {
     toast.success("Share link copied");
   };
 
+  const openEditShare = (share) => {
+    setEditForm({ password: share.password_raw || '', label: share.label || '', access_level: share.access_level || 'download' });
+    setEditingShare(share);
+  };
+
+  const handleSaveShare = async () => {
+    try {
+      const updates = {};
+      if (editForm.label !== (editingShare.label || '')) updates.label = editForm.label;
+      if (editForm.access_level !== (editingShare.access_level || 'download')) updates.access_level = editForm.access_level;
+      if (editForm.password !== (editingShare.password_raw || '')) updates.password = editForm.password;
+      if (Object.keys(updates).length === 0) { setEditingShare(null); return; }
+      await updateShare(editingShare.id, updates);
+      toast.success("Share updated");
+      setEditingShare(null);
+      loadGallery();
+    } catch { toast.error("Failed to update share"); }
+  };
+
   const toggleSelect = (fileId) => {
     setSelectedFiles(prev => {
       const next = new Set(prev);
@@ -615,6 +636,7 @@ export default function AdminGalleryDetail() {
                       )}
                     </PopoverContent>
                   </Popover>
+                  <button data-testid={`edit-share-${s.id}`} onClick={() => openEditShare(s)} className="p-1 text-[#57534E] hover:text-[#1C1917]" title="Edit share"><Pencil className="w-3.5 h-3.5" /></button>
                   <button data-testid={`copy-share-${s.id}`} onClick={() => copyShareLink(s.token)} className="p-1 text-[#57534E] hover:text-[#1C1917]"><Copy className="w-3.5 h-3.5" /></button>
                   <button data-testid={`qr-share-${s.id}`} onClick={() => setShowQR(s)} className="p-1 text-[#57534E] hover:text-[#1C1917]"><QrCode className="w-3.5 h-3.5" /></button>
                   <button onClick={() => handleExpireNow(s.id)} className="p-1 text-[#57534E] hover:text-[#1C1917]" title={s.is_active ? "Disable share" : "Enable share"}>
@@ -1120,6 +1142,63 @@ export default function AdminGalleryDetail() {
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Share Dialog */}
+      <Dialog open={!!editingShare} onOpenChange={(open) => { if (!open) setEditingShare(null); }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Edit Share</DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              {editingShare && <span className="text-xs break-all">{window.location.origin}/s/{editingShare.token}</span>}
+            </DialogDescription>
+          </DialogHeader>
+          {editingShare && (
+            <div className="space-y-4 py-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
+              <div className="space-y-1.5">
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Label</Label>
+                <Input data-testid="edit-share-label" value={editForm.label} onChange={e => setEditForm(f => ({...f, label: e.target.value}))}
+                  className="border-[#D4D4D8] rounded-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password</Label>
+                <div className="flex gap-2">
+                  <Input data-testid="edit-share-password" value={editForm.password} onChange={e => setEditForm(f => ({...f, password: e.target.value}))}
+                    placeholder="Leave blank to remove password" className="border-[#D4D4D8] rounded-sm flex-1" />
+                  <Button type="button" variant="outline" size="sm" data-testid="edit-generate-password-btn"
+                    className="shrink-0 text-xs gap-1.5 border-[#D4D4D8] hover:bg-[#F5F2EB]"
+                    onClick={() => {
+                      const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+                      let pw = '';
+                      for (let i = 0; i < 8; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+                      setEditForm(f => ({...f, password: pw}));
+                    }}>
+                    <RefreshCw className="w-3.5 h-3.5" /> Generate
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Access Level</Label>
+                <select data-testid="edit-share-access" value={editForm.access_level}
+                  onChange={e => setEditForm(f => ({...f, access_level: e.target.value}))}
+                  className="w-full border border-[#D4D4D8] rounded-sm p-2 text-sm bg-white" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                  <option value="view">View Only</option>
+                  <option value="download">Download</option>
+                  <option value="upload">Upload</option>
+                  <option value="full">Full Access</option>
+                </select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button onClick={() => setEditingShare(null)} variant="outline" className="flex-1 rounded-sm text-xs tracking-wider uppercase font-bold border-[#D4D4D8]">
+                  Cancel
+                </Button>
+                <Button data-testid="save-share-btn" onClick={handleSaveShare} className="flex-1 bg-[#1C1917] text-[#FDFCF8] rounded-sm text-xs tracking-wider uppercase font-bold">
+                  Save Changes
+                </Button>
               </div>
             </div>
           )}

@@ -1330,6 +1330,41 @@ async def update_share_expiry(share_id: str, data: ShareExpiryUpdate, admin=Depe
     await db.shares.update_one({"id": share_id}, {"$set": {"expires_at": data.expires_at}})
     return {"expires_at": data.expires_at}
 
+class ShareUpdate(BaseModel):
+    password: Optional[str] = None  # New password, empty string to remove, None to keep unchanged
+    label: Optional[str] = None
+    access_level: Optional[str] = None
+
+@api_router.put("/admin/shares/{share_id}")
+async def update_share(share_id: str, data: ShareUpdate, admin=Depends(get_admin)):
+    share = await db.shares.find_one({"id": share_id}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    
+    updates = {}
+    if data.label is not None:
+        updates["label"] = data.label
+    if data.access_level is not None:
+        updates["access_level"] = data.access_level
+        updates["allow_uploads"] = data.access_level in ("upload", "full")
+    if data.password is not None:
+        if data.password == "":
+            updates["password_hash"] = None
+            updates["password_raw"] = ""
+            updates["has_password"] = False
+        else:
+            updates["password_hash"] = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
+            updates["password_raw"] = data.password
+            updates["has_password"] = True
+    
+    if updates:
+        await db.shares.update_one({"id": share_id}, {"$set": updates})
+    
+    updated = await db.shares.find_one({"id": share_id}, {"_id": 0, "password_hash": 0})
+    return updated
+
+
+
 @api_router.get("/admin/shares/{share_id}/qr")
 async def get_share_qr(share_id: str, base_url: str = Query(...), token: Optional[str] = Query(None)):
     # Verify admin token (from query param since img src can't send headers)
