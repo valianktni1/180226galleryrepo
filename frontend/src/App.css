@@ -94,3 +94,12 @@
 
 /* Dark mode file card backgrounds */
 .file-card-empty { background-color: var(--card-empty-bg, #F5F2EB); }
+
+
+/* Hero image positioning — show top portion of couple's photo */
+/* Mobile: show from 25% (more of the top) */
+.hero-bg-image { background-position: center 25% !important; }
+/* Tablet/iPad */
+@media (min-width: 768px) { .hero-bg-image { background-position: center 28% !important; } }
+/* Desktop */
+@media (min-width: 1024px) { .hero-bg-image { background-position: center 30% !important; } }

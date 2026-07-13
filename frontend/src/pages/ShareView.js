@@ -445,11 +445,11 @@ function ShareViewFull() {
           {/* Hero background image */}
           {heroImageUrl && (
             <>
-              <div className="absolute inset-0 z-0"
+              <div className="absolute inset-0 z-0 hero-bg-image"
                 style={{
                   backgroundImage: `url(${heroImageUrl})`,
                   backgroundSize: 'cover',
-                  backgroundPosition: 'center 25%',
+                  backgroundPosition: 'center 30%',
                   filter: 'blur(2px) brightness(0.55)',
                   transform: 'scale(1.05)',
                 }} />
