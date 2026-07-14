@@ -51,7 +51,6 @@ export default function ShareAccess() {
           openAccessShare(token).then(res => {
             localStorage.setItem("share_token", res.data.jwt);
             localStorage.setItem("share_url_token", token);
-            // Store viewer_id for persistent favourites
             if (res.data.viewer_id) {
               localStorage.setItem(`viewer_id_${token}`, res.data.viewer_id);
             }
@@ -61,6 +60,23 @@ export default function ShareAccess() {
               setExpired(true);
             }
           });
+        } else {
+          // Auto-submit password from ?p= query param (shared links)
+          const autoPassword = searchParams.get('p');
+          if (autoPassword) {
+            accessShare(token, autoPassword).then(res => {
+              localStorage.setItem("share_token", res.data.jwt);
+              localStorage.setItem("share_url_token", token);
+              localStorage.setItem(`share_pw_${token}`, autoPassword);
+              if (res.data.viewer_id) {
+                localStorage.setItem(`viewer_id_${token}`, res.data.viewer_id);
+              }
+              navigate(redirectPath);
+            }).catch(() => {
+              // Wrong password — show the form, let them type it manually
+              setPassword('');
+            });
+          }
         }
       })
       .catch((err) => {
@@ -70,7 +86,7 @@ export default function ShareAccess() {
           setNotFound(true);
         }
       });
-  }, [token, navigate, redirectPath]);
+  }, [token, navigate, redirectPath, searchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -79,6 +95,7 @@ export default function ShareAccess() {
       const res = await accessShare(token, password);
       localStorage.setItem("share_token", res.data.jwt);
       localStorage.setItem("share_url_token", token);
+      localStorage.setItem(`share_pw_${token}`, password);
       // Store viewer_id for persistent favourites
       if (res.data.viewer_id) {
         localStorage.setItem(`viewer_id_${token}`, res.data.viewer_id);

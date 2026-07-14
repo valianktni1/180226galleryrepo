@@ -425,7 +425,10 @@ function ShareViewFull() {
               </Button>
               <Button data-testid="share-whatsapp-btn"
                 onClick={() => {
-                  const url = `${window.location.origin}/s/${token}`;
+                  const pw = localStorage.getItem(`share_pw_${token}`);
+                  const url = pw
+                    ? `${window.location.origin}/s/${token}?p=${encodeURIComponent(pw)}`
+                    : `${window.location.origin}/s/${token}`;
                   const text = encodeURIComponent(`Have a look at our wedding photos! 💒\n${url}`);
                   window.open(`https://wa.me/?text=${text}`, '_blank');
                 }}
