@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -15,10 +15,12 @@ import {
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl
 } from "@/lib/api";
-import GuestUploadView from "@/pages/GuestUploadView";
-import Slideshow from "@/pages/Slideshow";
-import VideoPlayer from "@/components/VideoPlayer";
 import { getTheme } from "@/lib/themes";
+
+// Code-split heavy components — only loaded when actually needed
+const GuestUploadView = lazy(() => import("@/pages/GuestUploadView"));
+const Slideshow = lazy(() => import("@/pages/Slideshow"));
+const VideoPlayer = lazy(() => import("@/components/VideoPlayer"));
 
 export default function ShareView() {
   const { token } = useParams();
@@ -29,7 +31,11 @@ export default function ShareView() {
 
   // If Guest Upload Mode, render the simplified view
   if (isGuestUploadMode) {
-    return <GuestUploadView galleryName={storedGalleryName} />;
+    return (
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#FDFCF8' }}><div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" /></div>}>
+        <GuestUploadView galleryName={storedGalleryName} />
+      </Suspense>
+    );
   }
 
   // Continue with normal ShareView
@@ -977,13 +983,15 @@ function ShareViewFull() {
 
       {/* Slideshow */}
       {showSlideshow && (
-        <Slideshow
-          photos={currentAlbumFiles.filter(f => f.file_type === 'photo' && (f.has_preview || f.has_thumb))}
-          galleryId={galleryId}
-          coupleName={coupleName}
-          onClose={() => setShowSlideshow(false)}
-          shareToken={token}
-        />
+        <Suspense fallback={null}>
+          <Slideshow
+            photos={currentAlbumFiles.filter(f => f.file_type === 'photo' && (f.has_preview || f.has_thumb))}
+            galleryId={galleryId}
+            coupleName={coupleName}
+            onClose={() => setShowSlideshow(false)}
+            shareToken={token}
+          />
+        </Suspense>
       )}
     </div>
   );
@@ -1200,11 +1208,13 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
           {isVideo && shareToken ? (
             <motion.div key={currentPhoto.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
               onClick={e => e.stopPropagation()}>
-              <VideoPlayer
-                src={videoStreamUrl(shareToken, currentPhoto.id)}
-                resolveUrl={() => getVideoPlaybackUrl(shareToken, currentPhoto.id)}
-                filename={currentPhoto.filename}
-              />
+              <Suspense fallback={<div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />}>
+                <VideoPlayer
+                  src={videoStreamUrl(shareToken, currentPhoto.id)}
+                  resolveUrl={() => getVideoPlaybackUrl(shareToken, currentPhoto.id)}
+                  filename={currentPhoto.filename}
+                />
+              </Suspense>
             </motion.div>
           ) : (
             <div className="relative" onClick={e => e.stopPropagation()}>

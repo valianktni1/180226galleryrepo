@@ -62,6 +62,12 @@ User deploys on TrueNAS via Dockge:
 ## In Progress
 None
 
+## Recently Completed (2026-07-08)
+- [x] **Font Preloading** — Moved Google Fonts (Cormorant Garamond + Manrope) from render-blocking CSS `@import` to `<link rel="stylesheet">` in HTML `<head>` with `preconnect` hints. Removed unused Inter font. Faster text rendering on first visit.
+- [x] **React.lazy() Code Splitting** — Lazy-loaded Slideshow, VideoPlayer, and GuestUploadView components in ShareView.js. Reduces initial JS bundle for couples, loading heavy components only when needed.
+- [x] **Preconnect Hints** — Already existed for Google Fonts CDN (confirmed and kept).
+- [x] **Database Indexes** — Already existed for all key collections (confirmed: files, favourites, shares, activity_log, etc.).
+
 ## Recently Completed (2026-07-07)
 - [x] P0 Download Bug Investigation — Code logic verified correct, all downloads work in preview (13/13 backend tests pass). Issue is environment-specific to TrueNAS production.
 - [x] Added comprehensive diagnostic logging to ALL download endpoints (album ZIP, POST ZIP, admin ZIP, favourites ZIP, single file) — logs file counts, missing files, parent directory contents
