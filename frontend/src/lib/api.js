@@ -268,7 +268,16 @@ export const getLiveVisitors = () => apiClient.get('/admin/live-visitors');
 
 // Broadcast email
 export const getBroadcastPreview = () => apiClient.get('/admin/broadcast-preview');
-export const sendBroadcastEmail = (data) => apiClient.post('/admin/broadcast-email', data);
+export const sendBroadcastEmail = (formData) =>
+  apiClient.post('/admin/broadcast-email', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+
+// Gallery-specific email with attachments
+export const sendGalleryEmail = (galleryId, formData) =>
+  apiClient.post(`/admin/galleries/${galleryId}/send-email`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
 
 // Email log
 export const getEmailLog = (limit = 200) => apiClient.get(`/admin/email-log?limit=${limit}`);

@@ -22,12 +22,12 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw, Pencil
+  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw, Pencil, Paperclip
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
-  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail
+  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 
@@ -62,6 +62,7 @@ export default function AdminGalleryDetail() {
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [sendingTemplate, setSendingTemplate] = useState(false);
+  const [galleryEmailAttachments, setGalleryEmailAttachments] = useState([]);
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -484,9 +485,22 @@ export default function AdminGalleryDetail() {
     }
     setSendingTemplate(true);
     try {
-      const res = await sendTemplateEmail(id, selectedTemplateId);
-      toast.success(res.data.message);
+      if (galleryEmailAttachments.length > 0) {
+        // Use the multipart endpoint with attachments
+        const tmpl = emailTemplates.find(t => t.id === selectedTemplateId);
+        const fd = new FormData();
+        fd.append("subject", tmpl?.subject || "");
+        fd.append("body", tmpl?.body || "");
+        fd.append("template_id", selectedTemplateId);
+        galleryEmailAttachments.forEach(f => fd.append("attachments", f));
+        const res = await sendGalleryEmail(id, fd);
+        toast.success(res.data.message);
+      } else {
+        const res = await sendTemplateEmail(id, selectedTemplateId);
+        toast.success(res.data.message);
+      }
       setShowSendEmail(false);
+      setGalleryEmailAttachments([]);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to send email");
     } finally { setSendingTemplate(false); }
@@ -1320,6 +1334,22 @@ export default function AdminGalleryDetail() {
                 )}
               </>
             )}
+          </div>
+          <div className="space-y-1.5 px-0">
+            <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Attachment</Label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="cursor-pointer text-xs px-3 py-1.5 border rounded-sm hover:bg-[#F5F2EB]" style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }}>
+                <Paperclip className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />Choose File
+                <input type="file" className="hidden" data-testid="gallery-email-attachment"
+                  onChange={e => { if (e.target.files.length) setGalleryEmailAttachments(prev => [...prev, ...Array.from(e.target.files)]); e.target.value = ''; }} />
+              </label>
+              {galleryEmailAttachments.map((f, i) => (
+                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ backgroundColor: '#F5F2EB', color: '#57534E' }}>
+                  {f.name}
+                  <button onClick={() => setGalleryEmailAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-600"><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowSendEmail(false)} className="rounded-sm">Cancel</Button>

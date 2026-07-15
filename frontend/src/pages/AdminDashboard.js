@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText, Paperclip
 } from "lucide-react";
 import {
   listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats, getEmailTemplates
@@ -38,6 +38,7 @@ export default function AdminDashboard() {
   const [networkStats, setNetworkStats] = useState(null);
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [broadcastForm, setBroadcastForm] = useState({ subject: "", body: "" });
+  const [broadcastAttachments, setBroadcastAttachments] = useState([]);
   const [broadcastRecipients, setBroadcastRecipients] = useState([]);
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [emailTemplates, setEmailTemplates] = useState([]);
@@ -115,7 +116,11 @@ export default function AdminDashboard() {
     }
     setSendingBroadcast(true);
     try {
-      const res = await sendBroadcastEmail(broadcastForm);
+      const fd = new FormData();
+      fd.append("subject", broadcastForm.subject);
+      fd.append("body", broadcastForm.body);
+      broadcastAttachments.forEach(f => fd.append("attachments", f));
+      const res = await sendBroadcastEmail(fd);
       const { sent, failed } = res.data;
       if (failed > 0) {
         toast.success(`Email sent to ${sent} couple(s), ${failed} failed`);
@@ -124,6 +129,7 @@ export default function AdminDashboard() {
       }
       setShowBroadcast(false);
       setBroadcastForm({ subject: "", body: "" });
+      setBroadcastAttachments([]);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to send broadcast");
     } finally {
@@ -771,6 +777,26 @@ export default function AdminDashboard() {
                 rows={8}
                 className="w-full px-3 py-2 text-sm border rounded-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
                 style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Attachment</Label>
+              <div className="flex items-center gap-2">
+                <label className="cursor-pointer text-xs px-3 py-1.5 border rounded-sm hover:bg-[#F5F2EB]" style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }}>
+                  <Paperclip className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />Choose File
+                  <input type="file" className="hidden" data-testid="broadcast-attachment"
+                    onChange={e => { if (e.target.files.length) setBroadcastAttachments(prev => [...prev, ...Array.from(e.target.files)]); e.target.value = ''; }} />
+                </label>
+                {broadcastAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {broadcastAttachments.map((f, i) => (
+                      <span key={i} className="text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ backgroundColor: '#F5F2EB', color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                        {f.name}
+                        <button onClick={() => setBroadcastAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-600"><X className="w-3 h-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>

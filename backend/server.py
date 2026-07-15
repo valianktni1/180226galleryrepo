@@ -3845,13 +3845,29 @@ async def run_auto_archive():
     return result.deleted_count
 
 # ─── Reusable SMTP Send Helper ───
-def send_smtp_email(smtp: dict, to_email: str, subject: str, html_body: str):
-    """Send an email using stored SMTP settings. Runs synchronously (use in thread/executor)."""
-    msg = MIMEMultipart("alternative")
+def send_smtp_email(smtp: dict, to_email: str, subject: str, html_body: str, attachments: list = None):
+    """Send an email using stored SMTP settings. Runs synchronously (use in thread/executor).
+    attachments: list of dicts with 'filename' and 'data' (bytes)
+    """
+    msg = MIMEMultipart("mixed")
     msg["Subject"] = subject
     msg["From"] = formataddr((smtp.get("sender_name", "Weddings By Mark"), smtp["smtp_email"]))
     msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html"))
+
+    # HTML body as a sub-part
+    html_part = MIMEText(html_body, "html")
+    msg.attach(html_part)
+
+    # Add attachments
+    if attachments:
+        for att in attachments:
+            from email.mime.base import MIMEBase
+            from email import encoders
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(att["data"])
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f'attachment; filename="{att["filename"]}"')
+            msg.attach(part)
 
     if smtp["smtp_port"] == 465:
         server = smtplib.SMTP_SSL(smtp["smtp_server"], smtp["smtp_port"], timeout=15)
@@ -3920,9 +3936,14 @@ async def broadcast_preview(admin=Depends(get_admin)):
     return {"recipients": galleries, "count": len(galleries)}
 
 @api_router.post("/admin/broadcast-email")
-async def send_broadcast_email(data: BroadcastEmailBody, admin=Depends(get_admin)):
+async def send_broadcast_email(
+    subject: str = Form(...),
+    body: str = Form(...),
+    attachments: List[UploadFile] = File(default=[]),
+    admin=Depends(get_admin)
+):
     """Send an email to all couples with an email address on their gallery."""
-    if not data.subject.strip() or not data.body.strip():
+    if not subject.strip() or not body.strip():
         raise HTTPException(status_code=400, detail="Subject and body are required")
 
     smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
@@ -3938,9 +3959,15 @@ async def send_broadcast_email(data: BroadcastEmailBody, admin=Depends(get_admin
     if not galleries:
         raise HTTPException(status_code=400, detail="No couples have email addresses set on their galleries")
 
+    # Read attachment files once
+    att_list = []
+    for att in attachments:
+        data = await att.read()
+        att_list.append({"filename": att.filename, "data": data})
+
     # Convert plain text body to HTML paragraphs
     body_html = ""
-    for line in data.body.strip().split("\n"):
+    for line in body.strip().split("\n"):
         stripped = line.strip()
         if not stripped:
             body_html += '<br>'
@@ -3953,24 +3980,23 @@ async def send_broadcast_email(data: BroadcastEmailBody, admin=Depends(get_admin
     failed = []
     for g in galleries:
         try:
-            send_smtp_email(smtp, g["client_email"], data.subject.strip(), html_content)
+            send_smtp_email(smtp, g["client_email"], subject.strip(), html_content, att_list if att_list else None)
             sent += 1
-            # Log each successful broadcast send
             await db.email_log.insert_one({
                 "type": "broadcast",
-                "subject": data.subject.strip(),
+                "subject": subject.strip(),
                 "gallery_name": g["folder_name"],
                 "recipient": g["client_email"],
+                "has_attachment": len(att_list) > 0,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             })
         except Exception as e:
             logger.warning(f"Broadcast email failed for {g['client_email']}: {e}")
             failed.append({"name": g["folder_name"], "email": g["client_email"], "error": str(e)})
 
-    # Log the broadcast
     await db.activity_log.insert_one({
         "action": "broadcast_email",
-        "details": f"Broadcast sent: '{data.subject}' to {sent} couples",
+        "details": f"Broadcast sent: '{subject}' to {sent} couples" + (f" with attachment" if att_list else ""),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "admin": True
     })
@@ -4093,6 +4119,70 @@ async def send_template_email(gallery_id: str, data: SendTemplateEmailBody, admi
     })
 
     return {"success": True, "message": f"Email sent to {client_email}"}
+
+
+@api_router.post("/admin/galleries/{gallery_id}/send-email")
+async def send_gallery_email_with_attachment(
+    gallery_id: str,
+    subject: str = Form(...),
+    body: str = Form(...),
+    template_id: str = Form(default=""),
+    attachments: List[UploadFile] = File(default=[]),
+    admin=Depends(get_admin)
+):
+    """Send an email to the couple on this gallery — supports attachments + optional template."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    client_email = gallery.get("client_email", "")
+    if not client_email:
+        raise HTTPException(status_code=400, detail="No email address set for this gallery")
+
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        raise HTTPException(status_code=400, detail="SMTP not configured")
+    smtp = smtp_doc["value"]
+
+    # Read attachments
+    att_list = []
+    for att in attachments:
+        data = await att.read()
+        att_list.append({"filename": att.filename, "data": data})
+
+    # Convert body to HTML
+    couple_name = gallery.get("folder_name", "")
+    share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True, "guest_upload_mode": {"$ne": True}}, {"_id": 0})
+    gallery_link = (share.get("custom_slug") or share.get("token", "")) if share else ""
+
+    final_subject = subject.replace("{couple_name}", couple_name).replace("{gallery_link}", gallery_link)
+    body_text = body.replace("{couple_name}", couple_name).replace("{gallery_link}", gallery_link)
+
+    body_html = ""
+    for line in body_text.strip().split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            body_html += '<br>'
+        else:
+            body_html += f'<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">{stripped}</p>\n'
+
+    html_content = build_branded_email(body_html, get_awards_url(smtp))
+
+    try:
+        send_smtp_email(smtp, client_email, final_subject, html_content, att_list if att_list else None)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to send email: {str(e)}")
+
+    await db.email_log.insert_one({
+        "type": "gallery_email",
+        "subject": final_subject,
+        "gallery_name": couple_name,
+        "recipient": client_email,
+        "has_attachment": len(att_list) > 0,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"success": True, "message": f"Email sent to {client_email}"}
+
 
 # ─── Automated Expiry Reminder Emails ───
 
