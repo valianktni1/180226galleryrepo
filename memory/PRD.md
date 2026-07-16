@@ -70,6 +70,7 @@ None
 
 ## Recently Completed (2026-07-16)
 - [x] **Email Attachment Bug Fix** — Fixed file picker in Send Email dialog (AdminGalleryDetail.js) and Broadcast Email dialog (AdminDashboard.js). Replaced `<label>` wrapping hidden `<input type="file">` with explicit `<button>` + `useRef` pattern to bypass Radix Dialog focus-trapping issue. Attachments now show filename + size as visual pills before sending. Backend multipart endpoint verified working.
+- [x] **PWA (Progressive Web App)** — Added manifest.json, service worker, Apple meta tags, and generated app icons from the WBM logo. Couples can now "Add to Home Screen" on iPhone/Android for a native app-like experience (full-screen, no browser bar, custom icon). Service worker caches fonts and static assets for faster repeat visits.
 
 ## Recently Completed (2026-07-07)
 - [x] P0 Download Bug Investigation — Code logic verified correct, all downloads work in preview (13/13 backend tests pass). Issue is environment-specific to TrueNAS production.
