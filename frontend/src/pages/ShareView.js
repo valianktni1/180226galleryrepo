@@ -16,6 +16,7 @@ import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl
 } from "@/lib/api";
 import { getTheme } from "@/lib/themes";
+import InstallBanner from "@/components/InstallBanner";
 
 // Code-split heavy components — only loaded when actually needed
 const GuestUploadView = lazy(() => import("@/pages/GuestUploadView"));
@@ -704,6 +705,7 @@ function ShareViewFull() {
             </div>
           </div>
         </footer>
+        <InstallBanner theme={t} />
       </div>
     );
   }
