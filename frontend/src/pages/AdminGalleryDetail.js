@@ -35,6 +35,7 @@ export default function AdminGalleryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const attachmentInputRef = useRef(null);
 
   const [gallery, setGallery] = useState(null);
   const [files, setFiles] = useState([]);
@@ -1337,16 +1338,20 @@ export default function AdminGalleryDetail() {
           </div>
           <div className="space-y-1.5 px-0">
             <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Attachment</Label>
+            <input ref={attachmentInputRef} type="file" className="hidden" data-testid="gallery-email-attachment"
+              onChange={e => { if (e.target.files?.length) { setGalleryEmailAttachments(prev => [...prev, ...Array.from(e.target.files)]); } e.target.value = ''; }} />
             <div className="flex items-center gap-2 flex-wrap">
-              <label className="cursor-pointer text-xs px-3 py-1.5 border rounded-sm hover:bg-[#F5F2EB]" style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }}>
-                <Paperclip className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />Choose File
-                <input type="file" className="hidden" data-testid="gallery-email-attachment"
-                  onChange={e => { if (e.target.files.length) setGalleryEmailAttachments(prev => [...prev, ...Array.from(e.target.files)]); e.target.value = ''; }} />
-              </label>
+              <button type="button" onClick={() => attachmentInputRef.current?.click()}
+                className="cursor-pointer text-xs px-3 py-1.5 border rounded-sm hover:bg-[#F5F2EB] flex items-center gap-1.5"
+                style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }}
+                data-testid="gallery-email-choose-file">
+                <Paperclip className="w-3.5 h-3.5" />Choose File
+              </button>
               {galleryEmailAttachments.map((f, i) => (
-                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ backgroundColor: '#F5F2EB', color: '#57534E' }}>
-                  {f.name}
-                  <button onClick={() => setGalleryEmailAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-600"><X className="w-3 h-3" /></button>
+                <span key={i} className="text-[11px] px-2 py-1 rounded-full flex items-center gap-1.5 border" style={{ backgroundColor: '#F0EDE6', borderColor: '#D4D4D8', color: '#1C1917' }}>
+                  <Paperclip className="w-3 h-3" style={{ color: '#D4AF37' }} />
+                  {f.name} <span style={{ color: '#A8A29E' }}>({(f.size / 1024).toFixed(0)}KB)</span>
+                  <button type="button" onClick={() => setGalleryEmailAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-600 ml-0.5"><X className="w-3 h-3" /></button>
                 </span>
               ))}
             </div>

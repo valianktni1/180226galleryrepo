@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -39,6 +39,7 @@ export default function AdminDashboard() {
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [broadcastForm, setBroadcastForm] = useState({ subject: "", body: "" });
   const [broadcastAttachments, setBroadcastAttachments] = useState([]);
+  const broadcastAttachmentRef = useRef(null);
   const [broadcastRecipients, setBroadcastRecipients] = useState([]);
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [emailTemplates, setEmailTemplates] = useState([]);
@@ -780,22 +781,22 @@ export default function AdminDashboard() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Attachment</Label>
-              <div className="flex items-center gap-2">
-                <label className="cursor-pointer text-xs px-3 py-1.5 border rounded-sm hover:bg-[#F5F2EB]" style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }}>
-                  <Paperclip className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />Choose File
-                  <input type="file" className="hidden" data-testid="broadcast-attachment"
-                    onChange={e => { if (e.target.files.length) setBroadcastAttachments(prev => [...prev, ...Array.from(e.target.files)]); e.target.value = ''; }} />
-                </label>
-                {broadcastAttachments.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {broadcastAttachments.map((f, i) => (
-                      <span key={i} className="text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ backgroundColor: '#F5F2EB', color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-                        {f.name}
-                        <button onClick={() => setBroadcastAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-600"><X className="w-3 h-3" /></button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+              <input ref={broadcastAttachmentRef} type="file" className="hidden" data-testid="broadcast-attachment"
+                onChange={e => { if (e.target.files?.length) { setBroadcastAttachments(prev => [...prev, ...Array.from(e.target.files)]); } e.target.value = ''; }} />
+              <div className="flex items-center gap-2 flex-wrap">
+                <button type="button" onClick={() => broadcastAttachmentRef.current?.click()}
+                  className="cursor-pointer text-xs px-3 py-1.5 border rounded-sm hover:bg-[#F5F2EB] flex items-center gap-1.5"
+                  style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }}
+                  data-testid="broadcast-choose-file">
+                  <Paperclip className="w-3.5 h-3.5" />Choose File
+                </button>
+                {broadcastAttachments.map((f, i) => (
+                  <span key={i} className="text-[11px] px-2 py-1 rounded-full flex items-center gap-1.5 border" style={{ backgroundColor: '#F0EDE6', borderColor: '#D4D4D8', color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
+                    <Paperclip className="w-3 h-3" style={{ color: '#D4AF37' }} />
+                    {f.name} <span style={{ color: '#A8A29E' }}>({(f.size / 1024).toFixed(0)}KB)</span>
+                    <button type="button" onClick={() => setBroadcastAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-600 ml-0.5"><X className="w-3 h-3" /></button>
+                  </span>
+                ))}
               </div>
             </div>
           </div>

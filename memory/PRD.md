@@ -68,6 +68,9 @@ None
 - [x] **Preconnect Hints** — Already existed for Google Fonts CDN (confirmed and kept).
 - [x] **Database Indexes** — Already existed for all key collections (confirmed: files, favourites, shares, activity_log, etc.).
 
+## Recently Completed (2026-07-16)
+- [x] **Email Attachment Bug Fix** — Fixed file picker in Send Email dialog (AdminGalleryDetail.js) and Broadcast Email dialog (AdminDashboard.js). Replaced `<label>` wrapping hidden `<input type="file">` with explicit `<button>` + `useRef` pattern to bypass Radix Dialog focus-trapping issue. Attachments now show filename + size as visual pills before sending. Backend multipart endpoint verified working.
+
 ## Recently Completed (2026-07-07)
 - [x] P0 Download Bug Investigation — Code logic verified correct, all downloads work in preview (13/13 backend tests pass). Issue is environment-specific to TrueNAS production.
 - [x] Added comprehensive diagnostic logging to ALL download endpoints (album ZIP, POST ZIP, admin ZIP, favourites ZIP, single file) — logs file counts, missing files, parent directory contents
