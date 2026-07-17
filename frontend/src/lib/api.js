@@ -289,6 +289,9 @@ export const updateEmailTemplate = (id, data) => apiClient.put(`/admin/email-tem
 export const deleteEmailTemplate = (id) => apiClient.delete(`/admin/email-templates/${id}`);
 export const sendTemplateEmail = (galleryId, templateId) => apiClient.post(`/admin/galleries/${galleryId}/send-template-email`, { template_id: templateId });
 
+// QR Picker Email
+export const sendQrPickerEmail = (galleryId) => apiClient.post(`/admin/galleries/${galleryId}/send-qr-picker`);
+
 // Guest Upload Mode - get upload count
 export const getGuestUploadCount = (token) =>
   apiClient.get(`/share/${token}/guest-upload-count`);

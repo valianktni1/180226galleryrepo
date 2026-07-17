@@ -27,7 +27,7 @@ import {
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
-  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail
+  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 
@@ -64,6 +64,7 @@ export default function AdminGalleryDetail() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [sendingTemplate, setSendingTemplate] = useState(false);
   const [galleryEmailAttachments, setGalleryEmailAttachments] = useState([]);
+  const [sendingQrPicker, setSendingQrPicker] = useState(false);
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -507,6 +508,21 @@ export default function AdminGalleryDetail() {
     } finally { setSendingTemplate(false); }
   };
 
+  const handleSendQrPicker = async () => {
+    if (!gallery.client_email) {
+      setEditingEmail(true);
+      toast.error("Add the couple's email first");
+      return;
+    }
+    setSendingQrPicker(true);
+    try {
+      const res = await sendQrPickerEmail(id);
+      toast.success(res.data.message);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send QR picker email");
+    } finally { setSendingQrPicker(false); }
+  };
+
   if (!gallery) return null;
 
   const currentFiles = files.filter(f => f.subfolder === activeTab);
@@ -578,6 +594,10 @@ export default function AdminGalleryDetail() {
             <Button data-testid="send-template-email-btn" onClick={handleOpenSendEmail}
               variant="outline" className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#57534E] text-[#57534E] hover:bg-[#57534E]/10">
               <Send className="w-3.5 h-3.5" /> Send Email
+            </Button>
+            <Button data-testid="send-qr-picker-btn" onClick={handleSendQrPicker} disabled={sendingQrPicker}
+              variant="outline" className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37]/10">
+              <QrCode className="w-3.5 h-3.5" /> {sendingQrPicker ? "Sending..." : "QR Picker"}
             </Button>
             <Button data-testid="create-share-btn" onClick={() => setShowShareDialog(true)}
               className="bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-5 py-2 text-xs tracking-wider uppercase font-bold gap-2">

@@ -1641,6 +1641,507 @@ async def get_qr_design_preview(design_num: int, token: Optional[str] = Query(No
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
 
+# ─── QR Picker Email System ───
+# Sends a branded email with 3 QR design previews. Couple clicks one → auto-emails the PDF.
+
+def _generate_qr_preview_png(share_url: str, couple_name: str, date_str: str, design: int, width=560, height=420) -> bytes:
+    """Generate a small preview PNG of a QR frame design with the actual QR code."""
+    from PIL import ImageDraw, ImageFont
+    
+    TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
+    FONTS_DIR = ROOT_DIR / "assets" / "fonts"
+    
+    FW, FH = width, height
+    
+    script_f = lambda s: ImageFont.truetype(str(FONTS_DIR / "GreatVibes-Regular.ttf"), s)
+    serif_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", s)
+    serif_bf = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf", s)
+    serif_if = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf", s)
+    sans_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", s)
+    
+    def make_qr_img(url, size=120):
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=6, border=1)
+        qr.add_data(url)
+        qr.make(fit=True)
+        qi = qr.make_image(fill_color="black", back_color="white").convert('RGB')
+        return qi.resize((size, size), Image.LANCZOS)
+    
+    def tc(draw, text, font, y, fill='black'):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((FW - tw) // 2, y), text, fill=fill, font=font)
+    
+    names = {1: "design_1_botanical_gold.png", 2: "design_2_hearts.png"}
+    
+    if design in (1, 2):
+        frame = Image.open(str(TEMPLATES_DIR / names[design])).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+    else:
+        img = Image.new('RGB', (FW, FH), (255, 255, 255))
+    
+    draw = ImageDraw.Draw(img)
+    
+    if design == 1:
+        sf = script_f(20)
+        tc(draw, "Share the Love", sf, int(FH * 0.10), fill='#1C1917')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name, script_f(16), int(FH * 0.72), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    elif design == 2:
+        tc(draw, "Capture THE LOVE", serif_bf(16), int(FH * 0.12), fill='#1C1917')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name.upper(), serif_bf(14), int(FH * 0.72), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    else:
+        sf = script_f(20)
+        tc(draw, "Share the Love", sf, int(FH * 0.10), fill='#1C1917')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name, script_f(16), int(FH * 0.72), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    
+    # Add a subtle border
+    draw.rectangle([(0, 0), (FW - 1, FH - 1)], outline='#E8E4DC', width=2)
+    
+    # Design label at bottom
+    labels = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal"}
+    label = labels.get(design, "Design")
+    tc(draw, label, sans_f(11), FH - 22, fill='#A8A29E')
+    
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def _make_qr_picker_token(gallery_id: str) -> str:
+    """Create a signed JWT for the QR picker flow, valid for 60 days."""
+    return jwt.encode(
+        {"gallery_id": gallery_id, "purpose": "qr_pick", "exp": datetime.now(timezone.utc) + timedelta(days=60)},
+        JWT_SECRET, algorithm="HS256"
+    )
+
+def _verify_qr_picker_token(token: str) -> str:
+    """Verify and return gallery_id from a QR picker token."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        if payload.get("purpose") != "qr_pick":
+            raise HTTPException(status_code=403, detail="Invalid token")
+        return payload["gallery_id"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=410, detail="This link has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=403, detail="Invalid link")
+
+
+@api_router.get("/public/qr-preview/{token}/{design}")
+async def public_qr_preview(token: str, design: int):
+    """Public endpoint: serves a QR design preview PNG (used as img src in emails)."""
+    gallery_id = _verify_qr_picker_token(token)
+    
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404)
+    
+    # Find guest upload share
+    share = await db.shares.find_one(
+        {"gallery_id": gallery_id, "is_active": True, "guest_upload_mode": True}, {"_id": 0}
+    )
+    if not share:
+        # Fallback to any active share
+        share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="No share link found")
+    
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    site_url = smtp_doc.get("value", {}).get("site_url", "") if smtp_doc else ""
+    share_url = f"{site_url}/s/{share.get('custom_slug') or share['token']}" if site_url else f"/s/{share['token']}"
+    
+    import re
+    folder_name = gallery["folder_name"]
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
+    date_match = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{2,4})$', folder_name.strip())
+    date_str = f"{date_match.group(1)}.{date_match.group(2)}.{date_match.group(3)}" if date_match else ""
+    
+    if design not in (1, 2, 3):
+        design = 1
+    
+    png_bytes = _generate_qr_preview_png(share_url, couple_name, date_str, design)
+    
+    return StreamingResponse(
+        io.BytesIO(png_bytes),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+
+@api_router.get("/public/qr-select/{token}/{design}")
+async def public_qr_select(token: str, design: int, request: Request):
+    """Public endpoint: couple clicks a QR design → generates PDF and emails it to them."""
+    gallery_id = _verify_qr_picker_token(token)
+    
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404)
+    
+    client_email = gallery.get("client_email", "")
+    if not client_email:
+        return Response(
+            content="<html><body style='font-family:Georgia;text-align:center;padding:60px;'><h2>Sorry, no email address on file.</h2><p>Please contact your photographer.</p></body></html>",
+            media_type="text/html"
+        )
+    
+    # Find the guest upload share
+    share = await db.shares.find_one(
+        {"gallery_id": gallery_id, "is_active": True, "guest_upload_mode": True}, {"_id": 0}
+    )
+    if not share:
+        share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True}, {"_id": 0})
+    if not share:
+        return Response(
+            content="<html><body style='font-family:Georgia;text-align:center;padding:60px;'><h2>No share link found.</h2></body></html>",
+            media_type="text/html"
+        )
+    
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        return Response(
+            content="<html><body style='font-family:Georgia;text-align:center;padding:60px;'><h2>Email not configured.</h2></body></html>",
+            media_type="text/html"
+        )
+    smtp = smtp_doc["value"]
+    site_url = smtp.get("site_url", "")
+    share_url = f"{site_url}/s/{share.get('custom_slug') or share['token']}" if site_url else f"/s/{share['token']}"
+    
+    if design not in (1, 2, 3):
+        design = 1
+    
+    import re
+    folder_name = gallery["folder_name"]
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
+    
+    design_names = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal"}
+    design_label = design_names.get(design, "Design")
+    
+    # Generate the full PDF by calling the existing qr-frame logic
+    # We need to build it here to avoid auth issues
+    date_match = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{2,4})$', folder_name.strip())
+    date_str = f"{date_match.group(1)}.{date_match.group(2)}.{date_match.group(3)}" if date_match else ""
+    
+    from PIL import ImageDraw, ImageFont
+    FW, FH = 2400, 1800
+    FONTS_DIR = ROOT_DIR / "assets" / "fonts"
+    TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
+    
+    script_f = lambda s: ImageFont.truetype(str(FONTS_DIR / "GreatVibes-Regular.ttf"), s)
+    serif_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", s)
+    serif_bf = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf", s)
+    serif_if = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf", s)
+    sans_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", s)
+    
+    def make_qr_img(url, size=550):
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=2)
+        qr.add_data(url)
+        qr.make(fit=True)
+        qi = qr.make_image(fill_color="black", back_color="white").convert('RGB')
+        return qi.resize((size, size), Image.LANCZOS)
+    
+    def tc(draw, text, font, y, fill='black'):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((FW - tw) // 2, y), text, fill=fill, font=font)
+    
+    def add_brand(draw):
+        b = "Designed and hosted by Weddings By Mark"
+        bf = sans_f(22)
+        bbox = draw.textbbox((0, 0), b, font=bf)
+        draw.text((FW - (bbox[2] - bbox[0]) - 60, FH - 60), b, fill='#AAAAAA', font=bf)
+    
+    SX = FW / 1264.0
+    SY = FH / 848.0
+    
+    if design == 1:
+        frame = Image.open(str(TEMPLATES_DIR / "design_1_botanical_gold.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        lw = lb[2] - lb[0]
+        total_w = sw + tw2 + lw + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#888888')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    elif design == 2:
+        frame = Image.open(str(TEMPLATES_DIR / "design_2_hearts.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        cap_font = script_f(int(60 * SX))
+        love_font = serif_bf(int(40 * SX))
+        cap_bb = draw.textbbox((0, 0), "Capture", font=cap_font)
+        love_bb = draw.textbbox((0, 0), "THE LOVE", font=love_font)
+        cap_w = cap_bb[2] - cap_bb[0]
+        total = cap_w + (love_bb[2] - love_bb[0]) + 30
+        sx = (FW - total) // 2
+        head_y = int(FH * 0.22)
+        draw.text((sx, head_y), "Capture", fill='#1C1917', font=cap_font)
+        draw.text((sx + cap_w + 30, head_y + int(25 * SY)), "THE LOVE", fill='#1C1917', font=love_font)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.50) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(17 * SX)), int(FH * 0.71), fill='#333333')
+        tc(draw, "JUST SCAN THE QR CODE", sans_f(int(14 * SX)), int(FH * 0.74), fill='#555555')
+        tc(draw, couple_name.upper(), serif_bf(int(35 * SX)), int(FH * 0.79), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    else:
+        img = Image.new('RGB', (FW, FH), (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#888888')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    
+    # Save as PDF
+    pdf_buf = io.BytesIO()
+    img.save(pdf_buf, format="PDF", resolution=300.0)
+    pdf_bytes = pdf_buf.getvalue()
+    safe_name = couple_name.replace(' ', '_').replace('&', 'and')
+    
+    # Email the PDF to the couple
+    awards_url = get_awards_url(smtp)
+    email_html = build_branded_email(f"""
+<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">
+Great choice! You selected the <strong>{design_label}</strong> design.
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">
+Your personalised QR code is attached as a PDF — ready to print at any size for your big day!
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">
+We recommend printing at <strong>8&times;6 inches</strong> or larger for best quality.
+</p>
+<p style="font-size:14px;color:#A8A29E;margin:20px 0 0 0;font-style:italic;">
+With love, Weddings By Mark
+</p>
+""", awards_url)
+    
+    try:
+        send_smtp_email(
+            smtp, client_email,
+            f"Your QR Code — {design_label} Design",
+            email_html,
+            [{"filename": f"{safe_name}_QR_{design_label.replace(' ', '_')}.pdf", "data": pdf_bytes}]
+        )
+    except Exception as e:
+        logging.error(f"QR picker email failed: {e}")
+        return Response(
+            content=f"""<html><body style="font-family:Georgia,'Times New Roman',serif;text-align:center;padding:60px;background:#FDFCF8;">
+<h2 style="color:#1C1917;">Oops!</h2>
+<p style="color:#57534E;">We couldn't send the email right now. Please contact your photographer.</p>
+</body></html>""",
+            media_type="text/html"
+        )
+    
+    # Log it
+    await db.email_log.insert_one({
+        "type": "qr_picker_delivery",
+        "design": design_label,
+        "gallery_id": gallery_id,
+        "gallery_name": couple_name,
+        "recipient": client_email,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Return a beautiful thank-you page
+    return Response(
+        content=f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR Code Sent!</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Manrope:wght@300;400&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:60px 20px;background:#FDFCF8;font-family:'Manrope',sans-serif;text-align:center;min-height:100vh;display:flex;align-items:center;justify-content:center;">
+<div style="max-width:480px;">
+<div style="width:64px;height:64px;border-radius:50%;background:#1C1917;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+</div>
+<h1 style="font-family:'Cormorant Garamond',Georgia,serif;font-size:32px;color:#1C1917;margin:0 0 12px;font-weight:400;">
+Beautiful Choice!
+</h1>
+<p style="font-size:15px;color:#57534E;line-height:1.7;margin:0 0 8px;">
+The <strong>{design_label}</strong> QR code has been sent to
+</p>
+<p style="font-size:14px;color:#D4AF37;margin:0 0 24px;letter-spacing:0.5px;">
+{client_email}
+</p>
+<p style="font-size:13px;color:#A8A29E;line-height:1.6;">
+Check your inbox (and spam folder, just in case!) for a PDF ready to print.
+</p>
+<div style="margin-top:32px;height:1px;background:linear-gradient(to right,transparent,#D4AF37,transparent);"></div>
+<p style="margin-top:20px;font-size:12px;color:#A8A29E;letter-spacing:1.5px;text-transform:uppercase;">Weddings By Mark</p>
+</div>
+</body>
+</html>""",
+        media_type="text/html"
+    )
+
+
+@api_router.post("/admin/galleries/{gallery_id}/send-qr-picker")
+async def send_qr_picker_email(gallery_id: str, admin=Depends(get_admin)):
+    """Send the QR design picker email to the couple."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    client_email = gallery.get("client_email", "")
+    if not client_email:
+        raise HTTPException(status_code=400, detail="No client email set for this gallery")
+    
+    # Find guest upload share first
+    share = await db.shares.find_one(
+        {"gallery_id": gallery_id, "is_active": True, "guest_upload_mode": True}, {"_id": 0}
+    )
+    if not share:
+        share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=400, detail="No active share link found. Create a Guest Upload share first.")
+    
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        raise HTTPException(status_code=400, detail="SMTP not configured. Go to Settings > Email to set up.")
+    smtp = smtp_doc["value"]
+    site_url = smtp.get("site_url", "").rstrip("/")
+    
+    if not site_url:
+        raise HTTPException(status_code=400, detail="Site URL not set in SMTP settings. Please set it so email links work.")
+    
+    import re
+    folder_name = gallery["folder_name"]
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
+    
+    # Generate a signed token for the public endpoints
+    picker_token = _make_qr_picker_token(gallery_id)
+    
+    # Build preview image URLs
+    preview_1 = f"{site_url}/api/public/qr-preview/{picker_token}/1"
+    preview_2 = f"{site_url}/api/public/qr-preview/{picker_token}/2"
+    preview_3 = f"{site_url}/api/public/qr-preview/{picker_token}/3"
+    
+    select_1 = f"{site_url}/api/public/qr-select/{picker_token}/1"
+    select_2 = f"{site_url}/api/public/qr-select/{picker_token}/2"
+    select_3 = f"{site_url}/api/public/qr-select/{picker_token}/3"
+    
+    awards_url = get_awards_url(smtp)
+    
+    email_content = f"""
+<p style="font-size:22px;color:#1C1917;font-family:Georgia,'Times New Roman',serif;margin:0 0 8px 0;font-weight:normal;">
+Hi {couple_name},
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 20px 0;line-height:1.8;">
+Your guest upload link is ready! Now it's time to choose your QR code design. Pick your favourite below and we'll send you a print-ready PDF straight to your inbox.
+</p>
+
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
+<tr>
+<td width="33%" align="center" valign="top" style="padding:0 6px;">
+<a href="{select_1}" target="_blank" style="text-decoration:none;display:block;">
+<img src="{preview_1}" alt="Botanical Gold" style="width:100%;max-width:170px;border-radius:6px;border:2px solid #E8E4DC;" />
+<p style="font-size:12px;color:#D4AF37;margin:8px 0 2px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">Botanical Gold</p>
+<p style="font-size:11px;color:#A8A29E;margin:0;">Click to select</p>
+</a>
+</td>
+<td width="33%" align="center" valign="top" style="padding:0 6px;">
+<a href="{select_2}" target="_blank" style="text-decoration:none;display:block;">
+<img src="{preview_2}" alt="Rose Hearts" style="width:100%;max-width:170px;border-radius:6px;border:2px solid #E8E4DC;" />
+<p style="font-size:12px;color:#D4AF37;margin:8px 0 2px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">Rose Hearts</p>
+<p style="font-size:11px;color:#A8A29E;margin:0;">Click to select</p>
+</a>
+</td>
+<td width="33%" align="center" valign="top" style="padding:0 6px;">
+<a href="{select_3}" target="_blank" style="text-decoration:none;display:block;">
+<img src="{preview_3}" alt="Elegant Minimal" style="width:100%;max-width:170px;border-radius:6px;border:2px solid #E8E4DC;" />
+<p style="font-size:12px;color:#D4AF37;margin:8px 0 2px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">Elegant Minimal</p>
+<p style="font-size:11px;color:#A8A29E;margin:0;">Click to select</p>
+</a>
+</td>
+</tr>
+</table>
+
+<div style="text-align:center;margin:16px 0 0;padding:16px 0 0;border-top:1px solid #F5F2EB;">
+<p style="font-size:13px;color:#A8A29E;line-height:1.6;margin:0;">
+Simply click on your favourite design above and the print-ready PDF will be emailed to you automatically. Easy!
+</p>
+</div>
+"""
+    
+    html_content = build_branded_email(email_content, awards_url)
+    
+    try:
+        send_smtp_email(smtp, client_email, f"Choose Your QR Code Design — {couple_name}", html_content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to send email: {str(e)}")
+    
+    # Log
+    await db.email_log.insert_one({
+        "type": "qr_picker",
+        "gallery_id": gallery_id,
+        "gallery_name": couple_name,
+        "recipient": client_email,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"success": True, "message": f"QR picker email sent to {client_email}"}
+
+
+
 # ─── Slideshow Music ───
 MUSIC_DIR = Path(__file__).parent / "assets" / "slideshow_music"
 
