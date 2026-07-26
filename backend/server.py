@@ -21,6 +21,8 @@ import jwt
 import psutil
 import bcrypt
 from PIL import Image
+import pillow_heif
+pillow_heif.register_heif_opener()
 import aiofiles
 import qrcode
 import asyncio
@@ -226,7 +228,7 @@ async def get_share_session(authorization: str = Header(None)):
 
 # ─── File Helpers ───
 def is_image(filename: str) -> bool:
-    return filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'))
+    return filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.heic', '.heif'))
 
 def is_video(filename: str) -> bool:
     return filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm', '.mts'))

@@ -87,25 +87,38 @@ export default function GuestUploadView({ galleryName }) {
           }, 5000);
         }
       } else {
-        // GUEST MODE: Upload all at once (smaller files)
-        const res = await guestUpload(token, files, (e) => {
-          setUploadProgress(Math.round((e.loaded * 100) / e.total));
-        });
-        
-        setUploadedFiles(res.data.uploaded || []);
-        
-        if (res.data.skipped && res.data.skipped.length > 0) {
-          toast.warning(`${res.data.skipped.length} file(s) exceeded 500MB limit and were not uploaded`);
+        // GUEST MODE: Upload files one at a time for reliability (avoids proxy body size limits)
+        const allUploaded = [];
+        const allSkipped = [];
+        for (let i = 0; i < files.length; i++) {
+          try {
+            const res = await guestUpload(token, [files[i]], (e) => {
+              const fileProgress = Math.round((e.loaded * 100) / e.total);
+              const overallProgress = Math.round(((i + fileProgress / 100) / files.length) * 100);
+              setUploadProgress(overallProgress);
+            });
+            if (res.data.uploaded) allUploaded.push(...res.data.uploaded);
+            if (res.data.skipped) allSkipped.push(...res.data.skipped);
+          } catch (err) {
+            toast.error(`Failed to upload ${files[i].name}: ${getErrorMessage(err, "Upload error")}`);
+          }
         }
         
-        if (res.data.uploaded && res.data.uploaded.length > 0) {
+        setUploadedFiles(allUploaded);
+        setUploadProgress(100);
+        
+        if (allSkipped.length > 0) {
+          toast.warning(`${allSkipped.length} file(s) exceeded 500MB limit and were not uploaded`);
+        }
+        
+        if (allUploaded.length > 0) {
           setShowSuccess(true);
           fetchUploadCount();
           setTimeout(() => {
             setShowSuccess(false);
             setUploadedFiles([]);
           }, 5000);
-        } else if (!res.data.skipped || res.data.skipped.length === 0) {
+        } else if (allSkipped.length === 0) {
           toast.error("No files were uploaded");
         }
       }
