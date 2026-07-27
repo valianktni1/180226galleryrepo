@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getAdminActivity, getArchivedActivity, clearActivityLogs, archiveLogsNow, getActivityStats, getEmailLog } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ export default function AdminActivity() {
   const [filterAction, setFilterAction] = useState(searchParams.get("action") || "");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const debounceRef = useRef(null);
   const [viewMode, setViewMode] = useState("active"); // "active", "archive", or "emails"
   const [stats, setStats] = useState({ active_count: 0, archived_count: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -159,8 +160,12 @@ export default function AdminActivity() {
                 type="text"
                 placeholder="Search by name..."
                 value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') setSearchQuery(searchInput); }}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  clearTimeout(debounceRef.current);
+                  debounceRef.current = setTimeout(() => setSearchQuery(e.target.value), 400);
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { clearTimeout(debounceRef.current); setSearchQuery(searchInput); } }}
                 className="pl-8 h-8 w-48 text-xs border-gray-200 rounded"
               />
             </div>
