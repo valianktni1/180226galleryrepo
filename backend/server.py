@@ -2492,6 +2492,112 @@ async def submit_favourites_to_album(token: str, request: Request, session=Depen
     return {"copied": copied, "already_existed": already_exists, "total_favourites": len(favs)}
 
 
+@api_router.post("/share/{token}/choose-album-cover")
+async def choose_album_cover(token: str, request: Request, session=Depends(get_share_session)):
+    """Couple selects their preferred album cover from Album Favourites."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    body = await request.json()
+    file_id = body.get("file_id")
+    if not file_id:
+        raise HTTPException(status_code=400, detail="No file selected")
+    
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    # Verify the file exists in Album Favourites
+    file_doc = await db.files.find_one({
+        "id": file_id, "gallery_id": gallery_id, "subfolder": "Album Favourites"
+    }, {"_id": 0})
+    if not file_doc:
+        raise HTTPException(status_code=404, detail="Photo not found in Album Favourites")
+    
+    filename = file_doc.get("original_filename") or file_doc["filename"]
+    
+    # Save the choice on the gallery
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {
+            "album_cover_choice": {
+                "file_id": file_id,
+                "filename": file_doc["filename"],
+                "original_filename": filename,
+                "chosen_at": datetime.now(timezone.utc).isoformat()
+            }
+        }}
+    )
+    
+    # Log activity
+    import re
+    folder_name = gallery["folder_name"]
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
+    
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "gallery_name": folder_name,
+        "share_label": share.get("label", token) if share else token,
+        "action": "album_cover_chosen",
+        "details": f"{couple_name} chose {filename} as their album cover",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Email the admin
+    try:
+        smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+        if smtp_doc and smtp_doc.get("value", {}).get("smtp_email"):
+            smtp = smtp_doc["value"]
+            admin_email = smtp.get("smtp_email", "")
+            site_url = smtp.get("site_url", "").rstrip("/")
+            awards_url = get_awards_url(smtp)
+            
+            # Build thumbnail URL for the email
+            thumb_link = f"{site_url}/api/share/{token}/files/{file_id}/thumb" if site_url else ""
+            
+            email_html = build_branded_email(f"""
+<p style="font-size:22px;color:#1C1917;font-family:Georgia,'Times New Roman',serif;margin:0 0 8px 0;font-weight:normal;">
+Album Cover Selected!
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 20px 0;line-height:1.8;">
+<strong>{couple_name}</strong> has chosen their album cover image:
+</p>
+<div style="text-align:center;margin:20px 0;">
+<p style="font-size:18px;color:#1C1917;font-weight:bold;margin:0 0 12px 0;font-family:Georgia,serif;">
+{filename}
+</p>
+{f'<img src="{thumb_link}" alt="{filename}" style="max-width:400px;width:100%;border-radius:4px;border:2px solid #E8E4DC;" />' if thumb_link else ''}
+</div>
+<p style="font-size:14px;color:#A8A29E;margin:20px 0 0 0;">
+Gallery: {folder_name}
+</p>
+""", awards_url)
+            
+            send_smtp_email(smtp, admin_email, f"Album Cover Chosen — {couple_name}", email_html)
+    except Exception as e:
+        logger.warning(f"Failed to send album cover notification email: {e}")
+    
+    return {"success": True, "message": "Cover choice saved!", "filename": filename}
+
+
+@api_router.get("/share/{token}/album-cover-choice")
+async def get_album_cover_choice(token: str, session=Depends(get_share_session)):
+    """Get the current album cover choice for this gallery."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    choice = gallery.get("album_cover_choice")
+    return {"choice": choice}
+
+
+
 async def _log_download(gallery_id, gallery_name, share_label, client_ip,
                         download_type, filenames, subfolder, downloaded_count, total_in_scope):
     """Log a detailed download event to activity_log.

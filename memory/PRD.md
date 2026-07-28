@@ -82,6 +82,20 @@ None
 ## Backlog
 None — all previous backlog items cancelled per user request.
 
+## Recently Completed (2026-07-16 to 2026-07-28)
+- [x] Font Preloading, React.lazy() Code Splitting
+- [x] Email Attachment Bug Fix (label → button+ref for Radix Dialog)
+- [x] PWA + Install Banner for couples' home screens
+- [x] QR Picker Email System (one-click sends 3 designs, couple picks, auto-emails PDF)
+- [x] Docker Build Fix (removed emergentintegrations from requirements.txt)
+- [x] HEIC/Live Photo support + pillow-heif
+- [x] Guest Upload reliability (one-at-a-time uploads)
+- [x] Activity Search live filter (search-as-you-type)
+- [x] Guest Upload Auto-Cleanup (90 days)
+- [x] Guest Upload Link Auto-Expiry (3 days after wedding date)
+- [x] Album Cover Chooser — couples tap "Cover" in Album Favourites, Mark gets emailed with thumbnail
+- [x] Updated gallery instructions to reflect Cover Chooser feature
+
 ## Key Files
 - `/app/backend/server.py` — All APIs, FFmpeg, SMTP email, NGINX signed URLs, network monitoring
 - `/app/frontend/src/lib/themes.js` — Gallery theme presets (5 themes with light/dark modes)

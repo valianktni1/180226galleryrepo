@@ -197,6 +197,12 @@ export const toggleShareFavourite = (token, fileId) =>
   apiClient.post(`/share/${token}/favourite`, { file_id: fileId });
 export const submitFavouritesToAlbum = (token) =>
   apiClient.post(`/share/${token}/submit-favourites`);
+
+// Album Cover Choice
+export const chooseAlbumCover = (token, fileId) =>
+  apiClient.post(`/share/${token}/choose-album-cover`, { file_id: fileId });
+export const getAlbumCoverChoice = (token) =>
+  apiClient.get(`/share/${token}/album-cover-choice`);
 export const downloadShareFile = (token, fileId) => {
   const jwt = localStorage.getItem('share_token');
   return fetch(`${BACKEND_URL}/api/share/${token}/download/${fileId}`, {

@@ -10,10 +10,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Heart, Download, X, ChevronLeft, ChevronRight, ChevronUp, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun, Share2
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun, Share2, Star
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl
+  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl, chooseAlbumCover, getAlbumCoverChoice
 } from "@/lib/api";
 import { getTheme } from "@/lib/themes";
 import InstallBanner from "@/components/InstallBanner";
@@ -74,6 +74,8 @@ function ShareViewFull() {
   const [showThankYou, setShowThankYou] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [showSlideshow, setShowSlideshow] = useState(false);
+  const [albumCoverChoice, setAlbumCoverChoice] = useState(null);
+  const [choosingCover, setChoosingCover] = useState(false);
 
   // Back to top button — show when scrolled past 600px
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -169,6 +171,25 @@ function ShareViewFull() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [activeAlbum, showFavourites]);
+
+
+  // Fetch album cover choice
+  useEffect(() => {
+    if (token) {
+      getAlbumCoverChoice(token).then(res => setAlbumCoverChoice(res.data.choice)).catch(() => {});
+    }
+  }, [token]);
+
+  const handleChooseCover = async (fileId) => {
+    setChoosingCover(true);
+    try {
+      const res = await chooseAlbumCover(token, fileId);
+      setAlbumCoverChoice({ file_id: fileId, filename: res.data.filename, chosen_at: new Date().toISOString() });
+      toast.success(`"${res.data.filename}" chosen as your album cover!`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to save cover choice"));
+    } finally { setChoosingCover(false); }
+  };
 
   const handleFavourite = async (fileId) => {
     try {
@@ -570,7 +591,7 @@ function ShareViewFull() {
             </div>
 
             <p className="text-xs" style={{ fontFamily: t.bodyFont, color: t.textMuted || '#A8A29E' }}>
-              Your selections will appear in your <strong style={{ color: t.headingColor }}>Album Favourites</strong> folder. Please email <a href="mailto:mark@perfectweddingsbymark.uk" className="underline" style={{ color: t.accent }}>mark@perfectweddingsbymark.uk</a> once submitted, including your chosen cover image number.
+              Your selections will appear in your <strong style={{ color: t.headingColor }}>Album Favourites</strong> folder. Once there, simply tap the <strong style={{ color: t.accent }}>Cover</strong> button on any image to choose it as your album front cover — Mark will be notified automatically.
             </p>
           </motion.div>
         </section>
@@ -905,7 +926,9 @@ function ShareViewFull() {
                 permissions={permissions}
                 selectMode={selectMode}
                 isSelected={selectedFiles.has(file.id)} theme={t}
-                downloadProgress={downloadProgress} />
+                downloadProgress={downloadProgress}
+                isAlbumCover={activeAlbum === 'Album Favourites' && albumCoverChoice?.file_id === file.id}
+                onChooseCover={activeAlbum === 'Album Favourites' ? handleChooseCover : null} />
             ))}
           </div>
         )}
@@ -1036,7 +1059,7 @@ function BlurUpImage({ src, alt, className = '', style = {} }) {
   );
 }
 
-function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false, theme = {}, downloadProgress = null }) {
+function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false, theme = {}, downloadProgress = null, isAlbumCover = false, onChooseCover = null }) {
   const emptyColor = theme.textSub || '#A8A29E';
   const mutedColor = theme.textMuted || '#C4C0B8';
   const isDownloading = downloadProgress && downloadProgress.fileId === file.id;
@@ -1136,6 +1159,27 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
             {downloadProgress.percent}%
           </span>
         </div>
+      )}
+      {/* Album Cover badge */}
+      {isAlbumCover && (
+        <div className="absolute top-2 right-2 z-10 px-2 py-1 rounded-full flex items-center gap-1 shadow-md"
+          style={{ backgroundColor: theme.accent, color: 'white' }}
+          data-testid={`cover-badge-${file.id}`}>
+          <Star className="w-3 h-3" fill="white" />
+          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ fontFamily: theme.bodyFont }}>Your Cover</span>
+        </div>
+      )}
+      {/* Choose as Cover button - only in Album Favourites */}
+      {onChooseCover && !isAlbumCover && file.file_type === 'photo' && (
+        <button
+          data-testid={`choose-cover-${file.id}`}
+          onClick={e => { e.stopPropagation(); onChooseCover(file.id); }}
+          className="absolute top-2 right-2 z-10 px-2 py-1 rounded-full flex items-center gap-1 shadow-md cover-choose-btn"
+          style={{ backgroundColor: 'rgba(255,255,255,0.92)', color: theme.accent, border: `1px solid ${theme.accent}` }}
+        >
+          <Star className="w-3 h-3" />
+          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ fontFamily: theme.bodyFont }}>Cover</span>
+        </button>
       )}
     </motion.div>
   );
