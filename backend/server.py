@@ -4824,6 +4824,108 @@ async def expiry_reminder_loop():
         # Check once every 24 hours
         await asyncio.sleep(86400)
 
+
+# ─── Guest Uploads Auto-Cleanup (90 days) ───
+GUEST_UPLOAD_MAX_AGE_DAYS = 90
+
+async def run_guest_upload_cleanup():
+    """Delete Guest Uploads subfolder files older than 90 days from disk, backup, and database.
+    ONLY targets 'Guest Uploads' subfolder. Never touches Wedding Images, Video, SelfieBooth, Album Favourites, etc."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=GUEST_UPLOAD_MAX_AGE_DAYS)).isoformat()
+    
+    # Find all guest upload files older than the cutoff
+    old_files = await db.files.find({
+        "subfolder": "Guest Uploads",
+        "uploaded_at": {"$lt": cutoff}
+    }, {"_id": 0}).to_list(10000)
+    
+    if not old_files:
+        return 0
+    
+    # Group by gallery for logging
+    gallery_ids = set(f["gallery_id"] for f in old_files)
+    total_deleted = 0
+    
+    for gallery_id in gallery_ids:
+        gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+        if not gallery:
+            continue
+        
+        gallery_files = [f for f in old_files if f["gallery_id"] == gallery_id]
+        folder_name = gallery["folder_name"]
+        
+        for f in gallery_files:
+            file_id = f["id"]
+            filename = f["filename"]
+            
+            try:
+                # Delete from disk (main upload)
+                file_path = UPLOAD_DIR / folder_name / "Guest Uploads" / filename
+                if file_path.exists():
+                    file_path.unlink()
+                
+                # Delete thumbnail
+                thumb_path = CACHE_DIR / gallery_id / "Guest Uploads" / f"thumb_{filename}"
+                if thumb_path.exists():
+                    thumb_path.unlink()
+                
+                # Delete preview
+                preview_path = CACHE_DIR / gallery_id / "Guest Uploads" / f"preview_{filename}"
+                if preview_path.exists():
+                    preview_path.unlink()
+                
+                # Delete from backup
+                backup_file = BACKUP_DIR / folder_name / "Guest Uploads" / filename
+                if backup_file.exists():
+                    backup_file.unlink()
+                
+                # Delete from database
+                await db.files.delete_one({"id": file_id})
+                total_deleted += 1
+                
+            except Exception as e:
+                logger.warning(f"Guest cleanup: failed to delete {filename} in {folder_name}: {e}")
+        
+        # If Guest Uploads folder is now empty, remove the empty directories
+        guest_dir = UPLOAD_DIR / folder_name / "Guest Uploads"
+        if guest_dir.exists() and not any(guest_dir.iterdir()):
+            guest_dir.rmdir()
+        
+        guest_cache = CACHE_DIR / gallery_id / "Guest Uploads"
+        if guest_cache.exists() and not any(guest_cache.iterdir()):
+            guest_cache.rmdir()
+        
+        guest_backup = BACKUP_DIR / folder_name / "Guest Uploads"
+        if guest_backup.exists() and not any(guest_backup.iterdir()):
+            guest_backup.rmdir()
+        
+        if total_deleted > 0:
+            # Log activity
+            await db.activity_log.insert_one({
+                "action": "guest_cleanup",
+                "gallery_id": gallery_id,
+                "gallery_name": folder_name,
+                "details": f"Auto-deleted {len(gallery_files)} guest upload(s) older than {GUEST_UPLOAD_MAX_AGE_DAYS} days",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+    
+    if total_deleted > 0:
+        logger.info(f"Guest upload cleanup: deleted {total_deleted} file(s) from {len(gallery_ids)} gallery(s)")
+    
+    return total_deleted
+
+async def guest_upload_cleanup_loop():
+    """Run guest upload cleanup once daily."""
+    while True:
+        try:
+            deleted = await run_guest_upload_cleanup()
+            if deleted > 0:
+                logger.info(f"Daily guest upload cleanup: {deleted} file(s) removed")
+        except Exception as e:
+            logger.warning(f"Guest upload cleanup failed: {e}")
+        await asyncio.sleep(86400)  # Check once every 24 hours
+
+
 @app.on_event("startup")
 async def startup_auto_archive():
     """Check for old logs on startup and archive if needed. Also start expiry reminder loop."""
@@ -4868,6 +4970,11 @@ async def startup_auto_archive():
         await db.galleries.create_index("id", unique=True)
     except Exception as e:
         logger.warning(f"Index creation: {e}")
+
+
+    # Start guest uploads auto-cleanup loop (90 days)
+    asyncio.create_task(guest_upload_cleanup_loop())
+
 
 app.include_router(api_router)
 
