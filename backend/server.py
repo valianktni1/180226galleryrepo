@@ -4926,6 +4926,81 @@ async def guest_upload_cleanup_loop():
         await asyncio.sleep(86400)  # Check once every 24 hours
 
 
+# ─── Auto-Expire Guest Upload Links (3 days after wedding date) ───
+GUEST_UPLOAD_GRACE_DAYS = 3  # Expire at 00:01 on the 3rd day after the wedding
+
+def _parse_wedding_date(folder_name: str):
+    """Extract wedding date from folder name like 'Sarah & James 15.06.25' or '15/06/2025'."""
+    import re
+    match = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{2,4})$', folder_name.strip())
+    if not match:
+        return None
+    try:
+        day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if year < 100:
+            year += 2000
+        return datetime(year, month, day, tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+async def run_guest_upload_link_expiry():
+    """Deactivate guest upload share links 3 days after the wedding date."""
+    now = datetime.now(timezone.utc)
+    
+    # Find all active guest upload shares
+    guest_shares = await db.shares.find(
+        {"is_active": True, "guest_upload_mode": True}, {"_id": 0}
+    ).to_list(1000)
+    
+    expired_count = 0
+    
+    for share in guest_shares:
+        gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+        if not gallery:
+            continue
+        
+        wedding_date = _parse_wedding_date(gallery["folder_name"])
+        if not wedding_date:
+            continue  # Can't determine date, skip
+        
+        # Expire at 00:01 on the 3rd day after the wedding
+        expiry_time = wedding_date + timedelta(days=GUEST_UPLOAD_GRACE_DAYS, minutes=1)
+        
+        if now >= expiry_time:
+            # Deactivate the share
+            await db.shares.update_one(
+                {"id": share["id"]},
+                {"$set": {"is_active": False, "auto_expired": True, "auto_expired_at": now.isoformat()}}
+            )
+            expired_count += 1
+            
+            logger.info(f"Auto-expired guest upload link for '{gallery['folder_name']}' (wedding: {wedding_date.strftime('%d/%m/%Y')}, expired: {expiry_time.strftime('%d/%m/%Y %H:%M')})")
+            
+            # Log activity
+            await db.activity_log.insert_one({
+                "action": "guest_link_expired",
+                "gallery_id": share["gallery_id"],
+                "gallery_name": gallery["folder_name"],
+                "share_label": share.get("label", ""),
+                "details": f"Guest upload link auto-expired ({GUEST_UPLOAD_GRACE_DAYS} days after wedding on {wedding_date.strftime('%d/%m/%Y')})",
+                "timestamp": now.isoformat()
+            })
+    
+    return expired_count
+
+async def guest_upload_expiry_loop():
+    """Check for expired guest upload links every hour."""
+    while True:
+        try:
+            expired = await run_guest_upload_link_expiry()
+            if expired > 0:
+                logger.info(f"Guest upload expiry check: {expired} link(s) deactivated")
+        except Exception as e:
+            logger.warning(f"Guest upload expiry check failed: {e}")
+        await asyncio.sleep(3600)  # Check every hour (to catch 00:01 accurately)
+
+
+
 @app.on_event("startup")
 async def startup_auto_archive():
     """Check for old logs on startup and archive if needed. Also start expiry reminder loop."""
@@ -4974,6 +5049,8 @@ async def startup_auto_archive():
 
     # Start guest uploads auto-cleanup loop (90 days)
     asyncio.create_task(guest_upload_cleanup_loop())
+    # Start guest upload link auto-expiry loop (3 days after wedding)
+    asyncio.create_task(guest_upload_expiry_loop())
 
 
 app.include_router(api_router)
