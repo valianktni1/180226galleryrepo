@@ -1,6 +1,5 @@
 # Test Credentials
 
-## Admin Login
+## Admin Account
 - Username: `admin`
 - Password: `test123`
-- 2FA: Disabled in this preview environment

@@ -62,6 +62,12 @@ User deploys on TrueNAS via Dockge:
 ## In Progress
 None
 
+## Recently Completed (2026-07-29)
+- [x] **Video Health Check** — New admin panel feature showing per-video web-optimization status. Green badge with file size when `.web.mp4` exists, amber "Not optimised" badge when missing. Summary bar shows "X/Y web-optimised" count per folder. Endpoint: `GET /api/admin/galleries/{id}/video-health`.
+- [x] **Fallback Stream Fix** — The fallback video streaming endpoint (`/share/{token}/stream/{file_id}`) now checks for the web-optimised `.web.mp4` version before streaming, matching the primary playback path behaviour. No risk to existing functionality.
+- [x] **5-Design QR Picker System** — Expanded from 3 to 5 designs. Added Classic Noir (Design 4) and Blush Peony (Design 5). All endpoints verified: admin preview, public preview, public select (PDF generation), and email HTML (5-design grid layout).
+- [x] **Fixed corrupted server.py** — Removed duplicate syntax fragment at end of file from previous session.
+
 ## Recently Completed (2026-07-08)
 - [x] **Font Preloading** — Moved Google Fonts (Cormorant Garamond + Manrope) from render-blocking CSS `@import` to `<link rel="stylesheet">` in HTML `<head>` with `preconnect` hints. Removed unused Inter font. Faster text rendering on first visit.
 - [x] **React.lazy() Code Splitting** — Lazy-loaded Slideshow, VideoPlayer, and GuestUploadView components in ShareView.js. Reduces initial JS bundle for couples, loading heavy components only when needed.
@@ -109,11 +115,13 @@ None — all previous backlog items cancelled per user request.
 ## Key API Endpoints
 - `GET /api/admin/dashboard-stats` — 5 key stats
 - `GET /api/admin/network-stats` — Network bandwidth (daily/weekly/video/downloads)
-- `GET /api/admin/diagnose-gallery/{gallery_id}` — **NEW** Diagnostic: compare DB files vs disk files for a gallery
+- `GET /api/admin/diagnose-gallery/{gallery_id}` — Diagnostic: compare DB files vs disk files for a gallery
+- `GET /api/admin/galleries/{gallery_id}/video-health` — **NEW** Per-video web-optimisation status check
 - `POST /api/admin/broadcast-email` — Mass email
 - `GET/POST/PUT/DELETE /api/admin/email-templates` — Template CRUD
 - `GET /api/admin/email-log` — Email history
 - `PUT /api/admin/galleries/{id}` — Accepts `theme` field for gallery theme updates
+- `GET /api/admin/qr-design-preview/{design_num}` — Admin QR design thumbnail (supports 1-5)
 
 ## Database Collections
 - `admin`, `galleries` (now includes `theme` field), `files`, `shares`, `favourites`, `activity_log`, `activity_log_archive`
