@@ -1397,7 +1397,7 @@ async def get_share_qr(share_id: str, base_url: str = Query(...), token: Optiona
 
 @api_router.get("/admin/shares/{share_id}/qr-frame")
 async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: Optional[str] = Query(None), design: int = Query(1)):
-    """Generate elegant QR code frame with couple name. Designs: 1=Floral, 2=Wavy Border, 3=Elegant Minimal."""
+    """Generate elegant QR code frame with couple name. Designs: 1=Floral, 2=Wavy Border, 3=Elegant Minimal, 4=Classic Noir, 5=Blush Peony."""
     # Verify admin token
     if token:
         try:
@@ -1553,6 +1553,70 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
         
         add_brand(draw)
 
+    elif design == 4:
+        # ── CLASSIC NOIR ── Black & gold elegant border
+        frame = Image.open(str(TEMPLATES_DIR / "design_4_classic_noir.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#555555')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#555555')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+
+    elif design == 5:
+        # ── BLUSH PEONY ── Romantic pink floral corners
+        frame = Image.open(str(TEMPLATES_DIR / "design_5_blush_peony.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#8B5E6B', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#A8808C', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#8B5E6B', font=sf)
+        
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#A8808C')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#A8808C')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#8B5E6B')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#A8808C')
+        add_brand(draw)
+
     else:
         # ── MINIMAL ── Clean white, built entirely from scratch
         img = Image.new('RGB', (FW, FH), (255, 255, 255))
@@ -1601,7 +1665,7 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
     buf.seek(0)
     
     safe_name = couple_name.replace(' ', '_').replace('&', 'and')
-    design_names = {1: "Floral", 2: "Wavy", 3: "Minimal"}
+    design_names = {1: "Floral", 2: "Wavy", 3: "Minimal", 4: "Classic_Noir", 5: "Blush_Peony"}
     
     return StreamingResponse(
         buf,
@@ -1673,9 +1737,9 @@ def _generate_qr_preview_png(share_url: str, couple_name: str, date_str: str, de
         tw = bbox[2] - bbox[0]
         draw.text(((FW - tw) // 2, y), text, fill=fill, font=font)
     
-    names = {1: "design_1_botanical_gold.png", 2: "design_2_hearts.png"}
+    names = {1: "design_1_botanical_gold.png", 2: "design_2_hearts.png", 4: "design_4_classic_noir.png", 5: "design_5_blush_peony.png"}
     
-    if design in (1, 2):
+    if design in names:
         frame = Image.open(str(TEMPLATES_DIR / names[design])).convert('RGB')
         img = frame.resize((FW, FH), Image.LANCZOS)
     else:
@@ -1702,6 +1766,26 @@ def _generate_qr_preview_png(share_url: str, couple_name: str, date_str: str, de
         tc(draw, couple_name.upper(), serif_bf(14), int(FH * 0.72), fill='#1C1917')
         if date_str:
             tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    elif design == 4:
+        # Classic Noir — black & gold border, elegant serif text
+        tc(draw, "Share the Love", script_f(20), int(FH * 0.10), fill='#1C1917')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name, script_f(16), int(FH * 0.72), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    elif design == 5:
+        # Blush Peony — romantic floral corners, soft text
+        tc(draw, "Share the Love", script_f(20), int(FH * 0.10), fill='#8B5E6B')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name, script_f(16), int(FH * 0.72), fill='#8B5E6B')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#A8808C')
     else:
         sf = script_f(20)
         tc(draw, "Share the Love", sf, int(FH * 0.10), fill='#1C1917')
@@ -1717,7 +1801,7 @@ def _generate_qr_preview_png(share_url: str, couple_name: str, date_str: str, de
     draw.rectangle([(0, 0), (FW - 1, FH - 1)], outline='#E8E4DC', width=2)
     
     # Design label at bottom
-    labels = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal"}
+    labels = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal", 4: "Classic Noir", 5: "Blush Peony"}
     label = labels.get(design, "Design")
     tc(draw, label, sans_f(11), FH - 22, fill='#A8A29E')
     
@@ -1775,7 +1859,7 @@ async def public_qr_preview(token: str, design: int):
     date_match = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{2,4})$', folder_name.strip())
     date_str = f"{date_match.group(1)}.{date_match.group(2)}.{date_match.group(3)}" if date_match else ""
     
-    if design not in (1, 2, 3):
+    if design not in (1, 2, 3, 4, 5):
         design = 1
     
     png_bytes = _generate_qr_preview_png(share_url, couple_name, date_str, design)
@@ -1825,14 +1909,14 @@ async def public_qr_select(token: str, design: int, request: Request):
     site_url = smtp.get("site_url", "")
     share_url = f"{site_url}/s/{share.get('custom_slug') or share['token']}" if site_url else f"/s/{share['token']}"
     
-    if design not in (1, 2, 3):
+    if design not in (1, 2, 3, 4, 5):
         design = 1
     
     import re
     folder_name = gallery["folder_name"]
     couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
     
-    design_names = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal"}
+    design_names = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal", 4: "Classic Noir", 5: "Blush Peony"}
     design_label = design_names.get(design, "Design")
     
     # Generate the full PDF by calling the existing qr-frame logic
@@ -1923,6 +2007,60 @@ async def public_qr_select(token: str, design: int, request: Request):
         tc(draw, couple_name.upper(), serif_bf(int(35 * SX)), int(FH * 0.79), fill='#1C1917')
         if date_str:
             tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    elif design == 4:
+        frame = Image.open(str(TEMPLATES_DIR / "design_4_classic_noir.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#555555')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#555555')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    elif design == 5:
+        frame = Image.open(str(TEMPLATES_DIR / "design_5_blush_peony.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#8B5E6B', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#A8808C', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#8B5E6B', font=sf)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#A8808C')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#A8808C')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#8B5E6B')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#A8808C')
         add_brand(draw)
     else:
         img = Image.new('RGB', (FW, FH), (255, 255, 255))
@@ -2073,15 +2211,21 @@ async def send_qr_picker_email(gallery_id: str, admin=Depends(get_admin)):
     picker_token = _make_qr_picker_token(gallery_id)
     
     # Build preview image URLs
-    preview_1 = f"{site_url}/api/public/qr-preview/{picker_token}/1"
-    preview_2 = f"{site_url}/api/public/qr-preview/{picker_token}/2"
-    preview_3 = f"{site_url}/api/public/qr-preview/{picker_token}/3"
-    
-    select_1 = f"{site_url}/api/public/qr-select/{picker_token}/1"
-    select_2 = f"{site_url}/api/public/qr-select/{picker_token}/2"
-    select_3 = f"{site_url}/api/public/qr-select/{picker_token}/3"
+    previews = {i: f"{site_url}/api/public/qr-preview/{picker_token}/{i}" for i in range(1, 6)}
+    selects = {i: f"{site_url}/api/public/qr-select/{picker_token}/{i}" for i in range(1, 6)}
     
     awards_url = get_awards_url(smtp)
+    
+    design_labels = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal", 4: "Classic Noir", 5: "Blush Peony"}
+    
+    def _qr_cell(num):
+        return f"""<td width="33%" align="center" valign="top" style="padding:0 6px 16px;">
+<a href="{selects[num]}" target="_blank" style="text-decoration:none;display:block;">
+<img src="{previews[num]}" alt="{design_labels[num]}" style="width:100%;max-width:170px;border-radius:6px;border:2px solid #E8E4DC;" />
+<p style="font-size:12px;color:#D4AF37;margin:8px 0 2px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">{design_labels[num]}</p>
+<p style="font-size:11px;color:#A8A29E;margin:0;">Click to select</p>
+</a>
+</td>"""
     
     email_content = f"""
 <p style="font-size:22px;color:#1C1917;font-family:Georgia,'Times New Roman',serif;margin:0 0 8px 0;font-weight:normal;">
@@ -2093,27 +2237,14 @@ Your guest upload link is ready! Now it's time to choose your QR code design. Pi
 
 <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
 <tr>
-<td width="33%" align="center" valign="top" style="padding:0 6px;">
-<a href="{select_1}" target="_blank" style="text-decoration:none;display:block;">
-<img src="{preview_1}" alt="Botanical Gold" style="width:100%;max-width:170px;border-radius:6px;border:2px solid #E8E4DC;" />
-<p style="font-size:12px;color:#D4AF37;margin:8px 0 2px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">Botanical Gold</p>
-<p style="font-size:11px;color:#A8A29E;margin:0;">Click to select</p>
-</a>
-</td>
-<td width="33%" align="center" valign="top" style="padding:0 6px;">
-<a href="{select_2}" target="_blank" style="text-decoration:none;display:block;">
-<img src="{preview_2}" alt="Rose Hearts" style="width:100%;max-width:170px;border-radius:6px;border:2px solid #E8E4DC;" />
-<p style="font-size:12px;color:#D4AF37;margin:8px 0 2px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">Rose Hearts</p>
-<p style="font-size:11px;color:#A8A29E;margin:0;">Click to select</p>
-</a>
-</td>
-<td width="33%" align="center" valign="top" style="padding:0 6px;">
-<a href="{select_3}" target="_blank" style="text-decoration:none;display:block;">
-<img src="{preview_3}" alt="Elegant Minimal" style="width:100%;max-width:170px;border-radius:6px;border:2px solid #E8E4DC;" />
-<p style="font-size:12px;color:#D4AF37;margin:8px 0 2px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">Elegant Minimal</p>
-<p style="font-size:11px;color:#A8A29E;margin:0;">Click to select</p>
-</a>
-</td>
+{_qr_cell(1)}
+{_qr_cell(2)}
+{_qr_cell(3)}
+</tr>
+<tr>
+<td width="33%"></td>
+{_qr_cell(4)}
+{_qr_cell(5)}
 </tr>
 </table>
 
@@ -5178,4 +5309,6 @@ async def add_noindex_header(request, call_next):
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    client.close()
+ent():
     client.close()
