@@ -1084,6 +1084,36 @@ async def transcode_status(gallery_id: str, admin=Depends(get_admin)):
             }
     return {"active": len(active_files) > 0, "files": active_files}
 
+@api_router.get("/admin/galleries/{gallery_id}/video-health")
+async def video_health_check(gallery_id: str, admin=Depends(get_admin)):
+    """Check which videos have web-optimised versions ready for smooth streaming."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    videos = await db.files.find({"gallery_id": gallery_id, "file_type": "video"}, {"_id": 0}).to_list(None)
+    results = []
+    for v in videos:
+        file_path = get_gallery_path(gallery["folder_name"]) / v["subfolder"] / v["filename"]
+        web_path = get_web_version_path(file_path) if file_path.exists() else None
+        has_web = web_path.exists() if web_path else False
+        original_mb = round(file_path.stat().st_size / (1024 * 1024), 1) if file_path.exists() else 0
+        web_mb = round(web_path.stat().st_size / (1024 * 1024), 1) if has_web else 0
+        results.append({
+            "id": v["id"],
+            "filename": v["filename"],
+            "subfolder": v["subfolder"],
+            "original_mb": original_mb,
+            "web_mb": web_mb,
+            "has_web_version": has_web,
+            "file_exists": file_path.exists(),
+        })
+    optimised = sum(1 for r in results if r["has_web_version"])
+    return {
+        "videos": results,
+        "summary": {"total": len(results), "optimised": optimised, "not_optimised": len(results) - optimised}
+    }
+
+
 @api_router.delete("/admin/galleries/{gallery_id}/files/{file_id}")
 async def delete_file(gallery_id: str, file_id: str, delete_backup: bool = Query(False), admin=Depends(get_admin)):
     f = await db.files.find_one({"id": file_id, "gallery_id": gallery_id}, {"_id": 0})
@@ -1690,7 +1720,7 @@ async def get_qr_design_preview(design_num: int, token: Optional[str] = Query(No
     else:
         raise HTTPException(status_code=401)
 
-    if design_num not in (1, 2, 3):
+    if design_num not in (1, 2, 3, 4, 5):
         design_num = 1
 
     if design_num in _qr_preview_cache:
@@ -1698,7 +1728,7 @@ async def get_qr_design_preview(design_num: int, token: Optional[str] = Query(No
         return StreamingResponse(buf, media_type="image/png")
 
     TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
-    names = {1: "design_1_botanical_gold.png", 2: "design_2_hearts.png", 3: "design_3_minimal.png"}
+    names = {1: "design_1_botanical_gold.png", 2: "design_2_hearts.png", 3: "design_3_minimal.png", 4: "design_4_classic_noir.png", 5: "design_5_blush_peony.png"}
     img = Image.open(str(TEMPLATES_DIR / names[design_num])).convert('RGB')
     thumb = img.resize((480, 360), Image.LANCZOS)
     buf = io.BytesIO()
@@ -2877,8 +2907,12 @@ async def stream_share_video(token: str, file_id: str, request: Request, t: str 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    file_size = file_path.stat().st_size
-    ext = file_path.suffix.lower()
+    # Prefer web-optimised version for smoother streaming on mobile
+    web_path = get_web_version_path(file_path)
+    stream_path = web_path if web_path.exists() else file_path
+
+    file_size = stream_path.stat().st_size
+    ext = stream_path.suffix.lower()
     content_types = {'.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
                      '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska', '.mts': 'video/mp2t'}
     content_type = content_types.get(ext, 'video/mp4')
@@ -2894,7 +2928,7 @@ async def stream_share_video(token: str, file_id: str, request: Request, t: str 
         length = end - start + 1
 
         async def async_iter_range():
-            async with aiofiles.open(file_path, "rb") as fh:
+            async with aiofiles.open(stream_path, "rb") as fh:
                 await fh.seek(start)
                 remaining = length
                 while remaining > 0:
@@ -2911,7 +2945,7 @@ async def stream_share_video(token: str, file_id: str, request: Request, t: str 
             "Cache-Control": "public, max-age=86400",
         })
     else:
-        return FileResponse(file_path, media_type=content_type, headers={
+        return FileResponse(stream_path, media_type=content_type, headers={
             "Accept-Ranges": "bytes",
             "Cache-Control": "public, max-age=86400",
         })
@@ -5309,6 +5343,4 @@ async def add_noindex_header(request, call_next):
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
-ent():
     client.close()

@@ -298,6 +298,9 @@ export const sendTemplateEmail = (galleryId, templateId) => apiClient.post(`/adm
 // QR Picker Email
 export const sendQrPickerEmail = (galleryId) => apiClient.post(`/admin/galleries/${galleryId}/send-qr-picker`);
 
+// Video Health Check
+export const getVideoHealth = (galleryId) => apiClient.get(`/admin/galleries/${galleryId}/video-health`);
+
 // Guest Upload Mode - get upload count
 export const getGuestUploadCount = (token) =>
   apiClient.get(`/share/${token}/guest-upload-count`);

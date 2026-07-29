@@ -27,7 +27,7 @@ import {
 import {
   getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
-  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail
+  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail, getVideoHealth
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 
@@ -65,6 +65,9 @@ export default function AdminGalleryDetail() {
   const [sendingTemplate, setSendingTemplate] = useState(false);
   const [galleryEmailAttachments, setGalleryEmailAttachments] = useState([]);
   const [sendingQrPicker, setSendingQrPicker] = useState(false);
+
+  // Video health check
+  const [videoHealth, setVideoHealth] = useState(null); // { videos: [], summary: {} }
 
   // Share creation
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -110,6 +113,18 @@ export default function AdminGalleryDetail() {
     if (!localStorage.getItem("admin_token")) { navigate("/admin"); return; }
     loadGallery();
   }, [navigate, loadGallery]);
+
+  // Fetch video health status when gallery loads
+  const loadVideoHealth = useCallback(async () => {
+    try {
+      const res = await getVideoHealth(id);
+      setVideoHealth(res.data);
+    } catch { /* ignore - non-critical */ }
+  }, [id]);
+
+  useEffect(() => {
+    if (gallery) loadVideoHealth();
+  }, [gallery, loadVideoHealth]);
 
   // Poll transcode status
   const startTranscodePolling = useCallback(() => {
@@ -417,6 +432,7 @@ export default function AdminGalleryDetail() {
             setReprocessing(false);
             setReprocessProgress({ total: data.queued, done: data.queued, current_file: null });
             toast.success('All videos optimised for streaming!');
+            loadVideoHealth(); // Refresh health badges
             setTimeout(() => setReprocessProgress(null), 3000);
           } else {
             setReprocessProgress(prog);
@@ -528,6 +544,19 @@ export default function AdminGalleryDetail() {
   const currentFiles = files.filter(f => f.subfolder === activeTab);
   const photoFiles = currentFiles.filter(f => f.file_type === 'photo');
   const videoFiles = currentFiles.filter(f => f.file_type === 'video');
+
+  // Video health lookup for current folder
+  const videoHealthMap = {};
+  const folderHealth = { total: 0, optimised: 0 };
+  if (videoHealth?.videos) {
+    for (const v of videoHealth.videos) {
+      videoHealthMap[v.id] = v;
+      if (v.subfolder === activeTab) {
+        folderHealth.total++;
+        if (v.has_web_version) folderHealth.optimised++;
+      }
+    }
+  }
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
@@ -783,6 +812,24 @@ export default function AdminGalleryDetail() {
                   )}
 
                   <div className="ml-auto flex items-center gap-2">
+                    {/* Video health summary */}
+                    {videoFiles.length > 0 && folderHealth.total > 0 && !reprocessProgress && !Object.keys(transcodeStatus).length && (
+                      <div data-testid="video-health-summary" className="flex items-center gap-2 px-3 py-1.5 rounded-sm border"
+                        style={{ 
+                          borderColor: folderHealth.optimised === folderHealth.total ? '#4ADE80' : '#F59E0B',
+                          backgroundColor: folderHealth.optimised === folderHealth.total ? '#F0FDF4' : '#FFFBEB'
+                        }}>
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: folderHealth.optimised === folderHealth.total ? '#16A34A' : '#F59E0B' }} />
+                        <span className="text-[10px] font-medium" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                          {folderHealth.optimised}/{folderHealth.total} web-optimised
+                        </span>
+                        {folderHealth.optimised < folderHealth.total && (
+                          <span className="text-[10px]" style={{ color: '#D97706', fontFamily: 'Manrope, sans-serif' }}>
+                            {folderHealth.total - folderHealth.optimised} pending
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {videoFiles.length > 0 && !reprocessProgress && (
                       <Button data-testid="optimise-videos-btn" variant="outline" onClick={handleReprocessVideos} disabled={reprocessing}
                         className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
@@ -842,6 +889,7 @@ export default function AdminGalleryDetail() {
                     const tc = transcodeStatus[file.id];
                     const isTranscoding = tc && tc.status === 'transcoding';
                     const justCompleted = tc && tc.status === 'complete';
+                    const vh = file.file_type === 'video' ? videoHealthMap[file.id] : null;
                     return (
                     <motion.div key={file.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(i * 0.01, 0.5) }}
                       className={`photo-card relative group aspect-square ${selectMode ? 'cursor-pointer' : ''} ${selectedFiles.has(file.id) ? 'ring-2 ring-[#D4AF37]' : ''} ${isCover ? 'ring-2 ring-amber-400' : ''}`}
@@ -904,6 +952,21 @@ export default function AdminGalleryDetail() {
                         <div className="absolute top-2 right-2 px-2 py-1 rounded-full flex items-center gap-1 text-xs font-medium" 
                           style={{ backgroundColor: '#D4AF37', color: 'white' }}>
                           <Star className="w-3 h-3" fill="white" /> Cover
+                        </div>
+                      )}
+                      {/* Video web-optimised health badge */}
+                      {vh && !isCover && !isTranscoding && !justCompleted && (
+                        <div data-testid={`video-health-${file.id}`} className="absolute top-2 right-2 px-1.5 py-0.5 rounded flex items-center gap-1"
+                          style={{ backgroundColor: vh.has_web_version ? 'rgba(22,163,74,0.85)' : 'rgba(217,119,6,0.85)' }}
+                          title={vh.has_web_version 
+                            ? `Web-optimised: ${vh.web_mb}MB (original ${vh.original_mb}MB)` 
+                            : `Not optimised — streaming original ${vh.original_mb}MB`}>
+                          {vh.has_web_version 
+                            ? <Check className="w-3 h-3 text-white" />
+                            : <RefreshCw className="w-3 h-3 text-white" />}
+                          <span className="text-[9px] font-semibold text-white" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                            {vh.has_web_version ? `${vh.web_mb}MB` : 'Not optimised'}
+                          </span>
                         </div>
                       )}
                       {/* Selection checkbox - always visible in select mode */}
