@@ -179,10 +179,15 @@ export default function AdminGalleryDetail() {
     try {
       const arr = Array.from(fileList);
       const hasVideos = arr.some(f => /\.(mp4|mov|avi|mkv|wmv|webm|m4v|flv|mts|m2ts)$/i.test(f.name));
-      await uploadFiles(id, activeTab, arr, (e) => {
+      const res = await uploadFiles(id, activeTab, arr, (e) => {
         setUploadProgress(Math.round((e.loaded * 100) / e.total));
       });
       toast.success(`${arr.length} file(s) uploaded to ${activeTab}`);
+      // Show auto-share notification if one was created
+      if (res.data?.auto_share) {
+        const s = res.data.auto_share;
+        toast.success(`Share link auto-created: /${s.token} (pw: ${s.password})`, { duration: 10000 });
+      }
       loadGallery();
       if (hasVideos) {
         setTimeout(() => startTranscodePolling(), 3000);

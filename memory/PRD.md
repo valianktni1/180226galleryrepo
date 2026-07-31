@@ -67,6 +67,7 @@ None
 - [x] **Fallback Stream Fix** — The fallback video streaming endpoint (`/share/{token}/stream/{file_id}`) now checks for the web-optimised `.web.mp4` version before streaming, matching the primary playback path behaviour. No risk to existing functionality.
 - [x] **5-Design QR Picker System** — Expanded from 3 to 5 designs. Added Classic Noir (Design 4) and Blush Peony (Design 5). All endpoints verified: admin preview, public preview, public select (PDF generation), and email HTML (5-design grid layout).
 - [x] **Fixed corrupted server.py** — Removed duplicate syntax fragment at end of file from previous session.
+- [x] **Auto-Share on Wedding Images Upload** — When files are first uploaded to "Wedding Images" folder, automatically creates a share link with: download access, random 6-char password, custom slug from gallery name (e.g. "Gina & Mark 30.10.21" → `ginamark301021`), and 3-month expiry from the wedding date. No couple notification. Skips if a share already exists. Logged in Activity feed. Toast shown in admin panel.
 
 ## Recently Completed (2026-07-08)
 - [x] **Font Preloading** — Moved Google Fonts (Cormorant Garamond + Manrope) from render-blocking CSS `@import` to `<link rel="stylesheet">` in HTML `<head>` with `preconnect` hints. Removed unused Inter font. Faster text rendering on first visit.

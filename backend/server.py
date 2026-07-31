@@ -1036,7 +1036,85 @@ async def upload_files(
         {"id": gallery_id},
         {"$set": {f"file_counts.{subfolder}": count, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
-    return {"uploaded": uploaded, "count": len(uploaded)}
+
+    # ─── Auto-create share link on first "Wedding Images" upload ───
+    auto_share = None
+    if subfolder.lower() == "wedding images":
+        try:
+            # Only create if no non-guest share exists yet for this gallery
+            existing_share = await db.shares.find_one({
+                "gallery_id": gallery_id,
+                "guest_upload_mode": {"$ne": True},
+                "is_active": True
+            })
+            if not existing_share:
+                import re, string, random
+                folder_name = gallery["folder_name"]
+
+                # Build slug: "Gina & Mark 30.10.21" → "ginamark301021"
+                slug = re.sub(r'[^a-z0-9]', '', folder_name.lower())
+
+                # Check slug uniqueness, append random chars if taken
+                if await db.shares.find_one({"token": slug}):
+                    slug = slug + ''.join(random.choices(string.ascii_lowercase, k=3))
+
+                # Generate 6-char password
+                auto_password = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+
+                # Extract wedding date and calculate 3-month expiry
+                expires_at = None
+                date_match = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{2,4})$', folder_name.strip())
+                if date_match:
+                    day, month, year = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
+                    if year < 100:
+                        year += 2000
+                    try:
+                        from dateutil.relativedelta import relativedelta
+                        wedding_date = datetime(year, month, day, tzinfo=timezone.utc)
+                        expiry_date = wedding_date + relativedelta(months=3)
+                        expires_at = expiry_date.isoformat()
+                    except Exception:
+                        pass
+
+                hashed_pw = bcrypt.hashpw(auto_password.encode(), bcrypt.gensalt()).decode()
+                share_doc = {
+                    "id": str(uuid.uuid4()),
+                    "gallery_id": gallery_id,
+                    "token": slug,
+                    "subfolder": None,
+                    "password_hash": hashed_pw,
+                    "password_raw": auto_password,
+                    "has_password": True,
+                    "access_level": "download",
+                    "allow_uploads": False,
+                    "guest_upload_mode": False,
+                    "allow_all_file_types": False,
+                    "label": gallery["folder_name"],
+                    "expires_at": expires_at,
+                    "is_active": True,
+                    "auto_created": True,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.shares.insert_one(share_doc)
+                auto_share = {
+                    "token": slug,
+                    "password": auto_password,
+                    "expires_at": expires_at,
+                }
+                await db.activity_log.insert_one({
+                    "gallery_id": gallery_id,
+                    "action": "auto_share_created",
+                    "details": f"Auto-created share link: /{slug} (password: {auto_password}, expires: {expires_at or 'never'})",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+                logger.info(f"Auto-created share for {folder_name}: /{slug} pw={auto_password} expires={expires_at}")
+        except Exception as e:
+            logger.warning(f"Auto-share creation failed (upload unaffected): {e}")
+
+    result = {"uploaded": uploaded, "count": len(uploaded)}
+    if auto_share:
+        result["auto_share"] = auto_share
+    return result
 
 @api_router.post("/admin/galleries/{gallery_id}/reprocess-videos")
 async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
