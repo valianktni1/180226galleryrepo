@@ -891,7 +891,7 @@ function ShareViewFull() {
             </p>
           </div>
         )}
-        {activeAlbum && activeAlbum.toLowerCase() !== 'video' && (
+        {activeAlbum && activeAlbum.toLowerCase() !== 'video' && activeAlbum.toLowerCase() !== 'guest uploads' && activeAlbum.toLowerCase() !== 'selfiebooth' && (
           <div className="mb-8 p-5 rounded-sm border" style={{ 
             backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)', 
             borderColor: 'rgba(212,175,55,0.25)' 
