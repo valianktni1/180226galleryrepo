@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Heart, Download, X, ChevronLeft, ChevronRight, ChevronUp, Camera, FolderOpen, Film,
-  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun, Share2, Star
+  ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun, Share2, Star, Clock
 } from "lucide-react";
 import {
   getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl, chooseAlbumCover, getAlbumCoverChoice
@@ -864,6 +864,17 @@ function ShareViewFull() {
       </header>
 
       <main className="max-w-screen-xl mx-auto px-6 py-8">
+        {activeAlbum && activeAlbum.toLowerCase() === 'guest uploads' && (
+          <div className="mb-8 p-5 rounded-sm border" style={{ 
+            backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)', 
+            borderColor: 'rgba(212,175,55,0.25)' 
+          }}>
+            <p className="text-sm leading-relaxed" style={{ fontFamily: t.bodyFont, color: t.text }}>
+              <Clock className="w-4 h-4 inline mr-2 -mt-0.5" style={{ color: t.accent }} />
+              Guest uploads are available for 90 days after your wedding date. Please download any files you wish to keep — this folder is cleared automatically after that period.
+            </p>
+          </div>
+        )}
         {activeAlbum && activeAlbum.toLowerCase() === 'video' && (
           <div className="mb-8 p-5 rounded-sm border" style={{ 
             backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)', 
