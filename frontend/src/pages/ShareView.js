@@ -573,8 +573,8 @@ function ShareViewFull() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-10">
               {[
                 { step: "1", icon: <Heart className="w-6 h-6" fill={t.accent} stroke={t.accent} />, title: "Heart Your Favourites", desc: "Open your Wedding Images folder and tap the heart on your 40 favourite photos" },
-                { step: "2", icon: <ImageIcon className="w-6 h-6" style={{ color: t.accent }} />, title: "Choose Your Cover", desc: "Pick one special image for the front cover of your album" },
-                { step: "3", icon: <CheckCircle className="w-6 h-6" style={{ color: t.accent }} />, title: "Submit Your Album", desc: "Tap the gold heart at the top, then press Submit for Album" },
+                { step: "2", icon: <CheckCircle className="w-6 h-6" style={{ color: t.accent }} />, title: "Submit Your Album", desc: "Tap the gold heart at the top, then press Submit for Album" },
+                { step: "3", icon: <ImageIcon className="w-6 h-6" style={{ color: t.accent }} />, title: "Choose Your Cover", desc: "Open Album Favourites and tap Cover on your chosen front-cover image" },
               ].map(({ step, icon, title, desc }) => (
                 <div key={step} className="flex flex-col items-center text-center p-6 border" style={{ borderColor: t.border, backgroundColor: t.bgInstructions, borderRadius: t.cardRadius, borderWidth: t.cardBorderWidth }}>
                   {t.instructionIconBg ? (
@@ -1351,9 +1351,8 @@ function ThankYouModal({ show, onClose, count, galleryName, theme = {} }) {
             Your {count} favourite {count === 1 ? 'photo has' : 'photos have'} been submitted for your wedding album.
           </p>
           <p className="text-sm mb-6 p-3 rounded-lg" style={{ fontFamily: theme.bodyFont || 'Manrope, sans-serif', color: text, backgroundColor: theme.bgAlt || '#FEF9E7' }}>
-            <strong>Guys... please don&apos;t forget!</strong><br />
-            Email Mark your chosen image for your front cover at{' '}
-            <a href="mailto:mark@perfectweddingsbymark.uk" className="underline font-medium" style={{ color: theme.accent || '#D4AF37' }}>mark@perfectweddingsbymark.uk</a>
+            <strong>One final step</strong><br />
+            Open your <strong>Album Favourites</strong> folder and tap <strong>Cover</strong> on the image you want for the front of your album. Mark will be notified automatically - there is no need to email the image number.
           </p>
           <button
             onClick={onClose}

@@ -4752,7 +4752,7 @@ How Many Images to Choose:
 </tr>
 </table>
 <p style="font-size:14px;color:#57534E;margin:0 0 10px 0;line-height:1.6;">
-<strong>Final Step:</strong> Once you've picked your favourites, send me a quick email with the image number you'd like for your front cover.
+<strong>Final Step:</strong> Once you've submitted your favourites, open the Album Favourites folder and click the "Cover" button on the image you'd like for the front of your album. I'll be notified automatically - there is no need to email the image number.
 </p>
 <p style="font-size:14px;color:#A8A29E;margin:0;line-height:1.6;font-style:italic;">
 Need help? I've included some "How-To" videos right inside your gallery folder to guide you through the process!
