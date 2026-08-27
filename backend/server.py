@@ -36,6 +36,13 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
 from share_selection import main_gallery_share_query
+from share_security import ShareSessionError, refresh_share_claims, share_is_expired
+from security_paths import (
+    UnsafePathError,
+    contained_path,
+    sanitise_upload_filename,
+    validate_path_component,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -225,7 +232,7 @@ async def get_share_session(authorization: str = Header(None)):
     payload = verify_jwt(token)
     if payload.get("role") != "share":
         raise HTTPException(status_code=403, detail="Invalid session")
-    return payload
+    return await validate_live_share_session(payload)
 
 # ─── File Helpers ───
 def is_image(filename: str) -> bool:
@@ -236,19 +243,36 @@ def is_video(filename: str) -> bool:
 
 def is_share_expired(share: dict) -> bool:
     """Check if a share has expired based on expires_at date."""
-    if not share.get("is_active"):
-        return True
-    expires_at = share.get("expires_at")
-    if not expires_at:
-        return False
+    return share_is_expired(share)
+
+async def validate_live_share_session(payload: dict, expected_token: str = None) -> dict:
+    """Revalidate a share JWT against MongoDB so revocation is immediate."""
+    if payload.get("role") != "share" or not payload.get("share_id"):
+        raise HTTPException(status_code=403, detail="Invalid session")
+
+    share = await db.shares.find_one({"id": payload["share_id"]}, {"_id": 0})
     try:
-        expiry_date = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-        return datetime.now(timezone.utc) > expiry_date
-    except (ValueError, TypeError):
-        return False
+        return refresh_share_claims(payload, share, expected_token=expected_token)
+    except ShareSessionError as exc:
+        status_code = 401 if str(exc) == "Share session is no longer active" else 403
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+def share_file_query(session: dict, **extra) -> dict:
+    """Build a file query constrained to the live share's gallery and folder."""
+    query = {"gallery_id": session["gallery_id"], **extra}
+    if session.get("subfolder"):
+        query["subfolder"] = session["subfolder"]
+    return query
 
 def slugify(text: str) -> str:
     return text.lower().strip().replace(' ', '-').replace('&', 'and')
+
+def require_safe_component(value: str, label: str) -> str:
+    """Translate filesystem validation failures into a safe client response."""
+    try:
+        return validate_path_component(value, label)
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 def make_thumbnail(input_path: Path, output_path: Path, size=(400, 400)):
     try:
@@ -331,16 +355,101 @@ def make_video_preview(input_path: Path, output_path: Path, size=(1600, 900)):
         return False
 
 def get_gallery_path(folder_name: str) -> Path:
-    return UPLOAD_DIR / folder_name
+    try:
+        return contained_path(UPLOAD_DIR, folder_name, labels=("gallery folder name",))
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+def get_gallery_subfolder_path(folder_name: str, subfolder: str) -> Path:
+    try:
+        return contained_path(
+            UPLOAD_DIR,
+            folder_name,
+            subfolder,
+            labels=("gallery folder name", "subfolder"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+def get_gallery_file_path(folder_name: str, subfolder: str, filename: str) -> Path:
+    try:
+        return contained_path(
+            UPLOAD_DIR,
+            folder_name,
+            subfolder,
+            filename,
+            labels=("gallery folder name", "subfolder", "filename"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 def get_thumb_path(gallery_id: str, subfolder: str, filename: str) -> Path:
-    return CACHE_DIR / gallery_id / slugify(subfolder) / f"{Path(filename).stem}.thumb.jpg"
+    safe_filename = require_safe_component(filename, "filename")
+    try:
+        return contained_path(
+            CACHE_DIR,
+            gallery_id,
+            slugify(require_safe_component(subfolder, "subfolder")),
+            f"{Path(safe_filename).stem}.thumb.jpg",
+            labels=("gallery id", "subfolder cache key", "thumbnail filename"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 def get_preview_path(gallery_id: str, subfolder: str, filename: str) -> Path:
-    return CACHE_DIR / gallery_id / slugify(subfolder) / f"{Path(filename).stem}.preview.jpg"
+    safe_filename = require_safe_component(filename, "filename")
+    try:
+        return contained_path(
+            CACHE_DIR,
+            gallery_id,
+            slugify(require_safe_component(subfolder, "subfolder")),
+            f"{Path(safe_filename).stem}.preview.jpg",
+            labels=("gallery id", "subfolder cache key", "preview filename"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+def get_cache_gallery_path(gallery_id: str) -> Path:
+    try:
+        return contained_path(CACHE_DIR, gallery_id, labels=("gallery id",))
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+def get_cache_subfolder_path(gallery_id: str, subfolder: str) -> Path:
+    try:
+        return contained_path(
+            CACHE_DIR,
+            gallery_id,
+            slugify(require_safe_component(subfolder, "subfolder")),
+            labels=("gallery id", "subfolder cache key"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+def get_backup_gallery_path(folder_name: str) -> Path:
+    try:
+        return contained_path(BACKUP_DIR, folder_name, labels=("backup gallery folder name",))
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+def get_backup_file_path(folder_name: str, subfolder: str, filename: str) -> Path:
+    try:
+        return contained_path(
+            BACKUP_DIR,
+            folder_name,
+            subfolder,
+            filename,
+            labels=("backup gallery folder name", "backup subfolder", "backup filename"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 def safe_filename(filename: str, existing_dir: Path) -> str:
     """Keep original filename, append (1), (2) etc if duplicate."""
+    try:
+        filename = sanitise_upload_filename(filename)
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     target = existing_dir / filename
     if not target.exists():
         return filename
@@ -745,10 +854,11 @@ async def list_templates(admin=Depends(get_admin)):
 
 @api_router.post("/admin/templates")
 async def create_template(data: TemplateCreate, admin=Depends(get_admin)):
+    subfolders = [require_safe_component(sf, "template subfolder") for sf in data.subfolders]
     doc = {
         "id": str(uuid.uuid4()),
         "name": data.name,
-        "subfolders": data.subfolders,
+        "subfolders": subfolders,
         "is_default": False,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -761,7 +871,7 @@ async def update_template(template_id: str, data: TemplateUpdate, admin=Depends(
     if data.name is not None:
         update["name"] = data.name
     if data.subfolders is not None:
-        update["subfolders"] = data.subfolders
+        update["subfolders"] = [require_safe_component(sf, "template subfolder") for sf in data.subfolders]
     if not update:
         raise HTTPException(status_code=400, detail="Nothing to update")
     await db.templates.update_one({"id": template_id}, {"$set": update})
@@ -781,6 +891,7 @@ async def delete_template(template_id: str, admin=Depends(get_admin)):
 # ─── Gallery (Couple Folder) CRUD ───
 @api_router.post("/admin/galleries")
 async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
+    folder_name = require_safe_component(data.folder_name, "gallery folder name")
     # Get template subfolders
     subfolders = list(DEFAULT_SUBFOLDERS)
     if data.template_id:
@@ -788,8 +899,9 @@ async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
         if tmpl:
             subfolders = tmpl["subfolders"]
 
+    subfolders = [require_safe_component(sf, "gallery subfolder") for sf in subfolders]
     gallery_id = str(uuid.uuid4())
-    folder_path = get_gallery_path(data.folder_name)
+    folder_path = get_gallery_path(folder_name)
 
     # Create physical folders
     for sf in subfolders:
@@ -797,7 +909,7 @@ async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
 
     doc = {
         "id": gallery_id,
-        "folder_name": data.folder_name,
+        "folder_name": folder_name,
         "subfolders": subfolders,
         "template_id": data.template_id,
         "client_email": data.client_email or "",
@@ -879,11 +991,12 @@ async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get
         raise HTTPException(status_code=404, detail="Gallery not found")
     update = {"updated_at": datetime.now(timezone.utc).isoformat()}
     if data.folder_name and data.folder_name != gallery["folder_name"]:
+        new_folder_name = require_safe_component(data.folder_name, "gallery folder name")
         old_path = get_gallery_path(gallery["folder_name"])
-        new_path = get_gallery_path(data.folder_name)
+        new_path = get_gallery_path(new_folder_name)
         if old_path.exists():
             old_path.rename(new_path)
-        update["folder_name"] = data.folder_name
+        update["folder_name"] = new_folder_name
     if data.client_email is not None:
         update["client_email"] = data.client_email
     if data.theme is not None:
@@ -932,11 +1045,11 @@ async def delete_subfolder(gallery_id: str, subfolder_name: str, admin=Depends(g
     if subfolder_name not in gallery["subfolders"]:
         raise HTTPException(status_code=404, detail="Subfolder not found")
     # Delete physical folder
-    folder_path = get_gallery_path(gallery["folder_name"]) / subfolder_name
+    folder_path = get_gallery_subfolder_path(gallery["folder_name"], subfolder_name)
     if folder_path.exists():
         shutil.rmtree(folder_path)
     # Delete cached thumbs
-    cache_path = CACHE_DIR / gallery_id / slugify(subfolder_name)
+    cache_path = get_cache_subfolder_path(gallery_id, subfolder_name)
     if cache_path.exists():
         shutil.rmtree(cache_path)
     # Delete files from DB
@@ -957,12 +1070,12 @@ async def delete_gallery(gallery_id: str, delete_backup: bool = Query(False), ad
     folder_path = get_gallery_path(gallery["folder_name"])
     if folder_path.exists():
         shutil.rmtree(folder_path)
-    cache_path = CACHE_DIR / gallery_id
+    cache_path = get_cache_gallery_path(gallery_id)
     if cache_path.exists():
         shutil.rmtree(cache_path)
     # Delete backup if requested
     if delete_backup:
-        backup_path = BACKUP_DIR / gallery["folder_name"]
+        backup_path = get_backup_gallery_path(gallery["folder_name"])
         if backup_path.exists():
             shutil.rmtree(backup_path)
             logger.info(f"Deleted backup for gallery '{gallery['folder_name']}'")
@@ -986,14 +1099,14 @@ async def upload_files(
     if subfolder not in gallery["subfolders"]:
         raise HTTPException(status_code=400, detail=f"Invalid subfolder: {subfolder}")
 
-    target_dir = get_gallery_path(gallery["folder_name"]) / subfolder
+    target_dir = get_gallery_file_path(gallery["folder_name"], subfolder, ".upload-target").parent
     target_dir.mkdir(parents=True, exist_ok=True)
 
     uploaded = []
     for file in files:
         # Stream file to disk for large file support
         final_name = safe_filename(file.filename, target_dir)
-        file_path = target_dir / final_name
+        file_path = get_gallery_file_path(gallery["folder_name"], subfolder, final_name)
         file_size = 0
 
         async with aiofiles.open(file_path, 'wb') as f:
@@ -1004,7 +1117,7 @@ async def upload_files(
                 await f.write(chunk)
                 file_size += len(chunk)
 
-        file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
+        file_type = "photo" if is_image(final_name) else "video" if is_video(final_name) else "other"
         file_id = str(uuid.uuid4())
 
         # Save file record immediately (thumbnails will be generated in background)
@@ -1105,10 +1218,10 @@ async def upload_files(
                 await db.activity_log.insert_one({
                     "gallery_id": gallery_id,
                     "action": "auto_share_created",
-                    "details": f"Auto-created share link: /{slug} (password: {auto_password}, expires: {expires_at or 'never'})",
+                    "details": f"Auto-created share link: /{slug} (password omitted, expires: {expires_at or 'never'})",
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 })
-                logger.info(f"Auto-created share for {folder_name}: /{slug} pw={auto_password} expires={expires_at}")
+                logger.info(f"Auto-created share for {folder_name}: /{slug} expires={expires_at}")
         except Exception as e:
             logger.warning(f"Auto-share creation failed (upload unaffected): {e}")
 
@@ -1126,7 +1239,7 @@ async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
     videos = await db.files.find({"gallery_id": gallery_id, "file_type": "video"}, {"_id": 0}).to_list(None)
     valid_videos = []
     for v in videos:
-        file_path = get_gallery_path(gallery["folder_name"]) / v["subfolder"] / v["filename"]
+        file_path = get_gallery_file_path(gallery["folder_name"], v["subfolder"], v["filename"])
         if file_path.exists():
             valid_videos.append((file_path, v["filename"], v["id"]))
     if not valid_videos:
@@ -1172,7 +1285,7 @@ async def video_health_check(gallery_id: str, admin=Depends(get_admin)):
     videos = await db.files.find({"gallery_id": gallery_id, "file_type": "video"}, {"_id": 0}).to_list(None)
     results = []
     for v in videos:
-        file_path = get_gallery_path(gallery["folder_name"]) / v["subfolder"] / v["filename"]
+        file_path = get_gallery_file_path(gallery["folder_name"], v["subfolder"], v["filename"])
         web_path = get_web_version_path(file_path) if file_path.exists() else None
         has_web = web_path.exists() if web_path else False
         original_mb = round(file_path.stat().st_size / (1024 * 1024), 1) if file_path.exists() else 0
@@ -1203,7 +1316,7 @@ async def delete_file(gallery_id: str, file_id: str, delete_backup: bool = Query
         raise HTTPException(status_code=404, detail="Gallery not found")
 
     # Delete physical file
-    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
     if file_path.exists():
         file_path.unlink()
     # Delete thumbnails
@@ -1214,7 +1327,7 @@ async def delete_file(gallery_id: str, file_id: str, delete_backup: bool = Query
 
     # Delete backup copy if requested
     if delete_backup:
-        backup_file = BACKUP_DIR / gallery["folder_name"] / f["subfolder"] / f["filename"]
+        backup_file = get_backup_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
         if backup_file.exists():
             backup_file.unlink()
             logger.info(f"Deleted backup for file '{f['filename']}' in gallery '{gallery['folder_name']}'")
@@ -1242,7 +1355,7 @@ async def copy_to_subfolder(gallery_id: str, data: CopyToSubfolder, admin=Depend
     if data.target_subfolder not in gallery["subfolders"]:
         raise HTTPException(status_code=400, detail=f"Target subfolder '{data.target_subfolder}' not found")
 
-    target_dir = get_gallery_path(gallery["folder_name"]) / data.target_subfolder
+    target_dir = get_gallery_subfolder_path(gallery["folder_name"], data.target_subfolder)
     target_dir.mkdir(parents=True, exist_ok=True)
     copied = 0
 
@@ -1250,11 +1363,11 @@ async def copy_to_subfolder(gallery_id: str, data: CopyToSubfolder, admin=Depend
         f = await db.files.find_one({"id": file_id, "gallery_id": gallery_id}, {"_id": 0})
         if not f:
             continue
-        src_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+        src_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
         if not src_path.exists():
             continue
         dest_name = safe_filename(f["filename"], target_dir)
-        dest_path = target_dir / dest_name
+        dest_path = get_gallery_file_path(gallery["folder_name"], data.target_subfolder, dest_name)
         shutil.copy2(src_path, dest_path)
 
         # Generate thumbnails for the copy
@@ -1293,7 +1406,9 @@ async def download_subfolder_zip(gallery_id: str, subfolder: str = Query(...), a
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    folder_path = get_gallery_path(gallery["folder_name"]) / subfolder
+    if subfolder not in gallery.get("subfolders", []):
+        raise HTTPException(status_code=404, detail="Subfolder not found")
+    folder_path = get_gallery_subfolder_path(gallery["folder_name"], subfolder)
     if not folder_path.exists():
         raise HTTPException(status_code=404, detail="Subfolder not found")
 
@@ -1309,7 +1424,7 @@ async def download_subfolder_zip(gallery_id: str, subfolder: str = Query(...), a
         missing = []
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
-                fp = folder_path / f["filename"]
+                fp = get_gallery_file_path(gallery["folder_name"], subfolder, f["filename"])
                 if fp.exists():
                     zf.write(fp, f["filename"])
                     added += 1
@@ -1353,7 +1468,7 @@ async def admin_download_file(gallery_id: str, file_id: str, admin=Depends(get_a
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     await log_bandwidth_event("file_download", file_path.stat().st_size, f"Admin: {f['filename']}")
@@ -2389,8 +2504,11 @@ MUSIC_DIR = Path(__file__).parent / "assets" / "slideshow_music"
 
 @api_router.get("/slideshow/music/{filename}")
 async def serve_slideshow_music(filename: str, request: Request):
-    safe_name = Path(filename).name  # prevent path traversal
-    file_path = MUSIC_DIR / safe_name
+    safe_name = require_safe_component(filename, "music filename")
+    try:
+        file_path = contained_path(MUSIC_DIR, safe_name, labels=("music filename",))
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not file_path.exists() or not safe_name.endswith('.mp3'):
         raise HTTPException(status_code=404, detail="Track not found")
     file_size = file_path.stat().st_size
@@ -2421,24 +2539,69 @@ async def serve_slideshow_music(filename: str, request: Request):
 # ─── Media Serving ───
 @api_router.get("/media/thumb/{gallery_id}/{subfolder_slug}/{filename}")
 async def serve_thumb(gallery_id: str, subfolder_slug: str, filename: str):
-    file_path = CACHE_DIR / gallery_id / subfolder_slug / filename
+    try:
+        file_path = contained_path(
+            CACHE_DIR,
+            gallery_id,
+            subfolder_slug,
+            filename,
+            labels=("gallery id", "subfolder cache key", "thumbnail filename"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not found")
     return FileResponse(file_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=2592000, immutable"})
 
 @api_router.get("/media/preview/{gallery_id}/{subfolder_slug}/{filename}")
 async def serve_preview(gallery_id: str, subfolder_slug: str, filename: str):
-    file_path = CACHE_DIR / gallery_id / subfolder_slug / filename
+    try:
+        file_path = contained_path(
+            CACHE_DIR,
+            gallery_id,
+            subfolder_slug,
+            filename,
+            labels=("gallery id", "subfolder cache key", "preview filename"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Preview not found")
     return FileResponse(file_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=2592000, immutable"})
 
 @api_router.get("/media/original/{gallery_id}/{subfolder}/{filename}")
-async def serve_original(gallery_id: str, subfolder: str, filename: str):
+async def serve_original(
+    gallery_id: str,
+    subfolder: str,
+    filename: str,
+    authorization: str = Header(None),
+    t: str = Query(None),
+):
+    auth_token = t
+    if authorization:
+        auth_token = authorization.replace("Bearer ", "")
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = verify_jwt(auth_token)
+    if payload.get("role") == "share":
+        payload = await validate_live_share_session(payload)
+        if payload.get("gallery_id") != gallery_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if payload.get("subfolder") and payload.get("subfolder") != subfolder:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    file_path = get_gallery_path(gallery["folder_name"]) / subfolder / filename
+    file_doc = await db.files.find_one(
+        {"gallery_id": gallery_id, "subfolder": subfolder, "filename": filename},
+        {"_id": 0, "id": 1},
+    )
+    if not file_doc:
+        raise HTTPException(status_code=404, detail="File not found")
+    file_path = get_gallery_file_path(gallery["folder_name"], subfolder, filename)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path)
@@ -2449,7 +2612,10 @@ EMAIL_ASSETS_DIR = Path(__file__).parent / "assets"
 @api_router.get("/public/email-assets/{filename}")
 async def get_email_asset(filename: str):
     """Serve email assets (like awards badges) publicly for email clients."""
-    file_path = EMAIL_ASSETS_DIR / filename
+    try:
+        file_path = contained_path(EMAIL_ASSETS_DIR, filename, labels=("email asset filename",))
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Asset not found")
     return FileResponse(file_path, media_type="image/png", headers={"Cache-Control": "public, max-age=31536000"})
@@ -2606,6 +2772,9 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
 async def toggle_share_favourite(token: str, data: FavouriteToggle, session=Depends(get_share_session)):
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
+    visible_file = await db.files.find_one(share_file_query(session, id=data.file_id), {"_id": 0, "id": 1})
+    if not visible_file:
+        raise HTTPException(status_code=404, detail="File not found")
     existing = await db.favourites.find_one({
         "session_id": session["sub"],
         "file_id": data.file_id,
@@ -2657,14 +2826,14 @@ async def submit_favourites_to_album(token: str, request: Request, session=Depen
             {"$set": {"subfolders": gallery["subfolders"]}}
         )
     
-    target_dir = get_gallery_path(gallery["folder_name"]) / target_subfolder
+    target_dir = get_gallery_subfolder_path(gallery["folder_name"], target_subfolder)
     target_dir.mkdir(parents=True, exist_ok=True)
     
     copied = 0
     already_exists = 0
     
     for fav in favs:
-        f = await db.files.find_one({"id": fav["file_id"], "gallery_id": gallery_id}, {"_id": 0})
+        f = await db.files.find_one(share_file_query(session, id=fav["file_id"]), {"_id": 0})
         if not f:
             continue
         
@@ -2678,12 +2847,12 @@ async def submit_favourites_to_album(token: str, request: Request, session=Depen
             already_exists += 1
             continue
         
-        src_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+        src_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
         if not src_path.exists():
             continue
         
         dest_name = safe_filename(f["filename"], target_dir)
-        dest_path = target_dir / dest_name
+        dest_path = get_gallery_file_path(gallery["folder_name"], target_subfolder, dest_name)
         shutil.copy2(src_path, dest_path)
         
         # Generate thumbnails for the copy
@@ -2892,13 +3061,12 @@ async def get_video_playback_token(token: str, file_id: str, t: str = Query(None
     if not t:
         raise HTTPException(status_code=401, detail="Not authenticated")
     payload = verify_jwt(t)
-    if payload.get("role") != "share" or payload.get("token") != token:
-        raise HTTPException(status_code=403, detail="Access denied")
-    f = await db.files.find_one({"id": file_id, "gallery_id": payload["gallery_id"]}, {"_id": 0})
+    payload = await validate_live_share_session(payload, expected_token=token)
+    f = await db.files.find_one(share_file_query(payload, id=file_id), {"_id": 0})
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
     gallery = await db.galleries.find_one({"id": payload["gallery_id"]}, {"_id": 0})
-    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     
@@ -2976,13 +3144,12 @@ async def stream_share_video(token: str, file_id: str, request: Request, t: str 
     if not t:
         raise HTTPException(status_code=401, detail="Not authenticated")
     payload = verify_jwt(t)
-    if payload.get("role") != "share" or payload.get("token") != token:
-        raise HTTPException(status_code=403, detail="Access denied")
-    f = await db.files.find_one({"id": file_id, "gallery_id": payload["gallery_id"]}, {"_id": 0})
+    payload = await validate_live_share_session(payload, expected_token=token)
+    f = await db.files.find_one(share_file_query(payload, id=file_id), {"_id": 0})
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
     gallery = await db.galleries.find_one({"id": payload["gallery_id"]}, {"_id": 0})
-    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
@@ -3036,11 +3203,11 @@ async def download_share_file(token: str, file_id: str, request: Request, sessio
     # Enforce download permission
     if not session.get("allow_downloads", False):
         raise HTTPException(status_code=403, detail="Downloads not allowed on this share")
-    f = await db.files.find_one({"id": file_id, "gallery_id": session["gallery_id"]}, {"_id": 0})
+    f = await db.files.find_one(share_file_query(session, id=file_id), {"_id": 0})
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
     gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
-    file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+    file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
     if not file_path.exists():
         # Enhanced diagnostic: show what IS on disk
         parent = file_path.parent
@@ -3081,11 +3248,9 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
 
     subfolder = session.get("subfolder")
     if file_ids:
-        query = {"gallery_id": gallery_id, "id": {"$in": file_ids}}
+        query = share_file_query(session, id={"$in": file_ids})
     else:
-        query = {"gallery_id": gallery_id}
-        if subfolder:
-            query["subfolder"] = subfolder
+        query = share_file_query(session)
     files = await db.files.find(query, {"_id": 0}).to_list(50000)
     
     if not files:
@@ -3122,7 +3287,7 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
         missing = []
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
-                fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+                fp = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
                 if fp.exists():
                     arcname = f"{f['subfolder']}/{f['filename']}"
                     zf.write(fp, arcname)
@@ -3168,9 +3333,7 @@ async def download_share_zip(token: str, request: Request, file_ids: List[str] =
 @api_router.get("/share/{token}/download-album")
 async def download_share_album_direct(token: str, request: Request, subfolder: str = Query(None), jwt_token: str = Query(..., alias="t")):
     # Verify JWT from query param
-    payload = verify_jwt(jwt_token)
-    if not payload or payload.get("role") != "share" or payload.get("token") != token:
-        raise HTTPException(status_code=403, detail="Access denied")
+    payload = await validate_live_share_session(verify_jwt(jwt_token), expected_token=token)
     if not payload.get("allow_downloads", False):
         raise HTTPException(status_code=403, detail="Downloads not allowed")
     
@@ -3179,9 +3342,13 @@ async def download_share_album_direct(token: str, request: Request, subfolder: s
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
     
-    query = {"gallery_id": gallery_id}
-    if subfolder:
-        query["subfolder"] = subfolder
+    share_subfolder = payload.get("subfolder")
+    if share_subfolder and subfolder and subfolder != share_subfolder:
+        raise HTTPException(status_code=403, detail="Access denied")
+    effective_subfolder = share_subfolder or subfolder
+    query = share_file_query(payload)
+    if effective_subfolder:
+        query["subfolder"] = effective_subfolder
     files = await db.files.find(query, {"_id": 0}).to_list(50000)
     
     if not files:
@@ -3207,7 +3374,7 @@ async def download_share_album_direct(token: str, request: Request, subfolder: s
         missing = []
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
-                fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+                fp = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
                 if fp.exists():
                     arcname = f["filename"] if subfolder else f"{f['subfolder']}/{f['filename']}"
                     zf.write(fp, arcname)
@@ -3254,9 +3421,7 @@ async def download_share_album_direct(token: str, request: Request, subfolder: s
 @api_router.get("/share/{token}/download-favourites")
 async def download_share_favourites_direct(token: str, request: Request, jwt_token: str = Query(..., alias="t")):
     # Verify JWT from query param
-    payload = verify_jwt(jwt_token)
-    if not payload or payload.get("role") != "share" or payload.get("token") != token:
-        raise HTTPException(status_code=403, detail="Access denied")
+    payload = await validate_live_share_session(verify_jwt(jwt_token), expected_token=token)
     if not payload.get("allow_downloads", False):
         raise HTTPException(status_code=403, detail="Downloads not allowed")
     
@@ -3277,7 +3442,7 @@ async def download_share_favourites_direct(token: str, request: Request, jwt_tok
         raise HTTPException(status_code=404, detail="No favourites to download")
     
     fav_ids = [f["file_id"] for f in favs]
-    files = await db.files.find({"gallery_id": gallery_id, "id": {"$in": fav_ids}}, {"_id": 0}).to_list(50000)
+    files = await db.files.find(share_file_query(payload, id={"$in": fav_ids}), {"_id": 0}).to_list(50000)
     
     if not files:
         raise HTTPException(status_code=404, detail="No files found")
@@ -3297,7 +3462,7 @@ async def download_share_favourites_direct(token: str, request: Request, jwt_tok
         added = 0
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
             for f in files:
-                fp = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+                fp = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
                 if fp.exists():
                     zf.write(fp, f["filename"])
                     added += 1
@@ -3350,7 +3515,7 @@ async def guest_upload(
     is_photographer_mode = share.get("allow_all_file_types", False) if share else False
 
     subfolder = session.get("subfolder") or "Guest Uploads"
-    target_dir = get_gallery_path(gallery["folder_name"]) / subfolder
+    target_dir = get_gallery_file_path(gallery["folder_name"], subfolder, ".upload-target").parent
     target_dir.mkdir(parents=True, exist_ok=True)
     
     # Only check compression setting for non-photographer uploads
@@ -3361,17 +3526,8 @@ async def guest_upload(
     for file in files:
         if is_photographer_mode:
             # PHOTOGRAPHER MODE: Stream directly to disk, preserve original filename, no size limit
-            original_name = file.filename or "unnamed_file"
-            # Preserve original filename but handle duplicates
-            final_name = original_name
-            file_path = target_dir / final_name
-            counter = 1
-            while file_path.exists():
-                stem = Path(original_name).stem
-                suffix = Path(original_name).suffix
-                final_name = f"{stem}_{counter}{suffix}"
-                file_path = target_dir / final_name
-                counter += 1
+            final_name = safe_filename(file.filename, target_dir)
+            file_path = get_gallery_file_path(gallery["folder_name"], subfolder, final_name)
 
             # Stream directly to disk in chunks - no memory buffering
             file_size = 0
@@ -3383,7 +3539,7 @@ async def guest_upload(
                     await f_out.write(chunk)
                     file_size += len(chunk)
 
-            file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
+            file_type = "photo" if is_image(final_name) else "video" if is_video(final_name) else "other"
             
             # Generate thumbnails in background for photos (non-blocking)
             has_thumb = False
@@ -3412,19 +3568,33 @@ async def guest_upload(
             
             uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
         else:
-            # GUEST MODE: Original behaviour with memory read, size limit, compression
-            content = await file.read()
-            # Enforce 500MB limit for guest uploads
-            if len(content) > MAX_GUEST_UPLOAD_SIZE:
-                skipped_too_large.append(file.filename)
-                continue
-
+            # GUEST MODE: stream to a temporary file so large uploads do not fill RAM.
             final_name = safe_filename(file.filename, target_dir)
-            file_path = target_dir / final_name
-            async with aiofiles.open(file_path, 'wb') as f_out:
-                await f_out.write(content)
+            file_path = get_gallery_file_path(gallery["folder_name"], subfolder, final_name)
+            temp_path = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.partial")
+            file_size = 0
+            too_large = False
+            try:
+                async with aiofiles.open(temp_path, 'wb') as f_out:
+                    while True:
+                        chunk = await file.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        file_size += len(chunk)
+                        if file_size > MAX_GUEST_UPLOAD_SIZE:
+                            too_large = True
+                            break
+                        await f_out.write(chunk)
+                if too_large:
+                    temp_path.unlink(missing_ok=True)
+                    skipped_too_large.append(file.filename)
+                    continue
+                temp_path.replace(file_path)
+            except Exception:
+                temp_path.unlink(missing_ok=True)
+                raise
 
-            file_type = "photo" if is_image(file.filename) else "video" if is_video(file.filename) else "other"
+            file_type = "photo" if is_image(final_name) else "video" if is_video(final_name) else "other"
             has_thumb = False
             has_preview = False
             if file_type == "photo":
@@ -3438,7 +3608,7 @@ async def guest_upload(
                 "filename": final_name,
                 "original_filename": file.filename,
                 "file_type": file_type,
-                "file_size": len(content),
+                "file_size": file_size,
                 "has_thumb": has_thumb,
                 "has_preview": has_preview,
                 "uploaded_by": "guest",
@@ -3448,7 +3618,7 @@ async def guest_upload(
             uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
             
             # Schedule background compression for large guest videos if enabled
-            if compression_enabled and file_type == "video" and len(content) > VIDEO_COMPRESSION_SIZE_THRESHOLD:
+            if compression_enabled and file_type == "video" and file_size > VIDEO_COMPRESSION_SIZE_THRESHOLD:
                 thumbnail_executor.submit(
                     compress_guest_video_background,
                     file_path,
@@ -3515,11 +3685,11 @@ async def guest_delete_files(token: str, data: DeleteFilesRequest, session=Depen
     affected_subfolders = set()
     
     for file_id in data.file_ids:
-        f = await db.files.find_one({"id": file_id, "gallery_id": gallery_id}, {"_id": 0})
+        f = await db.files.find_one(share_file_query(session, id=file_id), {"_id": 0})
         if not f:
             continue
         # Delete physical file
-        file_path = get_gallery_path(gallery["folder_name"]) / f["subfolder"] / f["filename"]
+        file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
         if file_path.exists():
             file_path.unlink()
         # Delete thumbnails
@@ -4191,7 +4361,7 @@ async def run_backup(admin=Depends(get_admin)):
                 continue
             
             stats["galleries"] += 1
-            backup_gallery_path = BACKUP_DIR / gallery_folder.name
+            backup_gallery_path = get_backup_gallery_path(gallery_folder.name)
             backup_gallery_path.mkdir(parents=True, exist_ok=True)
             
             # Walk through all subfolders and files
@@ -4203,7 +4373,15 @@ async def run_backup(admin=Depends(get_admin)):
                     
                     # Calculate relative path and destination
                     rel_path = src_path.relative_to(gallery_folder)
-                    dst_path = backup_gallery_path / rel_path
+                    try:
+                        dst_path = contained_path(
+                            backup_gallery_path,
+                            *rel_path.parts,
+                            labels=tuple("backup path component" for _ in rel_path.parts),
+                        )
+                    except UnsafePathError as exc:
+                        stats["errors"].append(f"Skipped unsafe backup path {rel_path}: {exc}")
+                        continue
                     
                     # Create parent directories if needed
                     dst_path.parent.mkdir(parents=True, exist_ok=True)
@@ -5215,22 +5393,22 @@ async def run_guest_upload_cleanup():
             
             try:
                 # Delete from disk (main upload)
-                file_path = UPLOAD_DIR / folder_name / "Guest Uploads" / filename
+                file_path = get_gallery_file_path(folder_name, "Guest Uploads", filename)
                 if file_path.exists():
                     file_path.unlink()
                 
                 # Delete thumbnail
-                thumb_path = CACHE_DIR / gallery_id / "Guest Uploads" / f"thumb_{filename}"
+                thumb_path = get_thumb_path(gallery_id, "Guest Uploads", filename)
                 if thumb_path.exists():
                     thumb_path.unlink()
                 
                 # Delete preview
-                preview_path = CACHE_DIR / gallery_id / "Guest Uploads" / f"preview_{filename}"
+                preview_path = get_preview_path(gallery_id, "Guest Uploads", filename)
                 if preview_path.exists():
                     preview_path.unlink()
                 
                 # Delete from backup
-                backup_file = BACKUP_DIR / folder_name / "Guest Uploads" / filename
+                backup_file = get_backup_file_path(folder_name, "Guest Uploads", filename)
                 if backup_file.exists():
                     backup_file.unlink()
                 
@@ -5242,16 +5420,25 @@ async def run_guest_upload_cleanup():
                 logger.warning(f"Guest cleanup: failed to delete {filename} in {folder_name}: {e}")
         
         # If Guest Uploads folder is now empty, remove the empty directories
-        guest_dir = UPLOAD_DIR / folder_name / "Guest Uploads"
+        guest_dir = get_gallery_subfolder_path(folder_name, "Guest Uploads")
         if guest_dir.exists() and not any(guest_dir.iterdir()):
             guest_dir.rmdir()
         
-        guest_cache = CACHE_DIR / gallery_id / "Guest Uploads"
+        guest_cache = get_cache_subfolder_path(gallery_id, "Guest Uploads")
         if guest_cache.exists() and not any(guest_cache.iterdir()):
             guest_cache.rmdir()
         
-        guest_backup = BACKUP_DIR / folder_name / "Guest Uploads"
-        if guest_backup.exists() and not any(guest_backup.iterdir()):
+        try:
+            guest_backup = contained_path(
+                BACKUP_DIR,
+                folder_name,
+                "Guest Uploads",
+                labels=("backup gallery folder name", "backup subfolder"),
+            )
+        except UnsafePathError as exc:
+            logger.warning(f"Guest cleanup: unsafe backup path for {folder_name}: {exc}")
+            guest_backup = None
+        if guest_backup and guest_backup.exists() and not any(guest_backup.iterdir()):
             guest_backup.rmdir()
         
         if total_deleted > 0:
@@ -5392,7 +5579,9 @@ async def startup_auto_archive():
         await db.activity_log.create_index([("action", 1), ("timestamp", 1)])
         await db.files.create_index("gallery_id")
         await db.files.create_index([("gallery_id", 1), ("subfolder", 1)])
+        await db.files.create_index([("gallery_id", 1), ("id", 1)])
         await db.shares.create_index("gallery_id")
+        await db.shares.create_index("id")
         await db.shares.create_index("token", unique=True)
         await db.favourites.create_index([("session_id", 1), ("gallery_id", 1)])
         await db.favourites.create_index([("session_id", 1), ("file_id", 1)])

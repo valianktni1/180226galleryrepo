@@ -9,7 +9,7 @@ Turn an existing fully-working single-tenant wedding photography gallery system 
 
 ## SUPER ADMIN CREDENTIALS
 - **Username**: `superadmin`
-- **Password**: `Stu!d10App_2026xQ`
+- **Password**: `[removed — create a unique secret at deployment]`
 - This is the platform owner (Mark). Create this account during first-run setup.
 - Super admin sits ABOVE all tenant photographers. Separate auth tier.
 
@@ -468,7 +468,7 @@ GET    /api/public/email-assets/{filename}
 ## WHAT MUST BE ADDED (SaaS Layer)
 
 ### 1. Super Admin System
-- **Separate auth tier** — `superadmin` / `Stu!d10App_2026xQ`
+- **Separate auth tier** — use a unique super-admin account and deployment secret
 - **Super Admin Dashboard** at `/super-admin/`:
   - List all tenants with: business name, email, plan, storage used/limit, status (active/suspended/cancelled), created date
   - **Create Tenant** manually

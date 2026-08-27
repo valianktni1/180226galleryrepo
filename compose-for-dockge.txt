@@ -22,10 +22,10 @@ services:
       - MONGO_URL=mongodb://mongodb:27017
       - DB_NAME=weddings_by_mark
       - CORS_ORIGINS=*
-      - JWT_SECRET=2PGOiuUGvnf2BHY4up69T1F3tM+AqPQIp21hUYfXstI=
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - UPLOAD_DIR=/data/userfiles
       - NGINX_VIDEO_URL=enabled
-      - NGINX_VIDEO_SECRET=2PGOiuUGvnf2BHY4up69T1F3tM+AqPQIp21hUYfXstI=
+      - NGINX_VIDEO_SECRET=${NGINX_VIDEO_SECRET:?NGINX_VIDEO_SECRET must be set}
     volumes:
       - /mnt/nextcloud/newwedidngsbymarkuserfiles:/data/userfiles
       - /mnt/couplesgalleriesbackup/180226:/backup
@@ -40,7 +40,7 @@ services:
     container_name: wbm-nginx-video
     restart: unless-stopped
     environment:
-      - NGINX_VIDEO_SECRET=2PGOiuUGvnf2BHY4up69T1F3tM+AqPQIp21hUYfXstI=
+      - NGINX_VIDEO_SECRET=${NGINX_VIDEO_SECRET:?NGINX_VIDEO_SECRET must be set}
     volumes:
       - /mnt/nextcloud/newwedidngsbymarkuserfiles:/uploads:ro
     networks:
