@@ -35,6 +35,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
+from share_selection import main_gallery_share_query
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -4479,10 +4480,15 @@ async def send_gallery_notification(gallery_id: str, request: Request, admin=Dep
         raise HTTPException(status_code=400, detail="SMTP not configured. Go to Settings > Email to set up.")
     smtp = smtp_doc["value"]
     
-    # Find the primary share link for this gallery
-    share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True}, {"_id": 0})
+    # The gallery-ready email must use the downloadable whole-gallery share.
+    # Never fall back to a QR/guest-upload or subfolder-only share: doing so can
+    # email the couple an upload link instead of their password-protected gallery.
+    share = await db.shares.find_one(main_gallery_share_query(gallery_id), {"_id": 0})
     if not share:
-        raise HTTPException(status_code=400, detail="No active share link found. Create a share link first.")
+        raise HTTPException(
+            status_code=400,
+            detail="No active main gallery download link found. Upload Wedding Images or create a whole-gallery Download share first.",
+        )
     
     # Build gallery URL
     base_url = str(request.base_url).rstrip("/")
