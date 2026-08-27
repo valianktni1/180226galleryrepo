@@ -1,5 +1,13 @@
 # Gallery Hardening Release 1
 
+## R1.1 frontend resolver correction
+
+The first live frontend smoke test showed that a freshly resolved `nginx:alpine`
+image could select Docker's IPv6 address for the `backend` and `nginx-video`
+service names, while those services listen on IPv4. Both Docker DNS resolver
+directives now set `ipv6=off`. This preserves the existing IPv4 service routing
+and prevents intermittent `connect() failed (111: Connection refused)` errors.
+
 Baseline: the live notification-email hotfix at commit
 `f324f51fcff21baaf9148f156a37e48b4a720bd6`.
 
