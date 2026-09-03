@@ -167,9 +167,13 @@ function ShareViewFull() {
     trackGalleryView(token);
   }, [token, navigate, loadFiles]);
 
-  // Scroll to top when entering or leaving an album
+  // Always reveal the folder heading and bulk-download controls when a folder
+  // is opened. The second reset runs after React has painted the new view and
+  // avoids browsers restoring the previous long-gallery scroll position.
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo(0, 0);
+    const frame = window.requestAnimationFrame(() => window.scrollTo(0, 0));
+    return () => window.cancelAnimationFrame(frame);
   }, [activeAlbum, showFavourites]);
 
 
@@ -351,6 +355,24 @@ function ShareViewFull() {
   }, [lightboxIndex, displayFiles]);
 
   const favCount = allFiles.filter(f => f.is_favourite).length;
+
+  // Clear, folder-specific wording for the prominent bulk-download button.
+  // This changes presentation only; every button still uses the existing,
+  // proven handleDownloadAlbum download path.
+  const folderDownloadItemLabel = (() => {
+    const count = currentAlbumFiles.length;
+    if (activeAlbum?.toLowerCase() === 'guest uploads') {
+      return count === 1 ? 'Guest Upload' : 'Guest Uploads';
+    }
+    if (count > 0 && currentAlbumFiles.every(file => file.file_type === 'video')) {
+      return count === 1 ? 'Video' : 'Videos';
+    }
+    if (count > 0 && currentAlbumFiles.every(file => file.file_type === 'photo')) {
+      return count === 1 ? 'Image' : 'Images';
+    }
+    return count === 1 ? 'File' : 'Files';
+  })();
+  const folderDownloadLabel = `Download All ${currentAlbumFiles.length} ${folderDownloadItemLabel}`;
 
   // Show all subfolders from the gallery (not just ones with files)
   const visibleAlbums = subfolders;
@@ -814,18 +836,19 @@ function ShareViewFull() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: t.bg, '--card-empty-bg': t.emptyBg }}>
       <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: darkMode ? 'rgba(26,26,26,0.85)' : 'rgba(253,252,248,0.85)', backdropFilter: 'blur(16px)', borderColor: darkMode ? '#333' : 'rgba(212,175,55,0.15)' }}>
-        <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-screen-xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <button data-testid="back-to-albums" onClick={() => { setActiveAlbum(null); setLightboxIndex(-1); setSelectMode(false); setSelectedFiles(new Set()); }}
+              className="shrink-0"
               style={{ color: t.text, transition: 'color 0.2s ease' }}>
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="text-lg font-medium" style={{ fontFamily: t.headingFont, color: t.headingColor }}>{activeAlbum}</h1>
-              <p className="text-xs" style={{ color: t.textSub, fontFamily: t.bodyFont }}>{coupleName} &middot; {currentAlbumFiles.length} files</p>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-medium truncate" style={{ fontFamily: t.headingFont, color: t.headingColor }}>{activeAlbum}</h1>
+              <p className="text-xs truncate" style={{ color: t.textSub, fontFamily: t.bodyFont }}>{coupleName} &middot; {currentAlbumFiles.length} files</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {permissions.allowDelete && (
               <Button data-testid="select-mode-btn" variant={selectMode ? "default" : "ghost"} 
                 onClick={() => { setSelectMode(m => !m); setSelectedFiles(new Set()); }}
@@ -848,15 +871,23 @@ function ShareViewFull() {
             )}
             {activeAlbum && activeAlbum.toLowerCase().includes('wedding') && !selectMode && currentAlbumFiles.filter(f => f.file_type === 'photo').length > 0 && (
               <Button data-testid="slideshow-btn" variant="ghost" onClick={() => setShowSlideshow(true)}
-                className="rounded-sm gap-2 text-xs tracking-wider"
+                className="rounded-sm gap-1.5 sm:gap-2 text-xs tracking-wider px-2 sm:px-4 h-9"
+                aria-label="Start slideshow"
+                title="Slideshow"
                 style={{ color: t.accent, fontFamily: t.bodyFont }}>
-                <PlayCircle className="w-3.5 h-3.5" /> Slideshow
+                <PlayCircle className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Slideshow</span>
               </Button>
             )}
-            {permissions.allowDownloads && !selectMode && (
+            {permissions.allowDownloads && currentAlbumFiles.length > 0 && !selectMode && (
               <Button data-testid="download-album-btn" variant="ghost" onClick={handleDownloadAlbum} disabled={downloading}
-                className="rounded-sm gap-2 text-xs tracking-wider" style={{ color: t.text }}>
-                <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing..." : "Download All"}
+                className="rounded-sm gap-1.5 sm:gap-2 text-xs tracking-wide px-2 sm:px-4 h-9"
+                aria-label={folderDownloadLabel}
+                title={folderDownloadLabel}
+                style={{ color: t.text }}>
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{downloading ? "Preparing..." : "Download All"}</span>
+                <span className="sm:hidden">{downloading ? "..." : `All (${currentAlbumFiles.length})`}</span>
               </Button>
             )}
           </div>
@@ -901,27 +932,27 @@ function ShareViewFull() {
               The small logo you see on your images is only visible here in your online gallery. 
               When you download your photos, they are completely watermark-free and in full quality.
             </p>
-            {permissions.allowDownloads && currentAlbumFiles.filter(f => f.file_type === 'photo').length > 0 && (
-              <button
-                data-testid="download-all-images-btn"
-                onClick={handleDownloadAlbum}
-                disabled={downloading}
-                className={`mt-4 w-full flex items-center justify-center gap-3 py-3.5 text-sm font-bold tracking-[0.15em] uppercase transition-all duration-200`}
-                style={{
-                  backgroundColor: t.accent,
-                  color: 'white',
-                  fontFamily: t.bodyFont,
-                  opacity: downloading ? 0.7 : 1,
-                  borderRadius: t.buttonStyle === 'pill' ? '9999px' : t.buttonStyle === 'rounded' ? '8px' : '2px',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = t.accentHover; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = t.accent; }}
-              >
-                <Download className="w-5 h-5" />
-                {downloading ? "Preparing Download..." : "Download All Images"}
-              </button>
-            )}
           </div>
+        )}
+        {permissions.allowDownloads && currentAlbumFiles.length > 0 && (
+          <button
+            data-testid="download-all-folder-btn"
+            onClick={handleDownloadAlbum}
+            disabled={downloading}
+            className="mb-8 w-full flex items-center justify-center gap-3 py-3.5 text-sm font-bold tracking-[0.12em] uppercase transition-all duration-200"
+            style={{
+              backgroundColor: t.accent,
+              color: 'white',
+              fontFamily: t.bodyFont,
+              opacity: downloading ? 0.7 : 1,
+              borderRadius: t.buttonStyle === 'pill' ? '9999px' : t.buttonStyle === 'rounded' ? '8px' : '2px',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = t.accentHover; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = t.accent; }}
+          >
+            <Download className="w-5 h-5" />
+            {downloading ? "Preparing Download..." : folderDownloadLabel}
+          </button>
         )}
         {currentAlbumFiles.length === 0 ? (
           <div className="text-center py-20">
