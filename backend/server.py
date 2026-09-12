@@ -37,6 +37,7 @@ from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
 from share_selection import main_gallery_share_query
 from share_security import ShareSessionError, refresh_share_claims, share_is_expired
+from backup_service import BackupManager
 from security_paths import (
     UnsafePathError,
     contained_path,
@@ -4345,74 +4346,29 @@ async def get_all_galleries_stats(admin=Depends(get_admin)):
 
 # ─── Backup Endpoint ───
 BACKUP_DIR = Path(os.environ.get('BACKUP_DIR', '/backup'))
+backup_manager = BackupManager(UPLOAD_DIR, BACKUP_DIR)
 
 @api_router.post("/admin/backup")
 async def run_backup(admin=Depends(get_admin)):
-    """Run incremental backup of all galleries to the backup directory."""
+    """Start one incremental backup without blocking gallery API requests."""
     if not BACKUP_DIR.exists():
         raise HTTPException(status_code=500, detail="Backup directory not configured or not accessible")
-    
-    stats = {"copied": 0, "skipped": 0, "errors": [], "galleries": 0}
-    
-    try:
-        # Iterate through all gallery folders in UPLOAD_DIR
-        for gallery_folder in UPLOAD_DIR.iterdir():
-            if not gallery_folder.is_dir():
-                continue
-            
-            stats["galleries"] += 1
-            backup_gallery_path = get_backup_gallery_path(gallery_folder.name)
-            backup_gallery_path.mkdir(parents=True, exist_ok=True)
-            
-            # Walk through all subfolders and files
-            for src_path in gallery_folder.rglob("*"):
-                if src_path.is_file():
-                    # Skip thumbnail/preview files
-                    if '.thumb.' in src_path.name or '.preview.' in src_path.name:
-                        continue
-                    
-                    # Calculate relative path and destination
-                    rel_path = src_path.relative_to(gallery_folder)
-                    try:
-                        dst_path = contained_path(
-                            backup_gallery_path,
-                            *rel_path.parts,
-                            labels=tuple("backup path component" for _ in rel_path.parts),
-                        )
-                    except UnsafePathError as exc:
-                        stats["errors"].append(f"Skipped unsafe backup path {rel_path}: {exc}")
-                        continue
-                    
-                    # Create parent directories if needed
-                    dst_path.parent.mkdir(parents=True, exist_ok=True)
-                    
-                    # Check if file needs copying (incremental logic)
-                    needs_copy = False
-                    if not dst_path.exists():
-                        needs_copy = True
-                    else:
-                        # Compare modification time and size
-                        src_stat = src_path.stat()
-                        dst_stat = dst_path.stat()
-                        if src_stat.st_size != dst_stat.st_size or src_stat.st_mtime > dst_stat.st_mtime:
-                            needs_copy = True
-                    
-                    if needs_copy:
-                        try:
-                            shutil.copy2(src_path, dst_path)  # copy2 preserves metadata
-                            stats["copied"] += 1
-                        except Exception as e:
-                            stats["errors"].append(f"{src_path.name}: {str(e)}")
-                    else:
-                        stats["skipped"] += 1
-        
-        return {
-            "success": True,
-            "message": f"Backup complete. {stats['copied']} files copied, {stats['skipped']} unchanged.",
-            "stats": stats
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
+
+    started, status = backup_manager.start()
+    if not started:
+        raise HTTPException(status_code=409, detail="A gallery backup is already running")
+
+    return {
+        "success": True,
+        "message": "Backup started in the background. The gallery remains available.",
+        "status": status,
+    }
+
+
+@api_router.get("/admin/backup/status")
+async def get_backup_status(admin=Depends(get_admin)):
+    """Return progress for the current or most recently completed backup."""
+    return backup_manager.status()
 
 # ─── Video Compression Settings ───
 VIDEO_COMPRESSION_SIZE_THRESHOLD = 200 * 1024 * 1024  # 200MB in bytes

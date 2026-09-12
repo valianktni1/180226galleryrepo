@@ -142,6 +142,8 @@ export const adminDownloadFile = (galleryId, fileId) => {
 // Backup
 export const runBackup = () =>
   apiClient.post('/admin/backup');
+export const getBackupStatus = () =>
+  apiClient.get('/admin/backup/status');
 
 // Video Compression Settings
 export const getCompressionSetting = () =>

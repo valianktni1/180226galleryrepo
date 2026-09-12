@@ -15,7 +15,7 @@ import {
   Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText, Paperclip
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats, getEmailTemplates
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getBackupStatus, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats, getEmailTemplates
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 
@@ -33,6 +33,7 @@ export default function AdminDashboard() {
   const [form, setForm] = useState({ folder_name: "", template_id: "", client_email: "", theme: "classic_gold" });
   const [newTemplate, setNewTemplate] = useState({ name: "", subfolders: "" });
   const [backingUp, setBackingUp] = useState(false);
+  const [backupStatus, setBackupStatus] = useState(null);
   const [liveVisitors, setLiveVisitors] = useState([]);
   const [dashStats, setDashStats] = useState({ active_galleries: 0, expiring_soon: 0, downloads_this_week: 0, pending_albums: 0, storage_used_bytes: 0 });
   const [networkStats, setNetworkStats] = useState(null);
@@ -82,15 +83,54 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // The backup runs in its own backend worker. Poll its lightweight in-memory
+  // status so closing or refreshing this page never interrupts the backup.
+  useEffect(() => {
+    let mounted = true;
+    let previousStatus = null;
+
+    const pollBackupStatus = async () => {
+      try {
+        const res = await getBackupStatus();
+        if (!mounted) return;
+        const status = res.data;
+        setBackupStatus(status);
+        setBackingUp(status.status === "running");
+
+        if (previousStatus === "running" && status.status === "complete") {
+          if ((status.errors || []).length > 0) {
+            toast.warning(status.message);
+          } else {
+            toast.success(status.message);
+          }
+        } else if (previousStatus === "running" && status.status === "failed") {
+          toast.error(status.message || "Backup failed");
+        }
+        previousStatus = status.status;
+      } catch {
+        // A temporary polling failure must not interrupt the running backup.
+      }
+    };
+
+    pollBackupStatus();
+    const interval = setInterval(pollBackupStatus, 2000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   const handleBackup = async () => {
     setBackingUp(true);
     try {
       const res = await runBackup();
+      setBackupStatus(res.data.status || null);
       toast.success(res.data.message);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Backup failed");
-    } finally {
-      setBackingUp(false);
+      if (err.response?.status !== 409) {
+        setBackingUp(false);
+      }
     }
   };
 
@@ -214,8 +254,20 @@ export default function AdminDashboard() {
             <img src="/logo.png" alt="Weddings By Mark" className="h-8" style={{ filter: 'invert(1)' }} />
           </div>
           <div className="flex items-center gap-2">
-            <Button data-testid="backup-btn" variant="ghost" onClick={handleBackup} disabled={backingUp} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
-              <HardDrive className={`w-4 h-4 ${backingUp ? 'animate-pulse' : ''}`} /> {backingUp ? 'Backing up...' : 'Backup'}
+            <Button
+              data-testid="backup-btn"
+              variant="ghost"
+              onClick={handleBackup}
+              disabled={backingUp}
+              title={backingUp && backupStatus?.current_gallery ? `Backing up ${backupStatus.current_gallery}` : "Back up gallery originals"}
+              className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider"
+            >
+              <HardDrive className={`w-4 h-4 ${backingUp ? 'animate-pulse' : ''}`} />
+              {backingUp
+                ? (backupStatus?.galleries_total
+                    ? `Backup ${backupStatus.galleries_done}/${backupStatus.galleries_total}`
+                    : 'Backing up...')
+                : 'Backup'}
             </Button>
             <Button data-testid="broadcast-email-btn" variant="ghost" onClick={handleOpenBroadcast} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Mail className="w-4 h-4" /> Broadcast
