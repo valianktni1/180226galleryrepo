@@ -5350,6 +5350,9 @@ async def run_guest_upload_cleanup():
             try:
                 # Delete from disk (main upload)
                 file_path = get_gallery_file_path(folder_name, "Guest Uploads", filename)
+                web_path = get_web_version_path(file_path)
+                if web_path.exists():
+                    web_path.unlink()
                 if file_path.exists():
                     file_path.unlink()
                 
@@ -5365,6 +5368,9 @@ async def run_guest_upload_cleanup():
                 
                 # Delete from backup
                 backup_file = get_backup_file_path(folder_name, "Guest Uploads", filename)
+                backup_web_file = get_web_version_path(backup_file)
+                if backup_web_file.exists():
+                    backup_web_file.unlink()
                 if backup_file.exists():
                     backup_file.unlink()
                 
