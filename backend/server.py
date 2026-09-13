@@ -136,6 +136,9 @@ class GalleryUpdate(BaseModel):
     client_email: Optional[str] = None
     theme: Optional[str] = None
 
+class SubfolderCreate(BaseModel):
+    name: str
+
 class ShareCreate(BaseModel):
     gallery_id: str
     subfolder: Optional[str] = None  # None = whole gallery, or specific subfolder
@@ -1005,6 +1008,46 @@ async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get
     await db.galleries.update_one({"id": gallery_id}, {"$set": update})
     updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     return updated
+
+@api_router.post("/admin/galleries/{gallery_id}/subfolders")
+async def create_subfolder(gallery_id: str, data: SubfolderCreate, admin=Depends(get_admin)):
+    """Add one empty, safely contained subfolder to an existing gallery."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    subfolder_name = require_safe_component(data.name, "subfolder name")
+    if "." in subfolder_name or subfolder_name.startswith("$"):
+        raise HTTPException(
+            status_code=400,
+            detail="Folder names cannot contain dots or start with a dollar sign",
+        )
+
+    existing_subfolders = gallery.get("subfolders", [])
+    if any(name.casefold() == subfolder_name.casefold() for name in existing_subfolders):
+        raise HTTPException(status_code=400, detail="A folder with this name already exists")
+
+    folder_path = get_gallery_subfolder_path(gallery["folder_name"], subfolder_name)
+    folder_path.mkdir(parents=True, exist_ok=True)
+
+    updated_subfolders = [*existing_subfolders, subfolder_name]
+    updated_counts = dict(gallery.get("file_counts") or {})
+    updated_counts[subfolder_name] = 0
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {
+            "subfolders": updated_subfolders,
+            "file_counts": updated_counts,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+
+    return {
+        "success": True,
+        "subfolder": subfolder_name,
+        "subfolders": updated_subfolders,
+        "file_counts": updated_counts,
+    }
 
 class SetCoverRequest(BaseModel):
     file_id: str

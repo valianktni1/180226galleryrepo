@@ -25,11 +25,13 @@ import {
   Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw, Pencil, Paperclip
 } from "lucide-react";
 import {
-  getGallery, uploadFiles, deleteFile, deleteSubfolder, copyToSubfolder, adminDownloadFile,
+  getGallery, uploadFiles, deleteFile, createSubfolder, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
   updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail, getVideoHealth
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
+
+const STANDARD_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourites", "Guest Uploads"];
 
 export default function AdminGalleryDetail() {
   const { id } = useParams();
@@ -86,6 +88,11 @@ export default function AdminGalleryDetail() {
 
   // Subfolder delete confirmation
   const [deleteSubfolderTarget, setDeleteSubfolderTarget] = useState(null);
+
+  // Add subfolder
+  const [showAddFolderDialog, setShowAddFolderDialog] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   // File/bulk delete confirmation with backup option
   const [fileDeleteConfirm, setFileDeleteConfirm] = useState({ open: false, fileId: null, filename: "", deleteBackup: false, isBulk: false });
@@ -224,6 +231,32 @@ export default function AdminGalleryDetail() {
       loadGallery();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to delete subfolder");
+    }
+  };
+
+  const handleCreateSubfolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) {
+      toast.error("Enter a folder name");
+      return;
+    }
+
+    setCreatingFolder(true);
+    try {
+      const res = await createSubfolder(id, name);
+      setGallery(current => ({
+        ...current,
+        subfolders: res.data.subfolders,
+        file_counts: res.data.file_counts,
+      }));
+      setActiveTab(res.data.subfolder);
+      setNewFolderName("");
+      setShowAddFolderDialog(false);
+      toast.success(`"${res.data.subfolder}" added`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to add folder");
+    } finally {
+      setCreatingFolder(false);
     }
   };
 
@@ -720,8 +753,8 @@ export default function AdminGalleryDetail() {
 
         {/* Subfolder Tabs */}
         <Tabs value={activeTab} onValueChange={v => { setActiveTab(v); setSelectedFiles(new Set()); }}>
-          <div className="flex items-center border-b mb-6" style={{ borderColor: '#F5F2EB' }}>
-            <TabsList className="bg-transparent w-full justify-start rounded-none h-auto p-0">
+          <div className="flex items-center gap-1 border-b mb-6" style={{ borderColor: '#F5F2EB' }}>
+            <TabsList className="bg-transparent flex-1 justify-start rounded-none h-auto p-0 overflow-x-auto">
               {gallery.subfolders.map(sf => {
                 const count = (gallery.file_counts || {})[sf] || 0;
                 return (
@@ -733,6 +766,16 @@ export default function AdminGalleryDetail() {
                 );
               })}
             </TabsList>
+            <Button
+              data-testid="add-subfolder-btn"
+              variant="ghost"
+              onClick={() => { setNewFolderName(""); setShowAddFolderDialog(true); }}
+              className="shrink-0 text-[#3F6212] hover:text-[#365314] hover:bg-[#3F6212]/5 rounded-sm px-2 sm:px-3 py-2 text-xs gap-1.5"
+              style={{ fontFamily: 'Manrope, sans-serif' }}
+              title="Add folder"
+            >
+              <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Add Folder</span>
+            </Button>
             {activeTab && (
               <Button
                 data-testid={`delete-subfolder-btn`}
@@ -1073,7 +1116,8 @@ export default function AdminGalleryDetail() {
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password (leave empty for no password)</Label>
               <div className="flex gap-2">
-                <Input data-testid="share-password-input" value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
+                <Input data-testid="share-password-input" name="new-share-password" autoComplete="new-password" data-lpignore="true"
+                  value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
                   placeholder="Optional - leave blank for open access" className="border-[#D4D4D8] rounded-sm flex-1" />
                 <Button type="button" variant="outline" size="sm" data-testid="generate-password-btn"
                   className="shrink-0 text-xs gap-1.5 border-[#D4D4D8] hover:bg-[#F5F2EB]"
@@ -1270,7 +1314,8 @@ export default function AdminGalleryDetail() {
               <div className="space-y-1.5">
                 <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password</Label>
                 <div className="flex gap-2">
-                  <Input data-testid="edit-share-password" value={editForm.password} onChange={e => setEditForm(f => ({...f, password: e.target.value}))}
+                  <Input data-testid="edit-share-password" name="edit-share-password" autoComplete="new-password" data-lpignore="true"
+                    value={editForm.password} onChange={e => setEditForm(f => ({...f, password: e.target.value}))}
                     placeholder="Leave blank to remove password" className="border-[#D4D4D8] rounded-sm flex-1" />
                   <Button type="button" variant="outline" size="sm" data-testid="edit-generate-password-btn"
                     className="shrink-0 text-xs gap-1.5 border-[#D4D4D8] hover:bg-[#F5F2EB]"
@@ -1305,6 +1350,47 @@ export default function AdminGalleryDetail() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Folder Dialog */}
+      <Dialog open={showAddFolderDialog} onOpenChange={(open) => {
+        setShowAddFolderDialog(open);
+        if (!open) setNewFolderName("");
+      }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Add Folder</DialogTitle>
+            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              Add an empty folder to {gallery?.folder_name}. Existing files and folders will not be changed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex flex-wrap gap-2">
+              {STANDARD_SUBFOLDERS.filter(name => !gallery?.subfolders?.some(existing => existing.toLowerCase() === name.toLowerCase())).map(name => (
+                <Button key={name} type="button" variant="outline" size="sm"
+                  onClick={() => setNewFolderName(name)}
+                  className="rounded-sm text-xs border-[#D4D4D8] hover:border-[#D4AF37]">
+                  {name}
+                </Button>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-subfolder-name" className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Folder name</Label>
+              <Input id="new-subfolder-name" data-testid="new-subfolder-name" value={newFolderName}
+                onChange={e => setNewFolderName(e.target.value)} placeholder="e.g. Album Favourites" autoFocus
+                className="border-[#D4D4D8] rounded-sm"
+                onKeyDown={e => { if (e.key === 'Enter' && !creatingFolder) handleCreateSubfolder(); }} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddFolderDialog(false)} className="rounded-sm">Cancel</Button>
+            <Button data-testid="confirm-add-subfolder" onClick={handleCreateSubfolder}
+              disabled={!newFolderName.trim() || creatingFolder}
+              className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 text-xs tracking-wider uppercase font-bold gap-2">
+              <Plus className="w-3.5 h-3.5" /> {creatingFolder ? "Adding..." : "Add Folder"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

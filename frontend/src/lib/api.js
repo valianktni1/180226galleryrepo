@@ -113,6 +113,8 @@ export const uploadFiles = (galleryId, subfolder, files, onProgress) => {
 };
 export const deleteFile = (galleryId, fileId, deleteBackup = false) =>
   apiClient.delete(`/admin/galleries/${galleryId}/files/${fileId}?delete_backup=${deleteBackup}`);
+export const createSubfolder = (galleryId, name) =>
+  apiClient.post(`/admin/galleries/${galleryId}/subfolders`, { name });
 export const deleteSubfolder = (galleryId, subfolderName) =>
   apiClient.delete(`/admin/galleries/${galleryId}/subfolders/${encodeURIComponent(subfolderName)}`);
 export const setSubfolderCover = (galleryId, subfolderName, fileId) =>
