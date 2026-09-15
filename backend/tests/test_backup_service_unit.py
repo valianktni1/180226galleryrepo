@@ -123,5 +123,34 @@ class BackupServiceTests(unittest.TestCase):
             self.assertEqual(second["copied"], 0)
             self.assertEqual(second["skipped"], 1)
 
+    def test_completed_status_is_restored_after_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            backup = root / "backup"
+            state_file = root / ".cache" / "backup-status.json"
+            source.mkdir()
+            backup.mkdir()
+            (source / "Couple").mkdir()
+            (source / "Couple" / "photo.jpg").write_bytes(b"photo")
+
+            manager = BackupManager(source, backup, state_file)
+            try:
+                started, _ = manager.start()
+                self.assertTrue(started)
+                deadline = time.monotonic() + 2
+                while manager.status()["status"] == "running" and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertEqual(manager.status()["status"], "complete")
+            finally:
+                manager._executor.shutdown(wait=True)
+
+            restored = BackupManager(source, backup, state_file)
+            try:
+                self.assertEqual(restored.status()["status"], "complete")
+                self.assertIsNotNone(restored.status()["finished_at"])
+            finally:
+                restored._executor.shutdown(wait=True)
+
 if __name__ == "__main__":
     unittest.main()

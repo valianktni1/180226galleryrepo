@@ -295,5 +295,25 @@ class DownloadJobManager:
                 "share_token": job["share_token"],
             }
 
+    def health_snapshot(self) -> Dict:
+        """Return aggregate job information without owners, tickets or paths."""
+        self._cleanup_expired()
+        with self._lock:
+            by_status = {
+                status: sum(job["status"] == status for job in self._jobs.values())
+                for status in ("queued", "preparing", "ready", "downloading", "complete", "failed")
+            }
+            active = sum(by_status[status] for status in ("queued", "preparing", "ready", "downloading"))
+        cache_bytes = 0
+        try:
+            cache_bytes = sum(path.stat().st_size for path in self.cache_dir.glob("*.zip"))
+        except OSError:
+            pass
+        return {
+            "active": active,
+            "by_status": by_status,
+            "cache_bytes": cache_bytes,
+        }
+
     def shutdown(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=True)

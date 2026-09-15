@@ -140,6 +140,23 @@ class DownloadJobManagerTests(unittest.TestCase):
         self.assertEqual(failed["status"], "failed")
         self.assertFalse((self.cache_dir / f"{state['id']}.zip").exists())
 
+    def test_health_snapshot_is_aggregate_and_contains_no_private_access_data(self):
+        source = self.source_dir / "one.jpg"
+        source.write_bytes(b"photo" * 100)
+        self.manager.start(
+            owner_kind="share", owner_id="viewer-secret", gallery_id="gallery-secret",
+            label="Wedding Images", filename="download.zip",
+            entries=[(source, "one.jpg")], share_token="private-share-token",
+        )
+        snapshot = self.manager.health_snapshot()
+        rendered = repr(snapshot)
+        self.assertGreaterEqual(snapshot["active"], 1)
+        self.assertIn("by_status", snapshot)
+        self.assertIn("cache_bytes", snapshot)
+        self.assertNotIn("viewer-secret", rendered)
+        self.assertNotIn("gallery-secret", rendered)
+        self.assertNotIn("private-share-token", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

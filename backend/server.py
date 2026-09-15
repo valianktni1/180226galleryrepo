@@ -39,6 +39,7 @@ from share_selection import main_gallery_share_query
 from share_security import ShareSessionError, refresh_share_claims, share_is_expired
 from backup_service import BackupManager
 from download_job_service import DownloadJobError, DownloadJobManager
+from system_health import backup_health, overall_status, storage_status, utc_now_iso
 from security_paths import (
     UnsafePathError,
     contained_path,
@@ -98,6 +99,7 @@ api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+APP_STARTED_AT = time.time()
 
 # Startup diagnostic: log UPLOAD_DIR contents so file path issues are visible in Docker logs
 logger.info(f"STARTUP: UPLOAD_DIR={UPLOAD_DIR} exists={UPLOAD_DIR.exists()}")
@@ -4598,7 +4600,7 @@ async def get_all_galleries_stats(admin=Depends(get_admin)):
 
 # ─── Backup Endpoint ───
 BACKUP_DIR = Path(os.environ.get('BACKUP_DIR', '/backup'))
-backup_manager = BackupManager(UPLOAD_DIR, BACKUP_DIR)
+backup_manager = BackupManager(UPLOAD_DIR, BACKUP_DIR, UPLOAD_DIR / ".cache" / "backup-status.json")
 
 @api_router.post("/admin/backup")
 async def run_backup(admin=Depends(get_admin)):
@@ -4621,6 +4623,154 @@ async def run_backup(admin=Depends(get_admin)):
 async def get_backup_status(admin=Depends(get_admin)):
     """Return progress for the current or most recently completed backup."""
     return backup_manager.status()
+
+
+@api_router.get("/admin/system-health")
+async def get_system_health(admin=Depends(get_admin)):
+    """Return a read-only, secret-free summary of services the app can verify."""
+    database_health = {
+        "status": "critical",
+        "title": "MongoDB unavailable",
+        "detail": "The gallery database did not answer its health check.",
+        "latency_ms": None,
+    }
+    smtp_doc = None
+    try:
+        started = time.perf_counter()
+        await db.command("ping")
+        database_health = {
+            "status": "healthy",
+            "title": "MongoDB connected",
+            "detail": "The gallery database answered normally.",
+            "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+        }
+        smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0, "value": 1})
+    except Exception:
+        logger.warning("System health database check failed", exc_info=True)
+
+    try:
+        usage = shutil.disk_usage(UPLOAD_DIR)
+        used_percent = round((usage.used / usage.total) * 100, 1) if usage.total else 0
+        storage_health = {
+            "status": storage_status(used_percent),
+            "title": "Gallery storage available",
+            "detail": "Capacity for original gallery files and generated media.",
+            "total_bytes": usage.total,
+            "used_bytes": usage.used,
+            "free_bytes": usage.free,
+            "used_percent": used_percent,
+            "writable": os.access(UPLOAD_DIR, os.W_OK),
+        }
+        if not storage_health["writable"]:
+            storage_health.update(
+                status="critical",
+                title="Gallery storage is read-only",
+                detail="The application cannot write to its gallery storage mount.",
+            )
+    except OSError:
+        storage_health = {
+            "status": "critical",
+            "title": "Gallery storage unavailable",
+            "detail": "The application could not read its gallery storage capacity.",
+            "total_bytes": 0,
+            "used_bytes": 0,
+            "free_bytes": 0,
+            "used_percent": 0,
+            "writable": False,
+        }
+
+    smtp_value = (smtp_doc or {}).get("value", {})
+    email_configured = all(smtp_value.get(key) for key in ("smtp_server", "smtp_email", "smtp_password"))
+    email_health = {
+        "status": "healthy" if email_configured else "warning",
+        "title": "Email configured" if email_configured else "Email needs configuration",
+        "detail": (
+            "SMTP details are stored. Use Settings → Email to send a live test when required."
+            if email_configured else "Complete SMTP settings before sending gallery notifications."
+        ),
+    }
+
+    gpu_device = Path("/dev/dri/renderD128").exists()
+    ffmpeg_available = shutil.which("ffmpeg") is not None
+    gpu_health = {
+        "status": "healthy" if gpu_device and ffmpeg_available else "warning",
+        "title": "Video GPU detected" if gpu_device and ffmpeg_available else "Video CPU fallback available",
+        "detail": (
+            "AMD render device and FFmpeg are available to the backend."
+            if gpu_device and ffmpeg_available
+            else "The hardware render device was not detected; video optimisation can use the CPU fallback."
+        ),
+    }
+
+    now = time.time()
+    current_visitors = sum(
+        now - visitor["last_seen"] <= VISITOR_TIMEOUT
+        for visitor in active_visitors.values()
+    )
+
+    transcode_active = sum(
+        info.get("status") in {"queued", "transcoding", "processing"}
+        for info in file_transcode_progress.values()
+    )
+    optimise_active = sum(
+        progress.get("done", 0) < progress.get("total", 0)
+        for progress in video_optimise_progress.values()
+    )
+    download_health = download_job_manager.health_snapshot()
+    backup = backup_health(backup_manager.status())
+    backup_running = backup["status"] == "active"
+    active_work = transcode_active + optimise_active + download_health["active"] + int(backup_running)
+
+    monitored = [database_health, storage_health, email_health, gpu_health, backup]
+    status = overall_status(monitored)
+    overall_titles = {
+        "healthy": "All monitored systems look healthy",
+        "warning": "One or more items need attention",
+        "critical": "A critical service needs attention",
+    }
+
+    return {
+        "status": status,
+        "title": overall_titles[status],
+        "checked_at": utc_now_iso(),
+        "uptime_seconds": int(time.time() - APP_STARTED_AT),
+        "summary": {
+            "storage": storage_health,
+            "backup": backup,
+            "active_work": active_work,
+            "couples_online": current_visitors,
+        },
+        "services": {
+            "api": {
+                "status": "healthy",
+                "title": "Gallery API responding",
+                "detail": "This authenticated health request completed normally.",
+            },
+            "database": database_health,
+            "email": email_health,
+            "video_gpu": gpu_health,
+        },
+        "work": {
+            "video_optimisations": optimise_active,
+            "video_files_transcoding": transcode_active,
+            "folder_downloads": download_health,
+            "backup_running": backup_running,
+            "couples_online": current_visitors,
+        },
+        "protection": {
+            "gallery_backup": backup,
+            "database_backup": {
+                "status": "neutral",
+                "title": "MongoDB backup managed externally",
+                "detail": "The gallery app does not inspect or change the TrueNAS database backup schedule.",
+            },
+            "offsite_backup": {
+                "status": "neutral",
+                "title": "Off-site backup managed externally",
+                "detail": "Backblaze or other off-site jobs remain under TrueNAS data protection.",
+            },
+        },
+    }
 
 # ─── Video Compression Settings ───
 VIDEO_COMPRESSION_SIZE_THRESHOLD = 200 * 1024 * 1024  # 200MB in bytes

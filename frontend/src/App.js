@@ -6,6 +6,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import AdminGalleryDetail from "@/pages/AdminGalleryDetail";
 import AdminSettings from "@/pages/AdminSettings";
 import AdminActivity from "@/pages/AdminActivity";
+import AdminSystemHealth from "@/pages/AdminSystemHealth";
 import ShareAccess from "@/pages/ShareAccess";
 import ShareView from "@/pages/ShareView";
 import SlideshowDirect from "@/pages/SlideshowDirect";
@@ -22,6 +23,7 @@ function App() {
           <Route path="/admin/gallery/:id" element={<AdminGalleryDetail />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
           <Route path="/admin/activity" element={<AdminActivity />} />
+          <Route path="/admin/health" element={<AdminSystemHealth />} />
           <Route path="/s/:token" element={<ShareAccess />} />
           <Route path="/s/:token/view" element={<ShareView />} />
           <Route path="/s/:token/slideshow" element={<SlideshowDirect />} />

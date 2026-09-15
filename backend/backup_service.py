@@ -8,6 +8,7 @@ backed up because they can be recreated from the preserved original video.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import shutil
 import threading
@@ -137,12 +138,13 @@ def incremental_backup(
 class BackupManager:
     """Own one background backup job and expose a thread-safe status snapshot."""
 
-    def __init__(self, source_root: Path, backup_root: Path):
+    def __init__(self, source_root: Path, backup_root: Path, state_file: Optional[Path] = None):
         self.source_root = source_root
         self.backup_root = backup_root
+        self.state_file = Path(state_file) if state_file else None
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gallery-backup")
         self._lock = threading.Lock()
-        self._state = self._idle_state()
+        self._state = self._load_state()
 
     @staticmethod
     def _idle_state() -> Dict:
@@ -165,6 +167,37 @@ class BackupManager:
         with self._lock:
             return copy.deepcopy(self._state)
 
+    def _load_state(self) -> Dict:
+        if not self.state_file or not self.state_file.exists():
+            return self._idle_state()
+        try:
+            state = json.loads(self.state_file.read_text(encoding="utf-8"))
+            if not isinstance(state, dict):
+                return self._idle_state()
+            loaded = self._idle_state()
+            loaded.update({key: state[key] for key in loaded if key in state})
+            if loaded["status"] == "running":
+                loaded.update(
+                    status="failed",
+                    message="The previous gallery backup was interrupted by an application restart.",
+                    finished_at=utc_now_iso(),
+                    current_gallery=None,
+                )
+            return loaded
+        except (OSError, ValueError, TypeError):
+            return self._idle_state()
+
+    def _persist_state(self) -> None:
+        if not self.state_file:
+            return
+        try:
+            self.state_file.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.state_file.with_suffix(self.state_file.suffix + ".tmp")
+            temporary.write_text(json.dumps(self._state), encoding="utf-8")
+            temporary.replace(self.state_file)
+        except OSError:
+            logger.warning("Could not persist gallery backup status", exc_info=True)
+
     def start(self) -> Tuple[bool, Dict]:
         with self._lock:
             if self._state["status"] == "running":
@@ -176,6 +209,7 @@ class BackupManager:
                 message="Backup started.",
                 started_at=utc_now_iso(),
             )
+            self._persist_state()
             state = copy.deepcopy(self._state)
 
         self._executor.submit(self._run)
@@ -201,6 +235,7 @@ class BackupManager:
                     finished_at=utc_now_iso(),
                     current_gallery=None,
                 )
+                self._persist_state()
             logger.info(message)
         except Exception as exc:
             logger.exception("Gallery backup failed")
@@ -211,3 +246,4 @@ class BackupManager:
                     finished_at=utc_now_iso(),
                     current_gallery=None,
                 )
+                self._persist_state()

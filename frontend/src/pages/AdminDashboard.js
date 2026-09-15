@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText, Paperclip
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText, Paperclip, HeartPulse
 } from "lucide-react";
 import {
   listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getBackupStatus, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats, getEmailTemplates
@@ -278,6 +278,9 @@ export default function AdminDashboard() {
             <Button data-testid="activity-btn" variant="ghost" onClick={() => navigate("/admin/activity")} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Eye className="w-4 h-4" /> Activity
             </Button>
+            <Button data-testid="health-btn" variant="ghost" onClick={() => navigate("/admin/health")} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider" title="System Health">
+              <HeartPulse className="w-4 h-4" /> <span className="hidden xl:inline">Health</span>
+            </Button>
             <Button data-testid="settings-btn" variant="ghost" onClick={() => navigate("/admin/settings")} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Settings className="w-4 h-4" /> Settings
             </Button>
@@ -325,6 +328,9 @@ export default function AdminDashboard() {
                 <p className="text-[10px]" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Bandwidth usage &amp; total storage</p>
               </div>
             </div>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/admin/health")} className="gap-2 text-xs text-[#57534E]" data-testid="open-health-panel-btn">
+              <HeartPulse className="w-4 h-4" /> <span className="hidden sm:inline">System Health</span>
+            </Button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5" style={{ borderTop: '1px solid #E8E4DC' }}>
             {/* Total Storage */}
