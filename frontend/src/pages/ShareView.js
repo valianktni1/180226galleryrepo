@@ -13,10 +13,12 @@ import {
   ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun, Share2, Star, Clock
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareDownloadUrl, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl, chooseAlbumCover, getAlbumCoverChoice
+  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl, chooseAlbumCover, getAlbumCoverChoice,
+  startShareFolderDownload, getShareFolderDownloadStatus, getDownloadJobFileUrl
 } from "@/lib/api";
 import { getTheme } from "@/lib/themes";
 import InstallBanner from "@/components/InstallBanner";
+import DownloadJobProgress from "@/components/DownloadJobProgress";
 
 // Code-split heavy components — only loaded when actually needed
 const GuestUploadView = lazy(() => import("@/pages/GuestUploadView"));
@@ -65,6 +67,9 @@ function ShareViewFull() {
   const [lightboxIndex, setLightboxIndex] = useState(-1);
   const [showFavourites, setShowFavourites] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadJob, setDownloadJob] = useState(null);
+  const downloadPollRef = useRef(null);
+  const downloadStartedRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectMode, setSelectMode] = useState(false);
@@ -83,6 +88,10 @@ function ShareViewFull() {
     const onScroll = () => setShowBackToTop(window.scrollY > 600);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => () => {
+    if (downloadPollRef.current) clearTimeout(downloadPollRef.current);
   }, []);
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -245,7 +254,43 @@ function ShareViewFull() {
     }
   };
 
-  const handleDownloadAlbum = () => {
+  const pollShareDownload = (jobId, ticket) => {
+    const check = async () => {
+      try {
+        const response = await getShareFolderDownloadStatus(token, jobId);
+        const nextJob = { ...response.data, ticket };
+        setDownloadJob(nextJob);
+
+        if (nextJob.status === "ready" && downloadStartedRef.current !== jobId) {
+          downloadStartedRef.current = jobId;
+          const link = document.createElement("a");
+          link.href = getDownloadJobFileUrl(jobId, ticket);
+          link.style.display = "none";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          trackDownload(token);
+        }
+        if (nextJob.status === "complete") {
+          setDownloading(false);
+          toast.success("Folder download complete");
+          return;
+        }
+        if (nextJob.status === "failed") {
+          setDownloading(false);
+          toast.error(nextJob.message || "Download failed");
+          return;
+        }
+        downloadPollRef.current = setTimeout(check, 750);
+      } catch (err) {
+        setDownloading(false);
+        toast.error(getErrorMessage(err, "Could not check download progress"));
+      }
+    };
+    check();
+  };
+
+  const handleDownloadAlbum = async () => {
     if (!permissions.allowDownloads) {
       toast.error("Downloads are not allowed on this share");
       return;
@@ -264,12 +309,22 @@ function ShareViewFull() {
       return;
     }
     
-    // For album download, use direct URL
+    // Folder downloads are prepared on disk and report genuine progress.
     if (activeAlbum) {
-      const url = getShareDownloadUrl(token, activeAlbum);
-      window.open(url, '_blank');
-      toast.success("Download started");
-      trackDownload(token);
+      if (downloading) return;
+      if (downloadPollRef.current) clearTimeout(downloadPollRef.current);
+      setDownloading(true);
+      setDownloadJob({ status: "queued", files_done: 0, files_total: currentAlbumFiles.length, percent: 0, label: activeAlbum });
+      downloadStartedRef.current = null;
+      try {
+        const response = await startShareFolderDownload(token, activeAlbum);
+        setDownloadJob(response.data);
+        pollShareDownload(response.data.id, response.data.ticket);
+      } catch (err) {
+        setDownloading(false);
+        setDownloadJob(null);
+        toast.error(getErrorMessage(err, "Download failed"));
+      }
     }
   };
 
@@ -939,7 +994,7 @@ function ShareViewFull() {
             data-testid="download-all-folder-btn"
             onClick={handleDownloadAlbum}
             disabled={downloading}
-            className="mb-8 w-full flex items-center justify-center gap-3 py-3.5 text-sm font-bold tracking-[0.12em] uppercase transition-all duration-200"
+            className={`${downloadJob?.label === activeAlbum ? "mb-3" : "mb-8"} w-full flex items-center justify-center gap-3 py-3.5 text-sm font-bold tracking-[0.12em] uppercase transition-all duration-200`}
             style={{
               backgroundColor: t.accent,
               color: 'white',
@@ -953,6 +1008,9 @@ function ShareViewFull() {
             <Download className="w-5 h-5" />
             {downloading ? "Preparing Download..." : folderDownloadLabel}
           </button>
+        )}
+        {downloadJob?.label === activeAlbum && (
+          <DownloadJobProgress job={downloadJob} accent={t.accent} dark={darkMode} className="mb-8" />
         )}
         {currentAlbumFiles.length === 0 ? (
           <div className="text-center py-20">

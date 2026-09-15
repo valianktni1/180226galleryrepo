@@ -133,6 +133,18 @@ export const downloadSubfolderZip = (galleryId, subfolder) => {
   return `${BACKEND_URL}/api/admin/galleries/${galleryId}/download-subfolder?subfolder=${encodeURIComponent(subfolder)}&token=${encodeURIComponent(token)}`;
 };
 
+// Progress-aware, disk-backed folder downloads
+export const startAdminFolderDownload = (galleryId, subfolder) =>
+  apiClient.post(`/admin/galleries/${galleryId}/download-jobs`, { subfolder });
+export const getAdminFolderDownloadStatus = (jobId) =>
+  apiClient.get(`/admin/download-jobs/${jobId}`);
+export const startShareFolderDownload = (token, subfolder) =>
+  apiClient.post(`/share/${token}/download-jobs`, { subfolder });
+export const getShareFolderDownloadStatus = (token, jobId) =>
+  apiClient.get(`/share/${token}/download-jobs/${jobId}`);
+export const getDownloadJobFileUrl = (jobId, ticket) =>
+  `${BACKEND_URL}/api/download-jobs/${encodeURIComponent(jobId)}/file?ticket=${encodeURIComponent(ticket)}`;
+
 // Admin download single file
 export const adminDownloadFile = (galleryId, fileId) => {
   const token = localStorage.getItem('admin_token');

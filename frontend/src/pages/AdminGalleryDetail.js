@@ -27,9 +27,11 @@ import {
 import {
   getGallery, uploadFiles, deleteFile, createSubfolder, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
-  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail, getVideoHealth
+  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail, getVideoHealth,
+  startAdminFolderDownload, getAdminFolderDownloadStatus, getDownloadJobFileUrl, getErrorMessage
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
+import DownloadJobProgress from "@/components/DownloadJobProgress";
 
 const STANDARD_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourites", "Guest Uploads"];
 
@@ -46,6 +48,10 @@ export default function AdminGalleryDetail() {
   const [activeTab, setActiveTab] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadJob, setDownloadJob] = useState(null);
+  const downloadPollRef = useRef(null);
+  const downloadStartedRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [copying, setCopying] = useState(false);
@@ -162,6 +168,10 @@ export default function AdminGalleryDetail() {
       if (thumbPollingRef.current) {
         clearInterval(thumbPollingRef.current);
         thumbPollingRef.current = null;
+      }
+      if (downloadPollRef.current) {
+        clearTimeout(downloadPollRef.current);
+        downloadPollRef.current = null;
       }
     };
   }, []);
@@ -308,21 +318,56 @@ export default function AdminGalleryDetail() {
     }
   };
 
-  const handleDownloadAll = () => {
-    const token = localStorage.getItem('admin_token');
-    const url = `${process.env.REACT_APP_BACKEND_URL}/api/admin/galleries/${id}/download-subfolder?subfolder=${encodeURIComponent(activeTab)}`;
-    // Open in new tab - browser handles the download with auth via fetch
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => res.blob())
-      .then(blob => {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `${gallery.folder_name} - ${activeTab}.zip`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-        toast.success("Download started");
-      })
-      .catch(() => toast.error("Download failed"));
+  const pollAdminDownload = (jobId, ticket) => {
+    const check = async () => {
+      try {
+        const response = await getAdminFolderDownloadStatus(jobId);
+        const nextJob = { ...response.data, ticket };
+        setDownloadJob(nextJob);
+
+        if (nextJob.status === "ready" && downloadStartedRef.current !== jobId) {
+          downloadStartedRef.current = jobId;
+          const link = document.createElement("a");
+          link.href = getDownloadJobFileUrl(jobId, ticket);
+          link.style.display = "none";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }
+        if (nextJob.status === "complete") {
+          setDownloading(false);
+          toast.success("Folder download complete");
+          return;
+        }
+        if (nextJob.status === "failed") {
+          setDownloading(false);
+          toast.error(nextJob.message || "Download failed");
+          return;
+        }
+        downloadPollRef.current = setTimeout(check, 750);
+      } catch (err) {
+        setDownloading(false);
+        toast.error(getErrorMessage(err, "Could not check download progress"));
+      }
+    };
+    check();
+  };
+
+  const handleDownloadAll = async () => {
+    if (!activeTab || downloading) return;
+    if (downloadPollRef.current) clearTimeout(downloadPollRef.current);
+    setDownloading(true);
+    setDownloadJob({ status: "queued", files_done: 0, files_total: currentFiles.length, percent: 0, label: activeTab });
+    downloadStartedRef.current = null;
+    try {
+      const response = await startAdminFolderDownload(id, activeTab);
+      setDownloadJob(response.data);
+      pollAdminDownload(response.data.id, response.data.ticket);
+    } catch (err) {
+      setDownloading(false);
+      setDownloadJob(null);
+      toast.error(getErrorMessage(err, "Download failed"));
+    }
   };
 
   const handleDownloadSingleFile = async (file) => {
@@ -819,6 +864,7 @@ export default function AdminGalleryDetail() {
 
               {/* Action Bar */}
               {currentFiles.length > 0 && (
+                <>
                 <div className="flex items-center gap-2 mb-4 flex-wrap">
                   <Button data-testid="select-mode-btn" variant={selectMode ? "default" : "outline"} 
                     onClick={() => { setSelectMode(m => !m); setSelectedFiles(new Set()); }}
@@ -915,13 +961,19 @@ export default function AdminGalleryDetail() {
                         ))}
                       </div>
                     )}
-                    <Button data-testid="download-all-btn" variant="outline" onClick={handleDownloadAll}
+                    <Button data-testid="download-all-btn" variant="outline" onClick={handleDownloadAll} disabled={downloading}
                       className="rounded-sm text-xs tracking-wider gap-1.5 border-[#D4D4D8] text-[#57534E]"
                       style={{ fontFamily: 'Manrope, sans-serif' }}>
-                      <Download className="w-3.5 h-3.5" /> Download All ({currentFiles.length})
+                      <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing…" : `Download All (${currentFiles.length})`}
                     </Button>
                   </div>
                 </div>
+                {downloadJob?.label === activeTab && (
+                  <div className="mb-4 ml-auto w-full sm:max-w-md">
+                    <DownloadJobProgress job={downloadJob} />
+                  </div>
+                )}
+                </>
               )}
 
               {/* Files Grid */}

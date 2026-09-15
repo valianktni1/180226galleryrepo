@@ -38,6 +38,7 @@ from email.utils import formataddr
 from share_selection import main_gallery_share_query
 from share_security import ShareSessionError, refresh_share_claims, share_is_expired
 from backup_service import BackupManager
+from download_job_service import DownloadJobError, DownloadJobManager
 from security_paths import (
     UnsafePathError,
     contained_path,
@@ -56,6 +57,8 @@ UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR', '/app/uploads'))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR = UPLOAD_DIR / ".cache" / "thumbs"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+DOWNLOAD_CACHE_DIR = UPLOAD_DIR / ".cache" / "downloads"
+download_job_manager = DownloadJobManager(DOWNLOAD_CACHE_DIR)
 
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 
@@ -138,6 +141,9 @@ class GalleryUpdate(BaseModel):
 
 class SubfolderCreate(BaseModel):
     name: str
+
+class DownloadJobCreate(BaseModel):
+    subfolder: str
 
 class ShareCreate(BaseModel):
     gallery_id: str
@@ -1444,7 +1450,210 @@ async def copy_to_subfolder(gallery_id: str, data: CopyToSubfolder, admin=Depend
     )
     return {"copied": copied}
 
-# ─── Streaming Download (for large galleries) ───
+# ─── Progress-aware folder downloads ───
+def _download_entries(gallery: dict, files: List[dict], include_subfolder: bool = False):
+    """Resolve database file records to safe, existing archive entries."""
+    entries = []
+    missing = []
+    for file_doc in files:
+        file_path = get_gallery_file_path(
+            gallery["folder_name"],
+            file_doc["subfolder"],
+            file_doc["filename"],
+        )
+        if file_path.is_file():
+            archive_name = (
+                f"{file_doc['subfolder']}/{file_doc['filename']}"
+                if include_subfolder
+                else file_doc["filename"]
+            )
+            entries.append((file_path, archive_name))
+        else:
+            missing.append(str(file_path))
+    return entries, missing
+
+
+@api_router.post("/admin/galleries/{gallery_id}/download-jobs")
+async def start_admin_download_job(
+    gallery_id: str,
+    data: DownloadJobCreate,
+    admin=Depends(get_admin),
+):
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    if data.subfolder not in gallery.get("subfolders", []):
+        raise HTTPException(status_code=404, detail="Subfolder not found")
+
+    files = await db.files.find(
+        {"gallery_id": gallery_id, "subfolder": data.subfolder},
+        {"_id": 0},
+    ).to_list(50000)
+    entries, missing = _download_entries(gallery, files)
+    if missing:
+        logger.warning(
+            "Admin download job omitted %s missing file(s) from %s/%s",
+            len(missing), gallery["folder_name"], data.subfolder,
+        )
+    if not entries:
+        raise HTTPException(status_code=404, detail="No files are available to download")
+
+    try:
+        state, ticket = download_job_manager.start(
+            owner_kind="admin",
+            owner_id=str(admin["sub"]),
+            gallery_id=gallery_id,
+            label=data.subfolder,
+            filename=f"{gallery['folder_name']} - {data.subfolder}.zip",
+            entries=entries,
+        )
+    except DownloadJobError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    total_bytes = sum(path.stat().st_size for path, _ in entries)
+    await log_bandwidth_event(
+        "file_download", total_bytes,
+        f"Admin ZIP job: {data.subfolder} ({len(entries)} files)",
+    )
+    return {**state, "ticket": ticket}
+
+
+@api_router.get("/admin/download-jobs/{job_id}")
+async def get_admin_download_job(job_id: str, admin=Depends(get_admin)):
+    try:
+        return download_job_manager.status(
+            job_id,
+            owner_kind="admin",
+            owner_id=str(admin["sub"]),
+        )
+    except DownloadJobError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.post("/share/{token}/download-jobs")
+async def start_share_download_job(
+    token: str,
+    data: DownloadJobCreate,
+    request: Request,
+    session=Depends(get_share_session),
+):
+    session = await validate_live_share_session(session, expected_token=token)
+    if not session.get("allow_downloads", False):
+        raise HTTPException(status_code=403, detail="Downloads not allowed")
+
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    share_subfolder = session.get("subfolder")
+    if share_subfolder and data.subfolder != share_subfolder:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if data.subfolder not in gallery.get("subfolders", []):
+        raise HTTPException(status_code=404, detail="Subfolder not found")
+
+    query = share_file_query(session, subfolder=data.subfolder)
+    files = await db.files.find(query, {"_id": 0}).to_list(50000)
+    entries, missing = _download_entries(gallery, files)
+    if missing:
+        logger.warning(
+            "Share download job omitted %s missing file(s) from %s/%s",
+            len(missing), gallery["folder_name"], data.subfolder,
+        )
+    if not entries:
+        raise HTTPException(status_code=404, detail="No files are available to download")
+
+    owner_id = f"{token}:{session['sub']}"
+    try:
+        state, ticket = download_job_manager.start(
+            owner_kind="share",
+            owner_id=owner_id,
+            gallery_id=gallery_id,
+            label=data.subfolder,
+            filename=f"{gallery['folder_name']} - {data.subfolder}.zip",
+            entries=entries,
+            share_token=token,
+        )
+    except DownloadJobError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    client_ip = request.headers.get(
+        "X-Forwarded-For",
+        request.client.host if request.client else "unknown",
+    ).split(",")[0].strip()
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    await _log_download(
+        gallery_id,
+        gallery.get("folder_name", "Unknown"),
+        share.get("label", token) if share else token,
+        client_ip,
+        "album",
+        [file_doc["filename"] for file_doc in files],
+        data.subfolder,
+        len(entries),
+        len(files),
+    )
+    total_bytes = sum(path.stat().st_size for path, _ in entries)
+    await log_bandwidth_event(
+        "file_download", total_bytes,
+        f"Album ZIP job: {data.subfolder} ({len(entries)} files)",
+    )
+    return {**state, "ticket": ticket}
+
+
+@api_router.get("/share/{token}/download-jobs/{job_id}")
+async def get_share_download_job(
+    token: str,
+    job_id: str,
+    session=Depends(get_share_session),
+):
+    session = await validate_live_share_session(session, expected_token=token)
+    try:
+        return download_job_manager.status(
+            job_id,
+            owner_kind="share",
+            owner_id=f"{token}:{session['sub']}",
+        )
+    except DownloadJobError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/download-jobs/{job_id}/file")
+async def download_prepared_job(job_id: str, ticket: str = Query(...)):
+    """Stream one prepared ZIP using its unguessable, short-lived ticket."""
+    try:
+        context = download_job_manager.access_context(job_id, ticket)
+        metadata = download_job_manager.download_metadata(job_id, ticket)
+    except DownloadJobError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if context["owner_kind"] == "share":
+        share = await db.shares.find_one({"token": context["share_token"]}, {"_id": 0})
+        allowed_levels = {"download", "upload", "full"}
+        if (
+            not share
+            or not share.get("is_active", True)
+            or is_share_expired(share)
+            or share.get("gallery_id") != context["gallery_id"]
+            or share.get("access_level", "download") not in allowed_levels
+            or (share.get("subfolder") and share.get("subfolder") != context["label"])
+        ):
+            raise HTTPException(status_code=401, detail="Share is no longer available")
+
+    from urllib.parse import quote
+    encoded_name = quote(metadata["filename"])
+    return StreamingResponse(
+        download_job_manager.iter_download(job_id, ticket),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(metadata["bytes_total"]),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+# ─── Legacy streaming downloads (kept for backwards compatibility) ───
 @api_router.get("/admin/galleries/{gallery_id}/download-subfolder")
 async def download_subfolder_zip(gallery_id: str, subfolder: str = Query(...), admin=Depends(get_admin)):
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
@@ -5621,4 +5830,5 @@ async def add_noindex_header(request, call_next):
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    download_job_manager.shutdown()
     client.close()
