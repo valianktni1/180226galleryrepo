@@ -12,12 +12,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText, Paperclip, HeartPulse
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText, Paperclip, HeartPulse, Pause, Play, Ban
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getBackupStatus, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getDashboardStats, getNetworkStats, getEmailTemplates
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getBackupStatus, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getCurrentBroadcastCampaign, pauseBroadcastCampaign, resumeBroadcastCampaign, cancelBroadcastCampaign, getDashboardStats, getNetworkStats, getEmailTemplates
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
+import AdminThemeToggle from "@/components/AdminThemeToggle";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -43,6 +44,8 @@ export default function AdminDashboard() {
   const broadcastAttachmentRef = useRef(null);
   const [broadcastRecipients, setBroadcastRecipients] = useState([]);
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
+  const [broadcastCampaign, setBroadcastCampaign] = useState(null);
+  const [broadcastClock, setBroadcastClock] = useState(Date.now());
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null, name: "", deleteBackup: false });
 
@@ -81,6 +84,28 @@ export default function AdminDashboard() {
     fetchVisitors();
     const interval = setInterval(fetchVisitors, 10000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Campaign progress is stored by the backend, so this remains accurate if
+  // the dialog is closed, the page is refreshed, or the container restarts.
+  useEffect(() => {
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const res = await getCurrentBroadcastCampaign();
+        if (mounted) setBroadcastCampaign(res.data.campaign || null);
+      } catch {
+        // A temporary status failure must not affect a running campaign.
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    const clock = setInterval(() => setBroadcastClock(Date.now()), 1000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      clearInterval(clock);
+    };
   }, []);
 
   // The backup runs in its own backend worker. Poll its lightweight in-memory
@@ -137,9 +162,10 @@ export default function AdminDashboard() {
   const handleOpenBroadcast = async () => {
     setShowBroadcast(true);
     try {
-      const [bRes, tRes] = await Promise.all([getBroadcastPreview(), getEmailTemplates()]);
+      const [bRes, tRes, cRes] = await Promise.all([getBroadcastPreview(), getEmailTemplates(), getCurrentBroadcastCampaign()]);
       setBroadcastRecipients(bRes.data.recipients || []);
       setEmailTemplates(tRes.data || []);
+      setBroadcastCampaign(cRes.data.campaign || null);
     } catch {
       setBroadcastRecipients([]);
       setEmailTemplates([]);
@@ -162,19 +188,30 @@ export default function AdminDashboard() {
       fd.append("body", broadcastForm.body);
       broadcastAttachments.forEach(f => fd.append("attachments", f));
       const res = await sendBroadcastEmail(fd);
-      const { sent, failed } = res.data;
-      if (failed > 0) {
-        toast.success(`Email sent to ${sent} couple(s), ${failed} failed`);
-      } else {
-        toast.success(`Email sent to ${sent} couple(s) successfully!`);
-      }
-      setShowBroadcast(false);
+      setBroadcastCampaign(res.data.campaign);
+      toast.success("Broadcast queued safely in batches of 10");
       setBroadcastForm({ subject: "", body: "" });
       setBroadcastAttachments([]);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to send broadcast");
     } finally {
       setSendingBroadcast(false);
+    }
+  };
+
+  const handleBroadcastAction = async (action) => {
+    if (!broadcastCampaign?.id) return;
+    try {
+      const request = action === "pause"
+        ? pauseBroadcastCampaign
+        : action === "resume"
+          ? resumeBroadcastCampaign
+          : cancelBroadcastCampaign;
+      const res = await request(broadcastCampaign.id);
+      setBroadcastCampaign(res.data.campaign);
+      toast.success(action === "pause" ? "Broadcast paused" : action === "resume" ? "Broadcast resumed" : "Broadcast cancelled");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || `Could not ${action} broadcast`);
     }
   };
 
@@ -245,10 +282,15 @@ export default function AdminDashboard() {
     const counts = g.file_counts || {};
     return s + Object.values(counts).reduce((a, b) => a + b, 0);
   }, 0);
+  const broadcastActive = ["queued", "running", "paused"].includes(broadcastCampaign?.status);
+  const nextBatchSeconds = broadcastCampaign?.next_batch_at
+    ? Math.max(0, Math.ceil((new Date(broadcastCampaign.next_batch_at).getTime() - broadcastClock) / 1000))
+    : 0;
+  const nextBatchLabel = `${Math.floor(nextBatchSeconds / 60)}:${String(nextBatchSeconds % 60).padStart(2, "0")}`;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
-      <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'rgba(253,252,248,0.85)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
+    <div className="min-h-screen" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
+      <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'var(--admin-header-bg)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Weddings By Mark" className="h-8" style={{ filter: 'invert(1)' }} />
@@ -270,7 +312,7 @@ export default function AdminDashboard() {
                 : 'Backup'}
             </Button>
             <Button data-testid="broadcast-email-btn" variant="ghost" onClick={handleOpenBroadcast} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
-              <Mail className="w-4 h-4" /> Broadcast
+              <Mail className="w-4 h-4" /> {broadcastActive ? `Broadcast ${broadcastCampaign.sent}/${broadcastCampaign.total}` : "Broadcast"}
             </Button>
             <Button data-testid="manage-templates-btn" variant="ghost" onClick={() => setShowTemplates(true)} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Layout className="w-4 h-4" /> Templates
@@ -284,6 +326,7 @@ export default function AdminDashboard() {
             <Button data-testid="settings-btn" variant="ghost" onClick={() => navigate("/admin/settings")} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Settings className="w-4 h-4" /> Settings
             </Button>
+            <AdminThemeToggle />
             <Button data-testid="create-gallery-btn" onClick={() => setShowCreate(true)} className="bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-6 py-2 text-xs tracking-[0.15em] uppercase font-bold gap-2">
               <Plus className="w-4 h-4" /> New Gallery
             </Button>
@@ -303,12 +346,12 @@ export default function AdminDashboard() {
             { label: "Downloads This Week", value: dashStats.downloads_this_week, icon: Download, color: '#22C55E', bg: 'rgba(34,197,94,0.08)' },
             { label: "Pending Albums", value: dashStats.pending_albums, icon: FolderHeart, color: dashStats.pending_albums > 0 ? '#EC4899' : '#A8A29E', bg: dashStats.pending_albums > 0 ? 'rgba(236,72,153,0.08)' : 'rgba(168,162,158,0.06)' },
           ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="p-5 border rounded-sm" style={{ borderColor: '#F5F2EB', backgroundColor: bg }} data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+            <div key={label} className="p-5 border rounded-sm" style={{ borderColor: 'var(--admin-border)', backgroundColor: bg }} data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
               <div className="flex items-center gap-2 mb-2">
                 <Icon className="w-4 h-4" style={{ color }} />
-                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{label}</span>
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>{label}</span>
               </div>
-              <span className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>{value}</span>
+              <span className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-text)' }}>{value}</span>
             </div>
           ))}
         </motion.div>
@@ -316,72 +359,72 @@ export default function AdminDashboard() {
         {/* Network & Storage Monitor */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
           className="mb-8 rounded-sm overflow-hidden shadow-sm border"
-          style={{ borderColor: '#E8E4DC' }}
+          style={{ borderColor: 'var(--admin-border)' }}
           data-testid="network-storage-panel">
-          <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: '#FAFAF9' }}>
+          <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: 'var(--admin-surface-soft)' }}>
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(99,102,241,0.1)' }}>
                 <Activity className="w-4 h-4" style={{ color: '#6366F1' }} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>Network &amp; Storage Monitor</h3>
-                <p className="text-[10px]" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Bandwidth usage &amp; total storage</p>
+                <h3 className="text-sm font-semibold" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-text)' }}>Network &amp; Storage Monitor</h3>
+                <p className="text-[10px]" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Bandwidth usage &amp; total storage</p>
               </div>
             </div>
             <Button variant="ghost" size="sm" onClick={() => navigate("/admin/health")} className="gap-2 text-xs text-[#57534E]" data-testid="open-health-panel-btn">
               <HeartPulse className="w-4 h-4" /> <span className="hidden sm:inline">System Health</span>
             </Button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-5" style={{ borderTop: '1px solid #E8E4DC' }}>
+          <div className="grid grid-cols-2 md:grid-cols-5" style={{ borderTop: '1px solid var(--admin-border)' }}>
             {/* Total Storage */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC', backgroundColor: 'rgba(99,102,241,0.06)' }} data-testid="storage-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(99,102,241,0.06)' }} data-testid="storage-total">
               <div className="flex items-center gap-2 mb-2">
                 <HardDrive className="w-3.5 h-3.5" style={{ color: '#6366F1' }} />
-                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Total Storage</span>
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Total Storage</span>
               </div>
-              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-text)' }}>
                 {dashStats.storage_used_bytes >= 1099511627776 ? `${(dashStats.storage_used_bytes / 1099511627776).toFixed(2)} TB` : `${(dashStats.storage_used_bytes / 1073741824).toFixed(1)} GB`}
               </span>
-              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-[10px] mt-1" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                 {(dashStats.storage_used_bytes / (1024*1024)).toFixed(0)} MB total
               </p>
             </div>
             {/* Daily Total */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC', backgroundColor: 'rgba(245,158,11,0.06)' }} data-testid="daily-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(245,158,11,0.06)' }} data-testid="daily-total">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-3.5 h-3.5" style={{ color: '#F59E0B' }} />
-                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Today (Total)</span>
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Today (Total)</span>
               </div>
-              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-text)' }}>
                 {networkStats ? (networkStats.daily.total_bytes >= 1073741824 ? `${(networkStats.daily.total_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.total_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
               </span>
-              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-[10px] mt-1" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                 {networkStats ? (networkStats.daily.sent_bytes >= 1073741824 ? `${(networkStats.daily.sent_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.sent_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} sent / {networkStats ? (networkStats.daily.recv_bytes >= 1073741824 ? `${(networkStats.daily.recv_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.recv_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} recv
               </p>
             </div>
             {/* Weekly Total */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC', backgroundColor: 'rgba(236,72,153,0.06)' }} data-testid="weekly-total">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(236,72,153,0.06)' }} data-testid="weekly-total">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-3.5 h-3.5" style={{ color: '#EC4899' }} />
-                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>This Week (Total)</span>
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>This Week (Total)</span>
               </div>
-              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-text)' }}>
                 {networkStats ? (networkStats.weekly.total_bytes >= 1073741824 ? `${(networkStats.weekly.total_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.weekly.total_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
               </span>
-              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-[10px] mt-1" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                 {networkStats ? (networkStats.weekly.sent_bytes >= 1073741824 ? `${(networkStats.weekly.sent_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.weekly.sent_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} sent / {networkStats ? (networkStats.weekly.recv_bytes >= 1073741824 ? `${(networkStats.weekly.recv_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.weekly.recv_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} recv
               </p>
             </div>
             {/* Video Streaming */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: '#E8E4DC', backgroundColor: 'rgba(139,92,246,0.06)' }} data-testid="video-bandwidth">
+            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(139,92,246,0.06)' }} data-testid="video-bandwidth">
               <div className="flex items-center gap-2 mb-2">
                 <Film className="w-3.5 h-3.5" style={{ color: '#8B5CF6' }} />
-                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Video Streams</span>
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Video Streams</span>
               </div>
-              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-text)' }}>
                 {networkStats?.video ? (networkStats.video.daily_bytes >= 1073741824 ? `${(networkStats.video.daily_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.video.daily_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
               </span>
-              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-[10px] mt-1" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                 today / {networkStats?.video ? (networkStats.video.weekly_bytes >= 1073741824 ? `${(networkStats.video.weekly_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.video.weekly_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} this week
               </p>
             </div>
@@ -389,12 +432,12 @@ export default function AdminDashboard() {
             <div className="p-5" style={{ backgroundColor: 'rgba(34,197,94,0.06)' }} data-testid="download-bandwidth">
               <div className="flex items-center gap-2 mb-2">
                 <ArrowDownToLine className="w-3.5 h-3.5" style={{ color: '#22C55E' }} />
-                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>Downloads</span>
+                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Downloads</span>
               </div>
-              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917' }}>
+              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-text)' }}>
                 {networkStats?.downloads ? (networkStats.downloads.daily_bytes >= 1073741824 ? `${(networkStats.downloads.daily_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.downloads.daily_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
               </span>
-              <p className="text-[10px] mt-1" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-[10px] mt-1" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                 today / {networkStats?.downloads ? (networkStats.downloads.weekly_bytes >= 1073741824 ? `${(networkStats.downloads.weekly_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.downloads.weekly_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} this week
               </p>
             </div>
@@ -404,11 +447,11 @@ export default function AdminDashboard() {
         {/* Live Visitors Panel */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
           className="mb-8 rounded-sm overflow-hidden shadow-sm"
-          style={{ border: liveVisitors.length > 0 ? '1px solid rgba(212,175,55,0.35)' : '1px solid #E8E4DC' }}
+          style={{ border: liveVisitors.length > 0 ? '1px solid rgba(212,175,55,0.35)' : '1px solid var(--admin-border)' }}
           data-testid="live-visitors-panel">
           {/* Header */}
           <div className="px-6 py-4 flex items-center justify-between"
-            style={{ backgroundColor: liveVisitors.length > 0 ? '#1C1917' : '#FAFAF9' }}>
+            style={{ backgroundColor: liveVisitors.length > 0 ? '#1C1917' : 'var(--admin-surface-soft)' }}>
             <div className="flex items-center gap-3">
               {liveVisitors.length > 0 ? (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(74,222,128,0.15)' }}>
@@ -418,17 +461,17 @@ export default function AdminDashboard() {
                   </span>
                 </div>
               ) : (
-                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
-                  <Eye className="w-4 h-4" style={{ color: '#A8A29E' }} />
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
+                  <Eye className="w-4 h-4" style={{ color: 'var(--admin-faint)' }} />
                 </div>
               )}
               <div>
                 <span className="text-sm font-semibold tracking-wide"
-                  style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#FDFCF8' : '#57534E' }}>
+                  style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#FDFCF8' : 'var(--admin-muted)' }}>
                   Live Gallery Visitors
                 </span>
                 <p className="text-[10px] mt-0.5 tracking-wider uppercase"
-                  style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#A8A29E' : '#D4D4D8' }}>
+                  style={{ fontFamily: 'Manrope, sans-serif', color: liveVisitors.length > 0 ? '#A8A29E' : 'var(--admin-border-strong)' }}>
                   {liveVisitors.length > 0 ? `${liveVisitors.length} couple${liveVisitors.length !== 1 ? 's' : ''} viewing right now` : 'No couples are currently viewing galleries'}
                 </p>
               </div>
@@ -446,7 +489,7 @@ export default function AdminDashboard() {
           </div>
           {/* Visitor rows */}
           {liveVisitors.length > 0 && (
-            <div className="divide-y" style={{ borderColor: '#F5F2EB' }}>
+            <div className="divide-y" style={{ borderColor: 'var(--admin-border)' }}>
               {liveVisitors.map((v) => {
                 const mins = Math.floor(v.duration_seconds / 60);
                 const actionIcon = v.action === 'watching_video' ? <Film className="w-3.5 h-3.5 text-purple-500" /> 
@@ -472,31 +515,31 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold truncate" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#1C1917', fontSize: '15px' }}>
+                        <span className="text-sm font-semibold truncate" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-text)', fontSize: '15px' }}>
                           {v.gallery_name}
                         </span>
-                        <span className="text-xs" style={{ color: '#A8A29E' }}>&mdash;</span>
-                        <span className="flex items-center gap-1.5 text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                        <span className="text-xs" style={{ color: 'var(--admin-faint)' }}>&mdash;</span>
+                        <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                           {actionIcon} {actionLabel}{v.subfolder ? ` ${v.subfolder}` : ''}
                         </span>
                       </div>
                       {v.detail && (
-                        <span className="text-[11px] truncate block max-w-[300px] mt-0.5 italic" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                        <span className="text-[11px] truncate block max-w-[300px] mt-0.5 italic" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                           {v.detail}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-4 shrink-0">
                       {v.ip && (
-                        <span className="text-[10px] tabular-nums px-2 py-0.5 rounded-sm" style={{ backgroundColor: '#F5F2EB', color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                        <span className="text-[10px] tabular-nums px-2 py-0.5 rounded-sm" style={{ backgroundColor: 'var(--admin-surface-raised)', color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                           {v.ip}
                         </span>
                       )}
-                      <span className="flex items-center gap-1.5 text-[11px]" style={{ color: '#78716C', fontFamily: 'Manrope, sans-serif' }}>
+                      <span className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--admin-subtle)', fontFamily: 'Manrope, sans-serif' }}>
                         {deviceIcon} {v.device}
                       </span>
                       <span className="text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: mins > 0 ? '#F5F2EB' : 'rgba(74,222,128,0.1)', color: mins > 0 ? '#57534E' : '#16A34A', fontFamily: 'Manrope, sans-serif' }}>
+                        style={{ backgroundColor: mins > 0 ? 'var(--admin-surface-raised)' : 'rgba(74,222,128,0.1)', color: mins > 0 ? 'var(--admin-muted)' : '#16A34A', fontFamily: 'Manrope, sans-serif' }}>
                         {mins > 0 ? `${mins} min` : 'Just joined'}
                       </span>
                     </div>
@@ -531,12 +574,12 @@ export default function AdminDashboard() {
         {/* Gallery Grid */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {[1,2,3,4].map(i => <div key={i} className="h-64 animate-pulse" style={{ backgroundColor: '#F5F2EB' }} />)}
+            {[1,2,3,4].map(i => <div key={i} className="h-64 animate-pulse" style={{ backgroundColor: 'var(--admin-surface-raised)' }} />)}
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-24">
             <FolderOpen className="w-12 h-12 mx-auto mb-4 text-[#D4D4D8]" strokeWidth={1} />
-            <p className="text-lg mb-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>
+            <p className="text-lg mb-2" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-muted)' }}>
               {galleries.length === 0 ? "No galleries yet" : "No results found"}
             </p>
             {galleries.length === 0 && (
@@ -554,10 +597,10 @@ export default function AdminDashboard() {
                 const stats = galleriesStats[g.id] || {};
                 return (
                   <motion.div key={g.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                    className="group border overflow-hidden cursor-pointer" style={{ borderColor: '#F5F2EB' }}
+                    className="group border overflow-hidden cursor-pointer" style={{ borderColor: 'var(--admin-border)' }}
                     onClick={() => navigate(`/admin/gallery/${g.id}`)} data-testid={`gallery-card-${g.id}`}
                   >
-                    <div className="aspect-[4/3] relative overflow-hidden" style={{ backgroundColor: '#F5F2EB' }}>
+                    <div className="aspect-[4/3] relative overflow-hidden" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
                       {g.cover_thumb ? (
                         <img src={`${process.env.REACT_APP_BACKEND_URL}${g.cover_thumb}`} alt={g.folder_name}
                           className="w-full h-full object-cover" style={{ transition: 'transform 0.7s cubic-bezier(0.33,1,0.68,1)' }}
@@ -586,12 +629,12 @@ export default function AdminDashboard() {
                     </div>
                     <div className="p-4">
                       <h3 className="text-lg mb-1 font-medium truncate" style={{ fontFamily: 'Cormorant Garamond, serif' }}>{g.folder_name}</h3>
-                      <div className="flex items-center gap-3 text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                      <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                         <span>{total} files</span>
                         <span>{g.share_count || 0} shares</span>
                       </div>
                       {/* Stats Row */}
-                      <div className="flex items-center gap-4 mt-2 text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                      <div className="flex items-center gap-4 mt-2 text-xs" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                         <span className="flex items-center gap-1" title="Total Views">
                           <Eye className="w-3 h-3" /> {stats.total_views || 0}
                         </span>
@@ -613,22 +656,22 @@ export default function AdminDashboard() {
 
       {/* Create Gallery Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>New Couple Folder</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Clone a template to create a folder structure for a couple
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-5 mt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Folder Name</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Folder Name</Label>
               <Input data-testid="gallery-name-input" value={form.folder_name}
                 onChange={e => setForm(f => ({...f, folder_name: e.target.value}))}
                 placeholder="e.g. Gina & Mark 30.11.22" className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]" required />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Template</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Template</Label>
               <Select value={form.template_id} onValueChange={v => setForm(f => ({...f, template_id: v}))}>
                 <SelectTrigger data-testid="template-select" className="border-[#D4D4D8] rounded-sm">
                   <SelectValue placeholder="Select template..." />
@@ -642,32 +685,32 @@ export default function AdminDashboard() {
                 </SelectContent>
               </Select>
               {form.template_id && (
-                <p className="text-xs mt-1" style={{ color: '#A8A29E' }}>
+                <p className="text-xs mt-1" style={{ color: 'var(--admin-faint)' }}>
                   Subfolders: {templates.find(t => t.id === form.template_id)?.subfolders.join(", ")}
                 </p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Couple&apos;s Email <span className="font-normal text-[#A8A29E]">(optional)</span></Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Couple&apos;s Email <span className="font-normal text-[#A8A29E]">(optional)</span></Label>
               <Input data-testid="client-email-input" type="email" value={form.client_email}
                 onChange={e => setForm(f => ({...f, client_email: e.target.value}))}
                 placeholder="e.g. couple@email.com" className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]" />
-              <p className="text-xs" style={{ color: '#A8A29E' }}>Used to send gallery-ready notifications</p>
+              <p className="text-xs" style={{ color: 'var(--admin-faint)' }}>Used to send gallery-ready notifications</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Gallery Theme</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Gallery Theme</Label>
               <div className="grid grid-cols-5 gap-2">
                 {THEME_LIST.map(th => (
                   <button type="button" key={th.id} data-testid={`create-theme-${th.id}`}
                     onClick={() => setForm(f => ({...f, theme: th.id}))}
                     className={`flex flex-col items-center gap-1.5 p-2.5 rounded-sm border transition-all cursor-pointer ${form.theme === th.id ? 'border-[#1C1917] shadow-sm' : 'border-[#E5E5E5] hover:border-[#A8A29E]'}`}
-                    style={{ backgroundColor: form.theme === th.id ? '#F5F2EB' : 'transparent' }}>
+                    style={{ backgroundColor: form.theme === th.id ? 'var(--admin-surface-raised)' : 'transparent' }}>
                     <div className="flex gap-0.5">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: th.preview.bg, border: '1px solid #D4D4D8' }} />
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: th.preview.accent }} />
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: th.preview.text }} />
                     </div>
-                    <span className="text-[9px] font-medium leading-tight text-center" style={{ color: form.theme === th.id ? '#1C1917' : '#78716C' }}>
+                    <span className="text-[9px] font-medium leading-tight text-center" style={{ color: form.theme === th.id ? 'var(--admin-text)' : 'var(--admin-subtle)' }}>
                       {th.name.split(' ')[0]}
                     </span>
                   </button>
@@ -686,23 +729,23 @@ export default function AdminDashboard() {
 
       {/* Templates Dialog */}
       <Dialog open={showTemplates} onOpenChange={setShowTemplates}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-xl" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-xl" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Folder Templates</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Master folder structures that get cloned for each couple
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2 max-h-[400px] overflow-y-auto">
             {templates.map(t => (
-              <div key={t.id} className="p-4 border flex items-start justify-between" style={{ borderColor: '#F5F2EB' }}>
+              <div key={t.id} className="p-4 border flex items-start justify-between" style={{ borderColor: 'var(--admin-border)' }}>
                 <div>
                   <p className="font-medium text-sm mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
                     {t.name} {t.is_default && <span className="text-xs text-[#D4AF37] ml-1">(Default)</span>}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {t.subfolders.map(sf => (
-                      <span key={sf} className="px-2 py-0.5 text-xs" style={{ backgroundColor: '#F5F2EB', color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>{sf}</span>
+                      <span key={sf} className="px-2 py-0.5 text-xs" style={{ backgroundColor: 'var(--admin-surface-raised)', color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>{sf}</span>
                     ))}
                   </div>
                 </div>
@@ -714,8 +757,8 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
-          <div className="border-t pt-4 mt-4 space-y-3" style={{ borderColor: '#F5F2EB' }}>
-            <p className="text-xs font-semibold tracking-wider uppercase" style={{ color: '#57534E' }}>Add New Template</p>
+          <div className="border-t pt-4 mt-4 space-y-3" style={{ borderColor: 'var(--admin-border)' }}>
+            <p className="text-xs font-semibold tracking-wider uppercase" style={{ color: 'var(--admin-muted)' }}>Add New Template</p>
             <Input data-testid="template-name-input" value={newTemplate.name} onChange={e => setNewTemplate(t => ({...t, name: e.target.value}))}
               placeholder="Template name" className="border-[#D4D4D8] rounded-sm text-sm" />
             <Input data-testid="template-subfolders-input" value={newTemplate.subfolders} onChange={e => setNewTemplate(t => ({...t, subfolders: e.target.value}))}
@@ -728,21 +771,21 @@ export default function AdminDashboard() {
       </Dialog>
       {/* Delete Gallery Confirmation Dialog */}
       <Dialog open={deleteConfirm.open} onOpenChange={(open) => !open && setDeleteConfirm({ open: false, id: null, name: "", deleteBackup: false })}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Delete Gallery</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Are you sure you want to delete <strong>&ldquo;{deleteConfirm.name}&rdquo;</strong> and ALL its files permanently?
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2">
-            <label className="flex items-start gap-3 p-3 rounded-sm border cursor-pointer hover:bg-amber-50/50 transition-colors" style={{ borderColor: '#E8E4DC' }}>
+            <label className="flex items-start gap-3 p-3 rounded-sm border cursor-pointer hover:bg-amber-50/50 transition-colors" style={{ borderColor: 'var(--admin-border)' }}>
               <input data-testid="delete-backup-checkbox" type="checkbox" checked={deleteConfirm.deleteBackup}
                 onChange={e => setDeleteConfirm(d => ({...d, deleteBackup: e.target.checked}))}
                 className="mt-0.5 w-4 h-4 rounded accent-[#D4AF37]" />
               <div>
-                <span className="text-sm font-semibold" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>Also delete from backup</span>
-                <p className="text-xs mt-0.5" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                <span className="text-sm font-semibold" style={{ color: 'var(--admin-text)', fontFamily: 'Manrope, sans-serif' }}>Also delete from backup</span>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                   This will permanently remove the backup copy too, freeing up storage space
                 </p>
               </div>
@@ -763,33 +806,70 @@ export default function AdminDashboard() {
 
       {/* Broadcast Email Dialog */}
       <Dialog open={showBroadcast} onOpenChange={setShowBroadcast}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Broadcast Email</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
-              Send an email to all couples who have an email address on their gallery
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
+              Safely sends 10 emails at a time, with a two-minute gap between batches
             </DialogDescription>
           </DialogHeader>
+          {broadcastCampaign && (
+            <div className="broadcast-progress-panel p-4 rounded-sm border space-y-3" data-testid="broadcast-progress"
+              style={{ backgroundColor: 'var(--admin-surface-soft)', borderColor: 'var(--admin-border)', fontFamily: 'Manrope, sans-serif' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate" style={{ color: 'var(--admin-text)' }}>{broadcastCampaign.subject || "Latest broadcast"}</p>
+                  <p className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: 'var(--admin-subtle)' }}>
+                    {broadcastCampaign.status === "complete" ? "Complete" : broadcastCampaign.status === "cancelled" ? "Cancelled" : broadcastCampaign.status === "failed" ? "Stopped" : broadcastCampaign.status === "paused" ? "Paused" : broadcastCampaign.status === "running" ? "Sending now" : "Queued"}
+                  </p>
+                </div>
+                <span className="text-sm font-semibold" style={{ color: '#D4AF37' }}>{broadcastCampaign.percent || 0}%</span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--admin-border)' }}>
+                <div className="h-full transition-all duration-500" style={{ width: `${broadcastCampaign.percent || 0}%`, backgroundColor: '#D4AF37' }} />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div><p className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>{broadcastCampaign.sent || 0}</p><p className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--admin-subtle)' }}>Sent</p></div>
+                <div><p className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>{broadcastCampaign.pending || 0}</p><p className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--admin-subtle)' }}>Waiting</p></div>
+                <div><p className="text-sm font-semibold" style={{ color: broadcastCampaign.failed ? '#B91C1C' : 'var(--admin-text)' }}>{broadcastCampaign.failed || 0}</p><p className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--admin-subtle)' }}>Failed</p></div>
+              </div>
+              <p className="text-[11px] text-center" style={{ color: 'var(--admin-muted)' }}>
+                {broadcastCampaign.status === "queued" && nextBatchSeconds > 0
+                  ? `Next batch in ${nextBatchLabel}`
+                  : broadcastCampaign.message}
+              </p>
+              {broadcastActive && (
+                <div className="flex gap-2 justify-center">
+                  {broadcastCampaign.status === "paused" ? (
+                    <Button size="sm" variant="outline" onClick={() => handleBroadcastAction("resume")} className="gap-1.5" data-testid="resume-broadcast-btn"><Play className="w-3.5 h-3.5" /> Resume</Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => handleBroadcastAction("pause")} className="gap-1.5" data-testid="pause-broadcast-btn"><Pause className="w-3.5 h-3.5" /> Pause</Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => handleBroadcastAction("cancel")} className="gap-1.5 text-red-700" data-testid="cancel-broadcast-btn"><Ban className="w-3.5 h-3.5" /> Cancel unsent</Button>
+                </div>
+              )}
+            </div>
+          )}
           <div className="space-y-4 mt-2">
             {/* Recipients preview */}
-            <div className="p-3 rounded-sm border" style={{ backgroundColor: '#FAFAF9', borderColor: '#F5F2EB' }}>
+            <div className="p-3 rounded-sm border" style={{ backgroundColor: 'var(--admin-surface-soft)', borderColor: 'var(--admin-border)' }}>
               <div className="flex items-center gap-2 mb-2">
                 <Users className="w-3.5 h-3.5" style={{ color: '#D4AF37' }} />
-                <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: '#57534E' }}>
+                <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: 'var(--admin-muted)' }}>
                   {broadcastRecipients.length} Recipient{broadcastRecipients.length !== 1 ? 's' : ''}
                 </span>
               </div>
               {broadcastRecipients.length > 0 ? (
                 <div className="max-h-24 overflow-y-auto space-y-1">
                   {broadcastRecipients.map(r => (
-                    <div key={r.id} className="flex items-center justify-between text-xs" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>
+                    <div key={r.id} className="flex items-center justify-between text-xs" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-muted)' }}>
                       <span className="truncate">{r.folder_name}</span>
                       <span className="text-[#A8A29E] truncate ml-2">{r.client_email}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                <p className="text-xs" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                   No couples have email addresses set. Add emails to gallery settings first.
                 </p>
               )}
@@ -797,61 +877,64 @@ export default function AdminDashboard() {
             {/* Template picker */}
             {emailTemplates.length > 0 && (
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Use a Template</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Use a Template</Label>
                 <div className="grid gap-1.5">
                   {emailTemplates.map(tmpl => (
                     <button key={tmpl.id} type="button" data-testid={`broadcast-template-${tmpl.id}`}
                       onClick={() => setBroadcastForm({ subject: tmpl.subject || '', body: tmpl.body || '' })}
+                      disabled={broadcastActive}
                       className="flex items-center gap-3 px-3 py-2.5 text-left border rounded-sm transition-all hover:shadow-sm"
-                      style={{ borderColor: '#E8E4DC', backgroundColor: '#FAFAF9', fontFamily: 'Manrope, sans-serif' }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#D4AF37'; e.currentTarget.style.backgroundColor = '#FFFDF5'; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E4DC'; e.currentTarget.style.backgroundColor = '#FAFAF9'; }}>
+                      style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-soft)', fontFamily: 'Manrope, sans-serif' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#D4AF37'; e.currentTarget.style.backgroundColor = 'var(--admin-surface-soft)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--admin-border)'; e.currentTarget.style.backgroundColor = 'var(--admin-surface-soft)'; }}>
                       <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#D4AF37' }} />
                       <div className="min-w-0">
-                        <span className="text-xs font-semibold block truncate" style={{ color: '#1C1917' }}>{tmpl.name}</span>
-                        {tmpl.subject && <span className="text-[10px] block truncate" style={{ color: '#A8A29E' }}>{tmpl.subject}</span>}
+                        <span className="text-xs font-semibold block truncate" style={{ color: 'var(--admin-text)' }}>{tmpl.name}</span>
+                        {tmpl.subject && <span className="text-[10px] block truncate" style={{ color: 'var(--admin-faint)' }}>{tmpl.subject}</span>}
                       </div>
                     </button>
                   ))}
                 </div>
                 <div className="flex items-center gap-3 my-2">
-                  <div className="h-px flex-1" style={{ backgroundColor: '#E8E4DC' }} />
-                  <span className="text-[10px] uppercase tracking-widest" style={{ color: '#A8A29E' }}>or compose manually</span>
-                  <div className="h-px flex-1" style={{ backgroundColor: '#E8E4DC' }} />
+                  <div className="h-px flex-1" style={{ backgroundColor: 'var(--admin-border)' }} />
+                  <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--admin-faint)' }}>or compose manually</span>
+                  <div className="h-px flex-1" style={{ backgroundColor: 'var(--admin-border)' }} />
                 </div>
               </div>
             )}
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Subject</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Subject</Label>
               <Input data-testid="broadcast-subject" value={broadcastForm.subject}
                 onChange={e => setBroadcastForm(f => ({...f, subject: e.target.value}))}
+                disabled={broadcastActive}
                 placeholder="e.g. Happy New Year from Weddings By Mark"
                 className="border-[#D4D4D8] rounded-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Message</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Message</Label>
               <textarea data-testid="broadcast-body" value={broadcastForm.body}
                 onChange={e => setBroadcastForm(f => ({...f, body: e.target.value}))}
+                disabled={broadcastActive}
                 placeholder="Write your message here..."
                 rows={8}
                 className="w-full px-3 py-2 text-sm border rounded-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
-                style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }} />
+                style={{ borderColor: 'var(--admin-border-strong)', fontFamily: 'Manrope, sans-serif' }} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Attachment</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Attachment</Label>
               <input ref={broadcastAttachmentRef} type="file" className="hidden" data-testid="broadcast-attachment"
                 onChange={e => { if (e.target.files?.length) { setBroadcastAttachments(prev => [...prev, ...Array.from(e.target.files)]); } e.target.value = ''; }} />
               <div className="flex items-center gap-2 flex-wrap">
-                <button type="button" onClick={() => broadcastAttachmentRef.current?.click()}
+                <button type="button" onClick={() => broadcastAttachmentRef.current?.click()} disabled={broadcastActive}
                   className="cursor-pointer text-xs px-3 py-1.5 border rounded-sm hover:bg-[#F5F2EB] flex items-center gap-1.5"
-                  style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }}
+                  style={{ borderColor: 'var(--admin-border-strong)', fontFamily: 'Manrope, sans-serif' }}
                   data-testid="broadcast-choose-file">
                   <Paperclip className="w-3.5 h-3.5" />Choose File
                 </button>
                 {broadcastAttachments.map((f, i) => (
-                  <span key={i} className="text-[11px] px-2 py-1 rounded-full flex items-center gap-1.5 border" style={{ backgroundColor: '#F0EDE6', borderColor: '#D4D4D8', color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
+                  <span key={i} className="text-[11px] px-2 py-1 rounded-full flex items-center gap-1.5 border" style={{ backgroundColor: 'var(--admin-surface-raised)', borderColor: 'var(--admin-border-strong)', color: 'var(--admin-text)', fontFamily: 'Manrope, sans-serif' }}>
                     <Paperclip className="w-3 h-3" style={{ color: '#D4AF37' }} />
-                    {f.name} <span style={{ color: '#A8A29E' }}>({(f.size / 1024).toFixed(0)}KB)</span>
+                    {f.name} <span style={{ color: 'var(--admin-faint)' }}>({(f.size / 1024).toFixed(0)}KB)</span>
                     <button type="button" onClick={() => setBroadcastAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-600 ml-0.5"><X className="w-3 h-3" /></button>
                   </span>
                 ))}
@@ -860,10 +943,10 @@ export default function AdminDashboard() {
           </div>
           <DialogFooter>
             <Button data-testid="send-broadcast-btn" onClick={handleSendBroadcast} 
-              disabled={sendingBroadcast || broadcastRecipients.length === 0}
+              disabled={sendingBroadcast || broadcastActive || broadcastRecipients.length === 0}
               className="w-full bg-[#1C1917] text-[#FDFCF8] hover:bg-[#1C1917]/90 rounded-sm px-8 py-5 text-xs tracking-[0.15em] uppercase font-bold gap-2">
               <Send className="w-4 h-4" />
-              {sendingBroadcast ? "Sending..." : `Send to ${broadcastRecipients.length} Couple${broadcastRecipients.length !== 1 ? 's' : ''}`}
+              {sendingBroadcast ? "Queuing..." : broadcastActive ? "A broadcast is already active" : `Queue for ${broadcastRecipients.length} Couple${broadcastRecipients.length !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>

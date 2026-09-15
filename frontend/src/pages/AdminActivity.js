@@ -4,6 +4,7 @@ import { getAdminActivity, getArchivedActivity, clearActivityLogs, archiveLogsNo
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Eye, Download, Heart, RefreshCw, ChevronDown, ChevronUp, Filter, FileText, Package, Search, Trash2, Archive, AlertTriangle, Mail, Send, Bell } from "lucide-react";
+import AdminThemeToggle from "@/components/AdminThemeToggle";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -135,8 +136,8 @@ export default function AdminActivity() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+    <div className="min-h-screen" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
+      <header className="border-b backdrop-blur-sm sticky top-0 z-10" style={{ backgroundColor: 'var(--admin-header-bg)' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => navigate("/admin/dashboard")} className="gap-2"
@@ -147,12 +148,13 @@ export default function AdminActivity() {
               <h1 className="text-lg font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
                 Activity Log
               </h1>
-              <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-xs" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                 {stats.active_count} active {stats.archived_count > 0 && `· ${stats.archived_count} archived`}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <AdminThemeToggle />
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <Input
@@ -199,7 +201,7 @@ export default function AdminActivity() {
       <main className="max-w-screen-xl mx-auto px-6 py-8">
         {/* Toolbar: Active/Archive toggle + Clear/Archive buttons */}
         <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-1 p-1 rounded-sm border" style={{ borderColor: '#E8E4DC', backgroundColor: '#F5F2EB' }}>
+          <div className="flex items-center gap-1 p-1 rounded-sm border" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-raised)' }}>
             <button
               onClick={() => setViewMode("active")}
               className={`px-4 py-1.5 text-xs font-semibold tracking-wider uppercase rounded-sm transition-colors ${
@@ -277,7 +279,7 @@ export default function AdminActivity() {
           <>
             <div className="mb-6 p-4 rounded-sm border flex items-center gap-3" style={{ backgroundColor: 'rgba(212,175,55,0.06)', borderColor: 'rgba(212,175,55,0.25)' }}>
               <Mail className="w-4 h-4 shrink-0" style={{ color: '#D4AF37' }} />
-              <p className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-xs" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                 A record of all emails sent — broadcast messages, gallery-ready notifications, and automated expiry reminders.
               </p>
             </div>
@@ -345,7 +347,7 @@ export default function AdminActivity() {
         {viewMode === "archive" && (
           <div className="mb-6 p-4 rounded-sm border flex items-center gap-3" style={{ backgroundColor: 'rgba(212,175,55,0.06)', borderColor: 'rgba(212,175,55,0.25)' }}>
             <Archive className="w-4 h-4 shrink-0" style={{ color: '#D4AF37' }} />
-            <p className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <p className="text-xs" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Archived logs are automatically moved here after 6 months. An email notification is sent when archiving occurs.
             </p>
           </div>

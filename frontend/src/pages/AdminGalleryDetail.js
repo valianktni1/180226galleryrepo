@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 import DownloadJobProgress from "@/components/DownloadJobProgress";
+import AdminThemeToggle from "@/components/AdminThemeToggle";
 
 const STANDARD_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourites", "Guest Uploads"];
 
@@ -481,7 +482,7 @@ export default function AdminGalleryDetail() {
   };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#FDFCF8' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--admin-bg)' }}>
       <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
     </div>
   );
@@ -642,9 +643,9 @@ export default function AdminGalleryDetail() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
+    <div className="min-h-screen" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'rgba(253,252,248,0.85)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
+      <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'var(--admin-header-bg)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button data-testid="back-to-dashboard" onClick={() => navigate("/admin/dashboard")} className="text-[#57534E] hover:text-[#1C1917]" style={{ transition: 'color 0.2s ease' }}>
@@ -653,7 +654,7 @@ export default function AdminGalleryDetail() {
             <div>
               <h1 className="text-xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>{gallery.folder_name}</h1>
               <div className="flex items-center gap-2">
-                <p className="text-xs" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>{gallery.subfolders.length} subfolders &middot; {files.length} files</p>
+                <p className="text-xs" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>{gallery.subfolders.length} subfolders &middot; {files.length} files</p>
                 {editingEmail ? (
                   <div className="flex items-center gap-1.5 ml-2">
                     <Input data-testid="edit-client-email" type="email" value={clientEmail}
@@ -665,7 +666,7 @@ export default function AdminGalleryDetail() {
                   </div>
                 ) : (
                   <button onClick={() => setEditingEmail(true)} className="flex items-center gap-1 ml-2 text-xs hover:text-[#D4AF37] transition-colors"
-                    style={{ color: clientEmail ? '#57534E' : '#A8A29E', fontFamily: 'Manrope, sans-serif' }} data-testid="client-email-display">
+                    style={{ color: clientEmail ? 'var(--admin-muted)' : 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }} data-testid="client-email-display">
                     <Mail className="w-3 h-3" />
                     {clientEmail || "Add email"}
                     {gallery.notification_sent_at && <span className="text-[9px] ml-1 text-green-600 font-semibold">Sent</span>}
@@ -675,6 +676,7 @@ export default function AdminGalleryDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <AdminThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button data-testid="theme-picker-btn" variant="outline"
@@ -722,14 +724,14 @@ export default function AdminGalleryDetail() {
       <main className="max-w-screen-xl mx-auto px-6 py-6">
         {/* Shares Bar */}
         {shares.length > 0 && (
-          <div className="mb-6 p-4 border" style={{ borderColor: '#F5F2EB' }}>
+          <div className="mb-6 p-4 border" style={{ borderColor: 'var(--admin-border)' }}>
             <div className="flex items-center gap-2 mb-3">
               <Share2 className="w-4 h-4 text-[#D4AF37]" />
               <span className="text-xs tracking-wider uppercase font-bold" style={{ fontFamily: 'Manrope, sans-serif' }}>Active Shares ({shares.length})</span>
             </div>
             <div className="space-y-2">
               {shares.map(s => (
-                <div key={s.id} className={`flex items-center gap-3 p-2 text-sm ${isShareExpired(s) ? 'opacity-50' : ''}`} style={{ backgroundColor: s.is_active && !isShareExpired(s) ? '#F5F2EB' : '#fafafa' }}>
+                <div key={s.id} className={`flex items-center gap-3 p-2 text-sm ${isShareExpired(s) ? 'opacity-50' : ''}`} style={{ backgroundColor: s.is_active && !isShareExpired(s) ? 'var(--admin-surface-raised)' : 'var(--admin-surface-soft)' }}>
                   <div className="flex-1 flex items-center gap-2 flex-wrap" style={{ fontFamily: 'Manrope, sans-serif' }}>
                     {s.has_password ? <Lock className="w-3.5 h-3.5 text-[#57534E]" /> : <Globe className="w-3.5 h-3.5 text-[#3F6212]" />}
                     <span className="text-xs font-medium">{s.label}</span>
@@ -798,7 +800,7 @@ export default function AdminGalleryDetail() {
 
         {/* Subfolder Tabs */}
         <Tabs value={activeTab} onValueChange={v => { setActiveTab(v); setSelectedFiles(new Set()); }}>
-          <div className="flex items-center gap-1 border-b mb-6" style={{ borderColor: '#F5F2EB' }}>
+          <div className="flex items-center gap-1 border-b mb-6" style={{ borderColor: 'var(--admin-border)' }}>
             <TabsList className="bg-transparent flex-1 justify-start rounded-none h-auto p-0 overflow-x-auto">
               {gallery.subfolders.map(sf => {
                 const count = (gallery.file_counts || {})[sf] || 0;
@@ -850,14 +852,14 @@ export default function AdminGalleryDetail() {
                   onChange={e => handleUpload(e.target.files)} data-testid="file-input" />
                 {uploading ? (
                   <div className="w-full max-w-xs">
-                    <p className="text-sm mb-2" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>Uploading to {sf}... {uploadProgress}%</p>
+                    <p className="text-sm mb-2" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>Uploading to {sf}... {uploadProgress}%</p>
                     <Progress value={uploadProgress} className="h-1.5" />
                   </div>
                 ) : (
                   <>
                     <Upload className="w-6 h-6 mb-2 text-[#A8A29E]" strokeWidth={1.5} />
-                    <p className="text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>Drop files here or click to upload to <strong>{sf}</strong></p>
-                    <p className="text-xs mt-1" style={{ color: '#A8A29E' }}>Original filenames preserved. No size limit.</p>
+                    <p className="text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-muted)' }}>Drop files here or click to upload to <strong>{sf}</strong></p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--admin-faint)' }}>Original filenames preserved. No size limit.</p>
                   </>
                 )}
               </div>
@@ -889,7 +891,7 @@ export default function AdminGalleryDetail() {
                       </Button>
                       {selectedFiles.size > 0 && (
                         <>
-                          <span className="text-xs font-bold" style={{ fontFamily: 'Manrope, sans-serif', color: '#57534E' }}>{selectedFiles.size} selected</span>
+                          <span className="text-xs font-bold" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-muted)' }}>{selectedFiles.size} selected</span>
                           {gallery.subfolders.includes("Album Favourites") && activeTab !== "Album Favourites" && (
                             <Button data-testid="copy-to-favourites-btn" onClick={handleCopyToFavourites} disabled={copying}
                               className="bg-[#D4AF37] text-white hover:bg-[#D4AF37]/90 rounded-sm text-xs tracking-wider gap-1.5 font-bold"
@@ -914,7 +916,7 @@ export default function AdminGalleryDetail() {
                           backgroundColor: folderHealth.optimised === folderHealth.total ? '#F0FDF4' : '#FFFBEB'
                         }}>
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: folderHealth.optimised === folderHealth.total ? '#16A34A' : '#F59E0B' }} />
-                        <span className="text-[10px] font-medium" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                        <span className="text-[10px] font-medium" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                           {folderHealth.optimised}/{folderHealth.total} web-optimised
                         </span>
                         {folderHealth.optimised < folderHealth.total && (
@@ -936,7 +938,7 @@ export default function AdminGalleryDetail() {
                         <Film className="w-3.5 h-3.5 shrink-0" style={{ color: '#D4AF37' }} />
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-medium" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                            <span className="text-[10px] font-medium" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                               {reprocessProgress.done >= reprocessProgress.total ? 'Done!' : reprocessProgress.current_file || 'Processing...'}
                             </span>
                             <span className="text-[10px] font-bold" style={{ color: '#D4AF37', fontFamily: 'Manrope, sans-serif' }}>
@@ -951,7 +953,7 @@ export default function AdminGalleryDetail() {
                     {!reprocessProgress && Object.keys(transcodeStatus).length > 0 && (
                       <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm border" style={{ borderColor: '#D4AF37', backgroundColor: '#FEFCE8' }}>
                         <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#D4AF37' }} />
-                        <span className="text-[10px] font-medium" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                        <span className="text-[10px] font-medium" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                           Transcoding {Object.values(transcodeStatus).filter(t => t.status === 'transcoding').length} video(s)...
                         </span>
                         {Object.values(transcodeStatus).filter(t => t.status === 'transcoding').map((t) => (
@@ -980,7 +982,7 @@ export default function AdminGalleryDetail() {
               {currentFiles.length === 0 ? (
                 <div className="text-center py-16">
                   <FolderOpen className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" strokeWidth={1} />
-                  <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>No files in {sf}</p>
+                  <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-muted)' }}>No files in {sf}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -1011,13 +1013,13 @@ export default function AdminGalleryDetail() {
                             <span className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 rounded truncate max-w-[90%]" style={{ backgroundColor: 'rgba(0,0,0,0.6)', color: 'white' }}>{file.filename}</span>
                           </div>
                         ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+                          <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
                             <Film className="w-8 h-8 text-[#A8A29E] mb-1" />
                             <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
                           </div>
                         )
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: '#F5F2EB' }}>
+                        <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
                           <FileText className="w-8 h-8 text-[#A8A29E] mb-1" />
                           <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
                           <span className="text-[10px] text-[#C4C0B8] mt-0.5">{(file.file_size / (1024*1024)).toFixed(1)} MB</span>
@@ -1121,16 +1123,16 @@ export default function AdminGalleryDetail() {
 
       {/* Create Share Dialog */}
       <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Create Share Link</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Share this gallery or a specific subfolder with a couple or their guests
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-5 mt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>What to share</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>What to share</Label>
               <div className="grid grid-cols-2 gap-2">
                 <button data-testid="share-whole-gallery" onClick={() => setShareForm(f => ({...f, subfolder: null}))}
                   className={`p-3 border text-left text-xs ${!shareForm.subfolder ? 'border-[#D4AF37] bg-[#D4AF37]/5' : 'border-[#F5F2EB]'}`}
@@ -1151,12 +1153,12 @@ export default function AdminGalleryDetail() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Label (optional)</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Label (optional)</Label>
               <Input data-testid="share-label-input" value={shareForm.label} onChange={e => setShareForm(f => ({...f, label: e.target.value}))}
                 placeholder="e.g. Gina & Mark's Gallery" className="border-[#D4D4D8] rounded-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Custom URL (optional)</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Custom URL (optional)</Label>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-[#A8A29E] whitespace-nowrap">{window.location.origin}/</span>
                 <Input data-testid="share-custom-slug-input" value={shareForm.custom_slug} 
@@ -1166,7 +1168,7 @@ export default function AdminGalleryDetail() {
               <p className="text-xs text-[#A8A29E]">Leave empty for auto-generated URL. Only letters, numbers and hyphens allowed.</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password (leave empty for no password)</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Password (leave empty for no password)</Label>
               <div className="flex gap-2">
                 <Input data-testid="share-password-input" name="new-share-password" autoComplete="new-password" data-lpignore="true"
                   value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
@@ -1184,7 +1186,7 @@ export default function AdminGalleryDetail() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Access Level</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Access Level</Label>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: 'view', label: 'View Only', desc: 'Can only view photos' },
@@ -1213,10 +1215,10 @@ export default function AdminGalleryDetail() {
                     className="mt-1 w-4 h-4 rounded border-[#D4AF37] text-[#D4AF37] focus:ring-[#D4AF37]"
                   />
                   <div>
-                    <span className="block font-bold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                    <span className="block font-bold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-text)' }}>
                       Guest Upload Mode
                     </span>
-                    <span className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                    <span className="text-xs" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                       Shows a simplified upload-only screen for wedding guests. No album browsing, no downloads - just a big upload button and a live counter.
                     </span>
                   </div>
@@ -1234,10 +1236,10 @@ export default function AdminGalleryDetail() {
                     className="mt-1 w-4 h-4 rounded border-[#8B6914] text-[#8B6914] focus:ring-[#8B6914]"
                   />
                   <div>
-                    <span className="block font-bold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                    <span className="block font-bold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-text)' }}>
                       Photographer Upload (All File Types)
                     </span>
-                    <span className="text-xs" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+                    <span className="text-xs" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                       Allows uploading any file type including RAW files (.NEF, .CR2, .CR3, .ARW etc). Use this for second shooters or photographers — not for wedding guests.
                     </span>
                   </div>
@@ -1245,7 +1247,7 @@ export default function AdminGalleryDetail() {
               </div>
             )}
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Expiry Date (optional)</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Expiry Date (optional)</Label>
               <Popover open={expiryPickerOpen} onOpenChange={setExpiryPickerOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" data-testid="expiry-date-picker"
@@ -1291,16 +1293,16 @@ export default function AdminGalleryDetail() {
 
       {/* QR Code Dialog */}
       <Dialog open={!!showQR} onOpenChange={() => setShowQR(null)}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader className="text-center">
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>QR Code</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>{showQR?.label}</DialogDescription>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>{showQR?.label}</DialogDescription>
           </DialogHeader>
           {showQR && (
             <div className="flex flex-col items-center gap-4 py-4">
               <img src={`${getShareQR(showQR.id)}&token=${localStorage.getItem('admin_token')}`}
                 alt="QR Code" className="w-48 h-48" data-testid="qr-code-image" />
-              <p className="text-sm font-medium break-all text-center" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>
+              <p className="text-sm font-medium break-all text-center" style={{ color: 'var(--admin-text)', fontFamily: 'Manrope, sans-serif' }}>
                 {window.location.origin}/s/{showQR.token}
               </p>
               <Button onClick={() => copyShareLink(showQR.token)} className="w-full bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 py-2 text-xs tracking-wider uppercase font-bold gap-2">
@@ -1308,8 +1310,8 @@ export default function AdminGalleryDetail() {
               </Button>
 
               {/* QR Frame Design Selector */}
-              <div className="w-full pt-2 border-t" style={{ borderColor: '#F5F2EB' }}>
-                <p className="text-xs tracking-wider uppercase font-bold mb-3 text-center" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+              <div className="w-full pt-2 border-t" style={{ borderColor: 'var(--admin-border)' }}>
+                <p className="text-xs tracking-wider uppercase font-bold mb-3 text-center" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
                   Download Printable QR Frame
                 </p>
                 <div className="grid grid-cols-3 gap-2">
@@ -1323,7 +1325,7 @@ export default function AdminGalleryDetail() {
                       data-testid={`qr-design-${d.id}`}
                       onClick={() => window.open(getShareQRFrame(showQR.id, d.id), '_blank')}
                       className="group flex flex-col items-center gap-1.5 p-2 border text-center transition-all hover:border-[#D4AF37] hover:bg-[#D4AF37]/5 overflow-hidden"
-                      style={{ borderColor: '#F5F2EB', fontFamily: 'Manrope, sans-serif' }}
+                      style={{ borderColor: 'var(--admin-border)', fontFamily: 'Manrope, sans-serif' }}
                     >
                       <div className="w-full aspect-[4/3] rounded-sm overflow-hidden bg-[#F5F2EB] mb-1">
                         <img
@@ -1333,8 +1335,8 @@ export default function AdminGalleryDetail() {
                           loading="lazy"
                         />
                       </div>
-                      <span className="text-xs font-bold" style={{ color: '#1C1917' }}>{d.name}</span>
-                      <span className="text-[10px] leading-tight" style={{ color: '#A8A29E' }}>{d.desc}</span>
+                      <span className="text-xs font-bold" style={{ color: 'var(--admin-text)' }}>{d.name}</span>
+                      <span className="text-[10px] leading-tight" style={{ color: 'var(--admin-faint)' }}>{d.desc}</span>
                       <div className="flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase text-[#D4AF37] opacity-0 group-hover:opacity-100 transition-opacity">
                         <Download className="w-3 h-3" /> PDF
                       </div>
@@ -1349,22 +1351,22 @@ export default function AdminGalleryDetail() {
 
       {/* Edit Share Dialog */}
       <Dialog open={!!editingShare} onOpenChange={(open) => { if (!open) setEditingShare(null); }}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Edit Share</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               {editingShare && <span className="text-xs break-all">{window.location.origin}/s/{editingShare.token}</span>}
             </DialogDescription>
           </DialogHeader>
           {editingShare && (
             <div className="space-y-4 py-2" style={{ fontFamily: 'Manrope, sans-serif' }}>
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Label</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Label</Label>
                 <Input data-testid="edit-share-label" value={editForm.label} onChange={e => setEditForm(f => ({...f, label: e.target.value}))}
                   className="border-[#D4D4D8] rounded-sm" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Password</Label>
                 <div className="flex gap-2">
                   <Input data-testid="edit-share-password" name="edit-share-password" autoComplete="new-password" data-lpignore="true"
                     value={editForm.password} onChange={e => setEditForm(f => ({...f, password: e.target.value}))}
@@ -1382,7 +1384,7 @@ export default function AdminGalleryDetail() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Access Level</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Access Level</Label>
                 <select data-testid="edit-share-access" value={editForm.access_level}
                   onChange={e => setEditForm(f => ({...f, access_level: e.target.value}))}
                   className="w-full border border-[#D4D4D8] rounded-sm p-2 text-sm bg-white" style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -1410,10 +1412,10 @@ export default function AdminGalleryDetail() {
         setShowAddFolderDialog(open);
         if (!open) setNewFolderName("");
       }}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Add Folder</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Add an empty folder to {gallery?.folder_name}. Existing files and folders will not be changed.
             </DialogDescription>
           </DialogHeader>
@@ -1428,7 +1430,7 @@ export default function AdminGalleryDetail() {
               ))}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-subfolder-name" className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Folder name</Label>
+              <Label htmlFor="new-subfolder-name" className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Folder name</Label>
               <Input id="new-subfolder-name" data-testid="new-subfolder-name" value={newFolderName}
                 onChange={e => setNewFolderName(e.target.value)} placeholder="e.g. Album Favourites" autoFocus
                 className="border-[#D4D4D8] rounded-sm"
@@ -1448,12 +1450,12 @@ export default function AdminGalleryDetail() {
 
       {/* Delete Subfolder Confirmation */}
       <AlertDialog open={!!deleteSubfolderTarget} onOpenChange={(open) => { if (!open) setDeleteSubfolderTarget(null); }}>
-        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
+        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               Remove &ldquo;{deleteSubfolderTarget}&rdquo;?
             </AlertDialogTitle>
-            <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <AlertDialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               {((gallery?.file_counts || {})[deleteSubfolderTarget] || 0) > 0
                 ? `This will permanently delete ${(gallery?.file_counts || {})[deleteSubfolderTarget]} files in this folder.`
                 : "This will remove the empty subfolder from this gallery."}
@@ -1475,23 +1477,23 @@ export default function AdminGalleryDetail() {
 
       {/* File Delete Confirmation Dialog */}
       <Dialog open={fileDeleteConfirm.open} onOpenChange={(open) => !open && setFileDeleteConfirm({ open: false, fileId: null, filename: "", deleteBackup: false, isBulk: false })}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               Delete {fileDeleteConfirm.isBulk ? "Files" : "File"}
             </DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Are you sure you want to delete <strong>{fileDeleteConfirm.filename}</strong>?
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2">
-            <label className="flex items-start gap-3 p-3 rounded-sm border cursor-pointer hover:bg-amber-50/50 transition-colors" style={{ borderColor: '#E8E4DC' }}>
+            <label className="flex items-start gap-3 p-3 rounded-sm border cursor-pointer hover:bg-amber-50/50 transition-colors" style={{ borderColor: 'var(--admin-border)' }}>
               <input data-testid="delete-file-backup-checkbox" type="checkbox" checked={fileDeleteConfirm.deleteBackup}
                 onChange={e => setFileDeleteConfirm(d => ({...d, deleteBackup: e.target.checked}))}
                 className="mt-0.5 w-4 h-4 rounded accent-[#D4AF37]" />
               <div>
-                <span className="text-sm font-semibold" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>Also delete from backup</span>
-                <p className="text-xs mt-0.5" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                <span className="text-sm font-semibold" style={{ color: 'var(--admin-text)', fontFamily: 'Manrope, sans-serif' }}>Also delete from backup</span>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                   Removes the backup copy too, freeing up storage space
                 </p>
               </div>
@@ -1512,24 +1514,24 @@ export default function AdminGalleryDetail() {
 
       {/* Send Template Email Dialog */}
       <Dialog open={showSendEmail} onOpenChange={setShowSendEmail}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Send Email</DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Send a template email to <strong>{clientEmail}</strong>
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             {emailTemplates.length === 0 ? (
-              <div className="text-center py-6 border rounded-sm" style={{ borderColor: '#E8E4DC' }}>
+              <div className="text-center py-6 border rounded-sm" style={{ borderColor: 'var(--admin-border)' }}>
                 <FileText className="w-10 h-10 mx-auto mb-2 text-[#D4D4D8]" />
-                <p className="text-sm" style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>No templates found</p>
-                <p className="text-xs mt-1" style={{ color: '#A8A29E' }}>Create templates in Settings &gt; Email Templates first</p>
+                <p className="text-sm" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>No templates found</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--admin-faint)' }}>Create templates in Settings &gt; Email Templates first</p>
               </div>
             ) : (
               <>
                 <div className="space-y-1.5">
-                  <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Choose Template</Label>
+                  <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Choose Template</Label>
                   <div className="space-y-2">
                     {emailTemplates.map(t => (
                       <label key={t.id} className={`flex items-start gap-3 p-3 rounded-sm border cursor-pointer transition-colors ${
@@ -1539,8 +1541,8 @@ export default function AdminGalleryDetail() {
                           onChange={() => setSelectedTemplateId(t.id)}
                           className="mt-0.5 accent-[#D4AF37]" />
                         <div className="flex-1 min-w-0">
-                          <span className="text-sm font-semibold" style={{ color: '#1C1917', fontFamily: 'Manrope, sans-serif' }}>{t.name}</span>
-                          <p className="text-xs mt-0.5" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                          <span className="text-sm font-semibold" style={{ color: 'var(--admin-text)', fontFamily: 'Manrope, sans-serif' }}>{t.name}</span>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                             Subject: {t.subject.replace('{couple_name}', gallery?.folder_name || '')}
                           </p>
                         </div>
@@ -1549,9 +1551,9 @@ export default function AdminGalleryDetail() {
                   </div>
                 </div>
                 {selectedTemplateId && (
-                  <div className="p-3 rounded-sm border text-xs" style={{ borderColor: '#E8E4DC', backgroundColor: '#FAFAF9', fontFamily: 'Manrope, sans-serif' }}>
-                    <p className="font-semibold mb-1" style={{ color: '#57534E' }}>Preview:</p>
-                    <p style={{ color: '#78716C', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                  <div className="p-3 rounded-sm border text-xs" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-soft)', fontFamily: 'Manrope, sans-serif' }}>
+                    <p className="font-semibold mb-1" style={{ color: 'var(--admin-muted)' }}>Preview:</p>
+                    <p style={{ color: 'var(--admin-subtle)', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
                       {(emailTemplates.find(t => t.id === selectedTemplateId)?.body || '')
                         .replace(/\{couple_name\}/g, gallery?.folder_name || '')
                         .replace(/\{gallery_link\}/g, shares.find(s => s.is_active && !s.guest_upload_mode)?.custom_slug || shares.find(s => s.is_active && !s.guest_upload_mode)?.token || '')
@@ -1563,20 +1565,20 @@ export default function AdminGalleryDetail() {
             )}
           </div>
           <div className="space-y-1.5 px-0">
-            <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Attachment</Label>
+            <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Attachment</Label>
             <input ref={attachmentInputRef} type="file" className="hidden" data-testid="gallery-email-attachment"
               onChange={e => { if (e.target.files?.length) { setGalleryEmailAttachments(prev => [...prev, ...Array.from(e.target.files)]); } e.target.value = ''; }} />
             <div className="flex items-center gap-2 flex-wrap">
               <button type="button" onClick={() => attachmentInputRef.current?.click()}
                 className="cursor-pointer text-xs px-3 py-1.5 border rounded-sm hover:bg-[#F5F2EB] flex items-center gap-1.5"
-                style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }}
+                style={{ borderColor: 'var(--admin-border-strong)', fontFamily: 'Manrope, sans-serif' }}
                 data-testid="gallery-email-choose-file">
                 <Paperclip className="w-3.5 h-3.5" />Choose File
               </button>
               {galleryEmailAttachments.map((f, i) => (
-                <span key={i} className="text-[11px] px-2 py-1 rounded-full flex items-center gap-1.5 border" style={{ backgroundColor: '#F0EDE6', borderColor: '#D4D4D8', color: '#1C1917' }}>
+                <span key={i} className="text-[11px] px-2 py-1 rounded-full flex items-center gap-1.5 border" style={{ backgroundColor: 'var(--admin-surface-raised)', borderColor: 'var(--admin-border-strong)', color: 'var(--admin-text)' }}>
                   <Paperclip className="w-3 h-3" style={{ color: '#D4AF37' }} />
-                  {f.name} <span style={{ color: '#A8A29E' }}>({(f.size / 1024).toFixed(0)}KB)</span>
+                  {f.name} <span style={{ color: 'var(--admin-faint)' }}>({(f.size / 1024).toFixed(0)}KB)</span>
                   <button type="button" onClick={() => setGalleryEmailAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-600 ml-0.5"><X className="w-3 h-3" /></button>
                 </span>
               ))}

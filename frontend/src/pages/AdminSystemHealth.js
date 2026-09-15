@@ -8,6 +8,7 @@ import {
   Server, ShieldCheck, Users, Video, XCircle
 } from "lucide-react";
 import { getSystemHealth } from "@/lib/api";
+import AdminThemeToggle from "@/components/AdminThemeToggle";
 
 const STATUS = {
   healthy: { label: "Healthy", color: "#15803D", bg: "#F0FDF4", border: "#BBF7D0", Icon: CheckCircle2 },
@@ -53,7 +54,7 @@ function StatusBadge({ status }) {
 function SummaryCard({ icon: Icon, label, value, detail, status = "neutral" }) {
   const item = tone(status);
   return (
-    <div className="p-5 border rounded-sm bg-white min-w-0" style={{ borderColor: "#E8E4DC" }}>
+    <div className="p-5 border rounded-sm bg-white min-w-0" style={{ borderColor: "var(--admin-border)" }}>
       <div className="flex items-center gap-2 mb-3">
         <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ color: item.color, backgroundColor: item.bg }}>
           <Icon className="w-4 h-4" />
@@ -68,7 +69,7 @@ function SummaryCard({ icon: Icon, label, value, detail, status = "neutral" }) {
 
 function HealthRow({ icon: Icon, item }) {
   return (
-    <div className="p-4 sm:p-5 flex items-start gap-3 border-b last:border-b-0" style={{ borderColor: "#F0EDE6" }}>
+    <div className="p-4 sm:p-5 flex items-start gap-3 border-b last:border-b-0" style={{ borderColor: "var(--admin-border)" }}>
       <div className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center bg-[#F7F5EF] text-[#57534E]">
         <Icon className="w-4 h-4" />
       </div>
@@ -88,8 +89,8 @@ function HealthRow({ icon: Icon, item }) {
 
 function Section({ title, subtitle, children }) {
   return (
-    <section className="border rounded-sm bg-white overflow-hidden" style={{ borderColor: "#E8E4DC" }}>
-      <div className="px-5 py-4 bg-[#FAFAF9] border-b" style={{ borderColor: "#E8E4DC" }}>
+    <section className="border rounded-sm bg-white overflow-hidden" style={{ borderColor: "var(--admin-border)" }}>
+      <div className="px-5 py-4 bg-[#FAFAF9] border-b" style={{ borderColor: "var(--admin-border)" }}>
         <h2 className="text-sm font-semibold text-[#1C1917]">{title}</h2>
         <p className="text-[11px] text-[#A8A29E] mt-0.5">{subtitle}</p>
       </div>
@@ -127,12 +128,13 @@ export default function AdminSystemHealth() {
   const storage = health?.summary?.storage;
   const backup = health?.summary?.backup;
   const downloads = health?.work?.folder_downloads;
+  const broadcast = health?.work?.broadcast_campaign;
   const overall = tone(health?.status);
   const OverallIcon = overall.Icon;
 
   return (
-    <div className="min-h-screen bg-[#FDFCF8]" data-testid="system-health-page">
-      <header className="sticky top-0 z-40 border-b bg-[#FDFCF8]/90 backdrop-blur-md" style={{ borderColor: "rgba(212,175,55,0.15)" }}>
+    <div className="min-h-screen" data-admin-page data-testid="system-health-page" style={{ backgroundColor: 'var(--admin-bg)' }}>
+      <header className="sticky top-0 z-40 border-b backdrop-blur-md" style={{ backgroundColor: 'var(--admin-header-bg)', borderColor: "rgba(212,175,55,0.15)" }}>
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Button variant="ghost" size="sm" onClick={() => navigate("/admin/dashboard")} className="gap-2 shrink-0" data-testid="health-back-btn">
@@ -143,9 +145,12 @@ export default function AdminSystemHealth() {
               <p className="text-[10px] text-[#A8A29E]">Read-only monitoring</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => load()} disabled={loading} className="gap-2" data-testid="refresh-health-btn">
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> <span className="hidden sm:inline">Refresh</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <AdminThemeToggle />
+            <Button variant="outline" size="sm" onClick={() => load()} disabled={loading} className="gap-2" data-testid="refresh-health-btn">
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> <span className="hidden sm:inline">Refresh</span>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -181,7 +186,7 @@ export default function AdminSystemHealth() {
               <SummaryCard icon={ShieldCheck} label="Last gallery backup" value={backup?.status === "active" ? "Running" : formatDate(backup?.last_completed_at)}
                 detail={backup?.title || "Not recorded"} status={backup?.status} />
               <SummaryCard icon={Activity} label="Active work" value={health.summary.active_work}
-                detail="Backups, video jobs and folder ZIPs" status={health.summary.active_work > 0 ? "active" : "healthy"} />
+                detail="Backups, broadcasts, video jobs and folder ZIPs" status={health.summary.active_work > 0 ? "active" : "healthy"} />
               <SummaryCard icon={Users} label="Couples online" value={health.summary.couples_online}
                 detail="Active gallery sessions now" status={health.summary.couples_online > 0 ? "active" : "healthy"} />
             </div>
@@ -215,13 +220,18 @@ export default function AdminSystemHealth() {
                   title: health.work.backup_running ? "Gallery backup running" : "No gallery backup running",
                   detail: health.work.backup_running ? backup.detail : "Background backup worker is available."
                 }} />
+                <HealthRow icon={Mail} item={{
+                  status: broadcast ? "active" : "healthy",
+                  title: broadcast ? `Broadcast ${broadcast.sent}/${broadcast.total} sent` : "No broadcast running",
+                  detail: broadcast ? broadcast.message : "The paced email queue is available."
+                }} />
               </Section>
 
               <div className="lg:col-span-2">
                 <Section title="Data protection" subtitle="Clear separation between app-verified and TrueNAS-managed protection">
                   <div className="grid md:grid-cols-3">
-                    <div className="md:border-r" style={{ borderColor: "#F0EDE6" }}><HealthRow icon={HardDrive} item={health.protection.gallery_backup} /></div>
-                    <div className="md:border-r" style={{ borderColor: "#F0EDE6" }}><HealthRow icon={Database} item={health.protection.database_backup} /></div>
+                    <div className="md:border-r" style={{ borderColor: "var(--admin-border)" }}><HealthRow icon={HardDrive} item={health.protection.gallery_backup} /></div>
+                    <div className="md:border-r" style={{ borderColor: "var(--admin-border)" }}><HealthRow icon={Database} item={health.protection.database_backup} /></div>
                     <HealthRow icon={Cloud} item={health.protection.offsite_backup} />
                   </div>
                 </Section>

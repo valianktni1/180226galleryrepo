@@ -21,6 +21,7 @@ import {
   get2FAStatus, setup2FA, enable2FA, disable2FA, getSMTPSettings, saveSMTPSettings, testSMTP,
   getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate
 } from "@/lib/api";
+import AdminThemeToggle from "@/components/AdminThemeToggle";
 
 export default function AdminSettings() {
   const navigate = useNavigate();
@@ -376,14 +377,17 @@ export default function AdminSettings() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#FDFCF8' }}>
+    <div className="min-h-screen" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b" style={{ backgroundColor: 'rgba(253,252,248,0.9)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
-        <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button onClick={() => navigate("/admin/dashboard")} className="text-[#57534E] hover:text-[#1C1917]">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Settings</h1>
+      <header className="sticky top-0 z-50 border-b" style={{ backgroundColor: 'var(--admin-header-bg)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
+        <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate("/admin/dashboard")} className="text-[#57534E] hover:text-[#1C1917]">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <h1 className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Settings</h1>
+          </div>
+          <AdminThemeToggle />
         </div>
       </header>
 
@@ -418,19 +422,19 @@ export default function AdminSettings() {
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-md">
             <form onSubmit={handlePasswordChange} className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Current Password</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Current Password</Label>
                 <Input type="password" data-testid="current-password" value={passwordForm.current_password}
                   onChange={e => setPasswordForm(f => ({...f, current_password: e.target.value}))}
                   className="border-[#D4D4D8] rounded-sm" required />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>New Password</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>New Password</Label>
                 <Input type="password" data-testid="new-password" value={passwordForm.new_password}
                   onChange={e => setPasswordForm(f => ({...f, new_password: e.target.value}))}
                   className="border-[#D4D4D8] rounded-sm" required minLength={6} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Confirm New Password</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Confirm New Password</Label>
                 <Input type="password" data-testid="confirm-password" value={passwordForm.confirm_password}
                   onChange={e => setPasswordForm(f => ({...f, confirm_password: e.target.value}))}
                   className="border-[#D4D4D8] rounded-sm" required minLength={6} />
@@ -467,7 +471,7 @@ export default function AdminSettings() {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-2 p-4 rounded-sm mb-4" style={{ backgroundColor: '#F5F2EB' }}>
+                  <div className="grid grid-cols-2 gap-2 p-4 rounded-sm mb-4" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
                     {recoveryCodes.map((code, i) => (
                       <code key={i} className="text-sm font-mono font-bold text-center py-1" data-testid={`recovery-code-${i}`}>
                         {code}
@@ -530,7 +534,7 @@ export default function AdminSettings() {
                     Open Google Authenticator on your phone and scan this QR code.
                   </p>
                   
-                  <div className="flex justify-center p-6 rounded-sm mb-4" style={{ backgroundColor: '#F5F2EB' }}>
+                  <div className="flex justify-center p-6 rounded-sm mb-4" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
                     <img src={setupQR} alt="2FA QR Code" className="w-48 h-48" data-testid="2fa-qr-code" />
                   </div>
 
@@ -538,7 +542,7 @@ export default function AdminSettings() {
                     Can&apos;t scan? Enter this code manually:
                   </p>
                   <code className="block text-center text-sm font-mono font-bold p-2 rounded-sm select-all" 
-                    style={{ backgroundColor: '#F5F2EB' }} data-testid="2fa-manual-secret">
+                    style={{ backgroundColor: 'var(--admin-surface-raised)' }} data-testid="2fa-manual-secret">
                     {setupSecret}
                   </code>
                 </div>
@@ -602,7 +606,7 @@ export default function AdminSettings() {
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: 'var(--admin-surface-raised)' }}>
                     <Shield className="w-6 h-6 text-[#D4AF37] mb-2" />
                     <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>How it works</h4>
                     <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -612,7 +616,7 @@ export default function AdminSettings() {
                       <li>4. Even if someone knows your password, they can&apos;t get in</li>
                     </ul>
                   </div>
-                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: 'var(--admin-surface-raised)' }}>
                     <Key className="w-6 h-6 text-[#D4AF37] mb-2" />
                     <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>What you need</h4>
                     <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -647,42 +651,42 @@ export default function AdminSettings() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>SMTP Server</Label>
+                        <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>SMTP Server</Label>
                         <Input data-testid="smtp-server" value={smtpForm.smtp_server}
                           onChange={e => setSMTPForm(f => ({...f, smtp_server: e.target.value}))}
                           placeholder="smtp.hostinger.com" className="border-[#D4D4D8] rounded-sm" />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Port</Label>
+                        <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Port</Label>
                         <Input data-testid="smtp-port" type="number" value={smtpForm.smtp_port}
                           onChange={e => setSMTPForm(f => ({...f, smtp_port: parseInt(e.target.value) || 465}))}
                           placeholder="465" className="border-[#D4D4D8] rounded-sm" />
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Email Address</Label>
+                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Email Address</Label>
                       <Input data-testid="smtp-email" type="email" value={smtpForm.smtp_email}
                         onChange={e => setSMTPForm(f => ({...f, smtp_email: e.target.value}))}
                         placeholder="mark@perfectweddingsbymark.uk" className="border-[#D4D4D8] rounded-sm" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Password</Label>
+                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Password</Label>
                       <Input data-testid="smtp-password" type="password" value={smtpForm.smtp_password}
                         onChange={e => setSMTPForm(f => ({...f, smtp_password: e.target.value}))}
                         placeholder="Your email password" className="border-[#D4D4D8] rounded-sm" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Sender Name</Label>
+                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Sender Name</Label>
                       <Input data-testid="smtp-sender" value={smtpForm.sender_name}
                         onChange={e => setSMTPForm(f => ({...f, sender_name: e.target.value}))}
                         placeholder="Weddings By Mark" className="border-[#D4D4D8] rounded-sm" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Gallery Site URL</Label>
+                      <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Gallery Site URL</Label>
                       <Input data-testid="smtp-site-url" value={smtpForm.site_url}
                         onChange={e => setSMTPForm(f => ({...f, site_url: e.target.value}))}
                         placeholder="https://gallery.weddingsbymark.co.uk" className="border-[#D4D4D8] rounded-sm" />
-                      <p className="text-[11px]" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                      <p className="text-[11px]" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                         Your gallery domain — used to display your awards badge in emails
                       </p>
                     </div>
@@ -700,7 +704,7 @@ export default function AdminSettings() {
                   </div>
                 </div>
 
-                <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: 'var(--admin-surface-raised)' }}>
                   <Mail className="w-6 h-6 text-[#D4AF37] mb-2" />
                   <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>How it works</h4>
                   <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -721,7 +725,7 @@ export default function AdminSettings() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <p className="text-sm text-[#57534E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                  Create reusable email templates. Use <code className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#F5F2EB' }}>{'{couple_name}'}</code> and <code className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#F5F2EB' }}>{'{gallery_link}'}</code> as tokens — they auto-fill when you send.
+                  Create reusable email templates. Use <code className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>{'{couple_name}'}</code> and <code className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>{'{gallery_link}'}</code> as tokens — they auto-fill when you send.
                 </p>
               </div>
               <Button onClick={openNewTemplate} data-testid="add-template-btn"
@@ -737,7 +741,7 @@ export default function AdminSettings() {
             ) : emailTemplates.length === 0 ? (
               <div className="text-center py-12 border rounded-sm" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
                 <FileText className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" />
-                <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>No templates yet</p>
+                <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-muted)' }}>No templates yet</p>
                 <p className="text-sm mt-1 text-[#A8A29E]" style={{ fontFamily: 'Manrope, sans-serif' }}>
                   Create your first template to start sending quick personalised emails
                 </p>
@@ -749,13 +753,13 @@ export default function AdminSettings() {
                     data-testid={`template-${t.id}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: '#1C1917' }}>
+                        <h4 className="font-semibold text-sm" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-text)' }}>
                           {t.name}
                         </h4>
-                        <p className="text-xs mt-0.5" style={{ color: '#A8A29E', fontFamily: 'Manrope, sans-serif' }}>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                           Subject: {t.subject}
                         </p>
-                        <p className="text-xs mt-1 line-clamp-2" style={{ color: '#78716C', fontFamily: 'Manrope, sans-serif' }}>
+                        <p className="text-xs mt-1 line-clamp-2" style={{ color: 'var(--admin-subtle)', fontFamily: 'Manrope, sans-serif' }}>
                           {t.body}
                         </p>
                       </div>
@@ -813,7 +817,7 @@ export default function AdminSettings() {
 
                 {/* Info Cards */}
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: 'var(--admin-surface-raised)' }}>
                     <Film className="w-6 h-6 text-[#D4AF37] mb-2" />
                     <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>How it works</h4>
                     <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -823,7 +827,7 @@ export default function AdminSettings() {
                       <li>• Typically saves 50-70% storage space</li>
                     </ul>
                   </div>
-                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: '#F5F2EB' }}>
+                  <div className="border rounded-sm p-4" style={{ borderColor: 'rgba(212,175,55,0.15)', backgroundColor: 'var(--admin-surface-raised)' }}>
                     <Check className="w-6 h-6 text-green-600 mb-2" />
                     <h4 className="font-medium mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>What&apos;s protected</h4>
                     <ul className="text-sm text-[#57534E] space-y-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -870,18 +874,18 @@ export default function AdminSettings() {
             ) : printSizes.length === 0 ? (
               <div className="text-center py-12 border rounded-sm" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
                 <Printer className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" />
-                <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>No print sizes configured</p>
+                <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-muted)' }}>No print sizes configured</p>
                 <p className="text-sm mt-1 text-[#A8A29E]">Add print sizes to enable the print shop for your couples</p>
               </div>
             ) : (
               <div className="border rounded-sm overflow-hidden" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
                 <table className="w-full">
                   <thead>
-                    <tr style={{ backgroundColor: '#F5F2EB' }}>
-                      <th className="text-left px-4 py-3 text-xs tracking-wider uppercase font-bold" style={{ color: '#57534E' }}>Size</th>
-                      <th className="text-right px-4 py-3 text-xs tracking-wider uppercase font-bold" style={{ color: '#57534E' }}>Gloss</th>
-                      <th className="text-right px-4 py-3 text-xs tracking-wider uppercase font-bold" style={{ color: '#57534E' }}>Luster</th>
-                      <th className="text-right px-4 py-3 text-xs tracking-wider uppercase font-bold" style={{ color: '#57534E' }}>Silk</th>
+                    <tr style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
+                      <th className="text-left px-4 py-3 text-xs tracking-wider uppercase font-bold" style={{ color: 'var(--admin-muted)' }}>Size</th>
+                      <th className="text-right px-4 py-3 text-xs tracking-wider uppercase font-bold" style={{ color: 'var(--admin-muted)' }}>Gloss</th>
+                      <th className="text-right px-4 py-3 text-xs tracking-wider uppercase font-bold" style={{ color: 'var(--admin-muted)' }}>Luster</th>
+                      <th className="text-right px-4 py-3 text-xs tracking-wider uppercase font-bold" style={{ color: 'var(--admin-muted)' }}>Silk</th>
                       <th className="w-24"></th>
                     </tr>
                   </thead>
@@ -921,7 +925,7 @@ export default function AdminSettings() {
             ) : orders.length === 0 ? (
               <div className="text-center py-12 border rounded-sm" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
                 <Package className="w-12 h-12 mx-auto mb-3 text-[#D4D4D8]" />
-                <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: '#57534E' }}>No orders yet</p>
+                <p className="text-lg" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-muted)' }}>No orders yet</p>
                 <p className="text-sm mt-1 text-[#A8A29E]">Orders will appear here when couples purchase prints</p>
               </div>
             ) : (
@@ -984,37 +988,37 @@ export default function AdminSettings() {
 
       {/* Add/Edit Print Size Dialog */}
       <Dialog open={showSizeDialog} onOpenChange={setShowSizeDialog}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               {editingSize ? "Edit Print Size" : "Add Print Size"}
             </DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Set the size name and prices for each finish type
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Size Name</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Size Name</Label>
               <Input data-testid="size-name" value={sizeForm.name} 
                 onChange={e => setSizeForm(f => ({...f, name: e.target.value}))}
                 placeholder="e.g. 6x4, 7x5, 10x8" className="border-[#D4D4D8] rounded-sm" />
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Gloss (£)</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Gloss (£)</Label>
                 <Input type="number" step="0.01" data-testid="gloss-price" value={sizeForm.gloss_price}
                   onChange={e => setSizeForm(f => ({...f, gloss_price: e.target.value}))}
                   placeholder="5.00" className="border-[#D4D4D8] rounded-sm" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Luster (£)</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Luster (£)</Label>
                 <Input type="number" step="0.01" data-testid="luster-price" value={sizeForm.luster_price}
                   onChange={e => setSizeForm(f => ({...f, luster_price: e.target.value}))}
                   placeholder="6.00" className="border-[#D4D4D8] rounded-sm" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Silk (£)</Label>
+                <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Silk (£)</Label>
                 <Input type="number" step="0.01" data-testid="silk-price" value={sizeForm.silk_price}
                   onChange={e => setSizeForm(f => ({...f, silk_price: e.target.value}))}
                   placeholder="6.50" className="border-[#D4D4D8] rounded-sm" />
@@ -1033,12 +1037,12 @@ export default function AdminSettings() {
 
       {/* Delete Size Confirmation */}
       <AlertDialog open={!!deleteSizeTarget} onOpenChange={() => setDeleteSizeTarget(null)}>
-        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
+        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               Delete &ldquo;{deleteSizeTarget?.name}&rdquo;?
             </AlertDialogTitle>
-            <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <AlertDialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               This will remove this print size option from the shop.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1054,7 +1058,7 @@ export default function AdminSettings() {
 
       {/* Order Details Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               Order Details
@@ -1085,7 +1089,7 @@ export default function AdminSettings() {
                 <p className="text-xs uppercase text-[#A8A29E] mb-2">Items</p>
                 <div className="space-y-2">
                   {selectedOrder.items.map((item, i) => (
-                    <div key={i} className="flex justify-between text-sm p-2" style={{ backgroundColor: '#F5F2EB' }}>
+                    <div key={i} className="flex justify-between text-sm p-2" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
                       <div>
                         <p className="font-medium">{item.filename}</p>
                         <p className="text-xs text-[#57534E]">{item.size_name} • {item.finish} • Qty: {item.quantity}</p>
@@ -1117,12 +1121,12 @@ export default function AdminSettings() {
 
       {/* Disable 2FA Confirmation Dialog */}
       <Dialog open={showDisableConfirm} onOpenChange={(open) => { setShowDisableConfirm(open); if (!open) setDisableCode(""); }}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               Disable Two-Factor Authentication
             </DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Enter your current 2FA code or a recovery code to disable two-factor authentication.
             </DialogDescription>
           </DialogHeader>
@@ -1153,38 +1157,38 @@ export default function AdminSettings() {
 
       {/* Email Template Create/Edit Dialog */}
       <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: '#FDFCF8' }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               {editingTemplate ? "Edit Template" : "New Email Template"}
             </DialogTitle>
-            <DialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               Use <code className="text-xs px-1 py-0.5 rounded bg-gray-100">{'{couple_name}'}</code> and <code className="text-xs px-1 py-0.5 rounded bg-gray-100">{'{gallery_link}'}</code> — they auto-fill when sending.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Template Name</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Template Name</Label>
               <Input data-testid="template-name" value={templateForm.name}
                 onChange={e => setTemplateForm(f => ({...f, name: e.target.value}))}
                 placeholder="e.g. Booking Confirmation, Thank You, Payment Reminder"
                 className="border-[#D4D4D8] rounded-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Subject Line</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Subject Line</Label>
               <Input data-testid="template-subject" value={templateForm.subject}
                 onChange={e => setTemplateForm(f => ({...f, subject: e.target.value}))}
                 placeholder="e.g. Booking Confirmed — {couple_name}"
                 className="border-[#D4D4D8] rounded-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: '#57534E' }}>Email Body</Label>
+              <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Email Body</Label>
               <textarea data-testid="template-body" value={templateForm.body}
                 onChange={e => setTemplateForm(f => ({...f, body: e.target.value}))}
                 placeholder={"Hey {couple_name},\n\nThank you for booking with Weddings By Mark...\n\nSpeak soon,\nMark"}
                 rows={10}
                 className="w-full px-3 py-2 text-sm border rounded-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
-                style={{ borderColor: '#D4D4D8', fontFamily: 'Manrope, sans-serif' }} />
+                style={{ borderColor: 'var(--admin-border-strong)', fontFamily: 'Manrope, sans-serif' }} />
             </div>
           </div>
           <DialogFooter>
@@ -1199,12 +1203,12 @@ export default function AdminSettings() {
 
       {/* Delete Template Confirmation */}
       <AlertDialog open={!!deleteTemplateTarget} onOpenChange={() => setDeleteTemplateTarget(null)}>
-        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: '#FDFCF8' }}>
+        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               Delete template?
             </AlertDialogTitle>
-            <AlertDialogDescription style={{ color: '#57534E', fontFamily: 'Manrope, sans-serif' }}>
+            <AlertDialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
               This will permanently remove the &ldquo;{deleteTemplateTarget?.name}&rdquo; template.
             </AlertDialogDescription>
           </AlertDialogHeader>

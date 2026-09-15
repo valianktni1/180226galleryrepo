@@ -3,8 +3,11 @@ from fastapi.responses import FileResponse, StreamingResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 import os
 import io
+import html
 import logging
 import shutil
 import zipfile
@@ -40,6 +43,13 @@ from share_security import ShareSessionError, refresh_share_claims, share_is_exp
 from backup_service import BackupManager
 from download_job_service import DownloadJobError, DownloadJobManager
 from system_health import backup_health, overall_status, storage_status, utc_now_iso
+from broadcast_service import (
+    ACTIVE_CAMPAIGN_STATUSES,
+    pending_batch,
+    public_campaign,
+    recipient_counts,
+    unique_recipients,
+)
 from security_paths import (
     UnsafePathError,
     contained_path,
@@ -60,6 +70,11 @@ CACHE_DIR = UPLOAD_DIR / ".cache" / "thumbs"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 DOWNLOAD_CACHE_DIR = UPLOAD_DIR / ".cache" / "downloads"
 download_job_manager = DownloadJobManager(DOWNLOAD_CACHE_DIR)
+BROADCAST_CACHE_DIR = UPLOAD_DIR / ".cache" / "broadcasts"
+BROADCAST_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+BROADCAST_BATCH_SIZE = 10
+BROADCAST_BATCH_DELAY_SECONDS = 120
+MAX_BROADCAST_ATTACHMENT_BYTES = 15 * 1024 * 1024
 
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 
@@ -4719,7 +4734,17 @@ async def get_system_health(admin=Depends(get_admin)):
     download_health = download_job_manager.health_snapshot()
     backup = backup_health(backup_manager.status())
     backup_running = backup["status"] == "active"
-    active_work = transcode_active + optimise_active + download_health["active"] + int(backup_running)
+    try:
+        active_broadcast = await db.broadcast_campaigns.find_one(
+            {"status": {"$in": list(ACTIVE_CAMPAIGN_STATUSES)}}, {"_id": 0}
+        )
+    except Exception:
+        active_broadcast = None
+    broadcast_health = public_campaign(active_broadcast)
+    active_work = (
+        transcode_active + optimise_active + download_health["active"]
+        + int(backup_running) + int(bool(active_broadcast))
+    )
 
     monitored = [database_health, storage_health, email_health, gpu_health, backup]
     status = overall_status(monitored)
@@ -4755,6 +4780,7 @@ async def get_system_health(admin=Depends(get_admin)):
             "video_files_transcoding": transcode_active,
             "folder_downloads": download_health,
             "backup_running": backup_running,
+            "broadcast_campaign": broadcast_health,
             "couples_online": current_visitors,
         },
         "protection": {
@@ -5327,7 +5353,291 @@ async def broadcast_preview(admin=Depends(get_admin)):
         {"client_email": {"$exists": True, "$ne": "", "$ne": None}},
         {"_id": 0, "id": 1, "folder_name": 1, "client_email": 1}
     ).to_list(500)
-    return {"recipients": galleries, "count": len(galleries)}
+    recipients = unique_recipients(galleries)
+    return {
+        "recipients": [
+            {
+                "id": str(uuid.uuid4()),
+                "folder_name": ", ".join(recipient["gallery_names"]),
+                "client_email": recipient["email"],
+            }
+            for recipient in recipients
+        ],
+        "count": len(recipients),
+    }
+
+
+def _broadcast_attachment_directory(campaign_id: str) -> Path:
+    return contained_path(BROADCAST_CACHE_DIR, campaign_id, labels=("broadcast campaign id",))
+
+
+def _safe_attachment_display_name(filename: str) -> str:
+    value = (
+        Path(filename or "attachment").name
+        .replace("\r", "_").replace("\n", "_")
+        .replace('"', "_").replace("\\", "_")
+    )
+    value = "".join(character for character in value if ord(character) >= 32)
+    return value[:180] or "attachment"
+
+
+async def _store_broadcast_attachments(campaign_id: str, attachments: List[UploadFile]) -> List[dict]:
+    """Store bounded attachments in the persistent application cache."""
+    if not attachments:
+        return []
+    directory = _broadcast_attachment_directory(campaign_id)
+    directory.mkdir(parents=True, exist_ok=True)
+    stored = []
+    total_bytes = 0
+    try:
+        for attachment in attachments:
+            remaining = MAX_BROADCAST_ATTACHMENT_BYTES - total_bytes
+            if remaining <= 0:
+                raise HTTPException(status_code=400, detail="Broadcast attachments must total no more than 15 MB")
+            data = await attachment.read(remaining + 1)
+            total_bytes += len(data)
+            if total_bytes > MAX_BROADCAST_ATTACHMENT_BYTES:
+                raise HTTPException(status_code=400, detail="Broadcast attachments must total no more than 15 MB")
+            storage_name = f"{uuid.uuid4().hex}.bin"
+            async with aiofiles.open(directory / storage_name, "wb") as output:
+                await output.write(data)
+            stored.append({
+                "filename": _safe_attachment_display_name(attachment.filename),
+                "storage_name": storage_name,
+                "size": len(data),
+            })
+        return stored
+    except Exception:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
+
+
+async def _load_broadcast_attachments(campaign: dict) -> List[dict]:
+    directory = _broadcast_attachment_directory(campaign["id"])
+    loaded = []
+    for attachment in campaign.get("attachments", []):
+        path = contained_path(directory, attachment["storage_name"], labels=("broadcast attachment",))
+        async with aiofiles.open(path, "rb") as source:
+            data = await source.read()
+        loaded.append({"filename": attachment["filename"], "data": data})
+    return loaded
+
+
+def _remove_broadcast_attachments(campaign_id: str) -> None:
+    try:
+        shutil.rmtree(_broadcast_attachment_directory(campaign_id), ignore_errors=True)
+    except UnsafePathError:
+        logger.warning("Refused unsafe broadcast attachment cleanup path")
+
+
+async def _update_broadcast_recipient(campaign_id: str, recipient_id: str, **values) -> None:
+    updates = {f"recipients.$.{key}": value for key, value in values.items()}
+    updates["updated_at"] = utc_now_iso()
+    await db.broadcast_campaigns.update_one(
+        {"id": campaign_id, "recipients.id": recipient_id},
+        {"$set": updates},
+    )
+
+
+async def _finish_broadcast_campaign(campaign: dict) -> None:
+    counts = recipient_counts(campaign.get("recipients", []))
+    await db.broadcast_campaigns.update_one(
+        {"id": campaign["id"]},
+        {"$set": {
+            "status": "complete",
+            "message": f"Broadcast complete. {counts['sent']} sent, {counts['failed']} failed.",
+            "sent": counts["sent"],
+            "failed": counts["failed"],
+            "pending": counts["pending"] + counts["sending"],
+            "finished_at": utc_now_iso(),
+            "next_batch_at": None,
+            "updated_at": utc_now_iso(),
+        }, "$unset": {"active_slot": ""}},
+    )
+    await db.activity_log.insert_one({
+        "action": "broadcast_email",
+        "details": f"Broadcast completed: '{campaign['subject']}' to {counts['sent']} couples",
+        "timestamp": utc_now_iso(),
+        "admin": True,
+    })
+    await asyncio.to_thread(_remove_broadcast_attachments, campaign["id"])
+
+
+async def process_due_broadcast_campaign() -> bool:
+    """Claim and process one due batch. Safe if more than one worker is started."""
+    now = utc_now_iso()
+    claim_id = uuid.uuid4().hex
+    campaign = await db.broadcast_campaigns.find_one_and_update(
+        {
+            "status": "queued",
+            "$or": [{"next_batch_at": None}, {"next_batch_at": {"$lte": now}}],
+        },
+        {"$set": {"status": "running", "claim_id": claim_id, "updated_at": now}},
+        sort=[("created_at", 1)],
+        return_document=ReturnDocument.AFTER,
+        projection={"_id": 0},
+    )
+    if not campaign:
+        return False
+    if not campaign.get("started_at"):
+        campaign["started_at"] = now
+        await db.broadcast_campaigns.update_one(
+            {"id": campaign["id"]}, {"$set": {"started_at": now}}
+        )
+
+    recipients = pending_batch(campaign, campaign.get("batch_size", BROADCAST_BATCH_SIZE))
+    if not recipients:
+        await _finish_broadcast_campaign(campaign)
+        return True
+
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    smtp = (smtp_doc or {}).get("value", {})
+    if not all(smtp.get(key) for key in ("smtp_server", "smtp_email", "smtp_password")):
+        await db.broadcast_campaigns.update_one(
+            {"id": campaign["id"]},
+            {"$set": {
+                "status": "paused",
+                "message": "Broadcast paused because SMTP settings are incomplete.",
+                "claim_id": None,
+                "updated_at": utc_now_iso(),
+            }},
+        )
+        return True
+
+    try:
+        attachment_data = await _load_broadcast_attachments(campaign)
+    except Exception:
+        logger.exception("Broadcast attachments could not be loaded")
+        await db.broadcast_campaigns.update_one(
+            {"id": campaign["id"]},
+            {"$set": {
+                "status": "failed",
+                "message": "Broadcast stopped because an attachment could not be loaded.",
+                "finished_at": utc_now_iso(),
+                "claim_id": None,
+                "updated_at": utc_now_iso(),
+            }, "$unset": {"active_slot": ""}},
+        )
+        await asyncio.to_thread(_remove_broadcast_attachments, campaign["id"])
+        return True
+
+    for recipient in recipients:
+        current = await db.broadcast_campaigns.find_one(
+            {"id": campaign["id"]}, {"_id": 0, "status": 1}
+        )
+        if not current or current.get("status") != "running":
+            break
+
+        await _update_broadcast_recipient(
+            campaign["id"], recipient["id"], status="sending", started_at=utc_now_iso()
+        )
+        try:
+            await asyncio.to_thread(
+                send_smtp_email,
+                smtp,
+                recipient["email"],
+                campaign["subject"],
+                campaign["html_content"],
+                attachment_data or None,
+            )
+            sent_at = utc_now_iso()
+            await _update_broadcast_recipient(
+                campaign["id"], recipient["id"], status="sent", sent_at=sent_at, error=None
+            )
+            await db.email_log.insert_one({
+                "type": "broadcast",
+                "campaign_id": campaign["id"],
+                "subject": campaign["subject"],
+                "gallery_name": ", ".join(recipient.get("gallery_names", [])),
+                "recipient": recipient["email"],
+                "has_attachment": bool(attachment_data),
+                "timestamp": sent_at,
+            })
+        except Exception as exc:
+            logger.warning("Broadcast email failed for one recipient: %s", exc)
+            await _update_broadcast_recipient(
+                campaign["id"], recipient["id"], status="failed",
+                error="SMTP delivery failed for this recipient.", finished_at=utc_now_iso()
+            )
+
+    campaign = await db.broadcast_campaigns.find_one({"id": campaign["id"]}, {"_id": 0})
+    if not campaign:
+        return True
+    counts = recipient_counts(campaign.get("recipients", []))
+    if campaign.get("status") in {"paused", "cancelled"}:
+        await db.broadcast_campaigns.update_one(
+            {"id": campaign["id"]},
+            {"$set": {
+                "sent": counts["sent"], "failed": counts["failed"],
+                "pending": counts["pending"] + counts["sending"], "claim_id": None,
+                "updated_at": utc_now_iso(),
+            }},
+        )
+        return True
+    if counts["pending"] == 0 and counts["sending"] == 0:
+        await _finish_broadcast_campaign(campaign)
+    else:
+        delay = campaign.get("batch_delay_seconds", BROADCAST_BATCH_DELAY_SECONDS)
+        next_batch = (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat()
+        await db.broadcast_campaigns.update_one(
+            {"id": campaign["id"], "status": "running"},
+            {"$set": {
+                "status": "queued",
+                "message": f"Next batch of up to {campaign.get('batch_size', BROADCAST_BATCH_SIZE)} emails is scheduled.",
+                "sent": counts["sent"], "failed": counts["failed"],
+                "pending": counts["pending"] + counts["sending"],
+                "next_batch_at": next_batch, "claim_id": None, "updated_at": utc_now_iso(),
+            }},
+        )
+    return True
+
+
+async def recover_broadcast_campaigns() -> None:
+    """Resume queued work after restart without resending an uncertain recipient."""
+    campaigns = await db.broadcast_campaigns.find(
+        {"status": {"$in": list(ACTIVE_CAMPAIGN_STATUSES)}}, {"_id": 0}
+    ).to_list(20)
+    for campaign in campaigns:
+        changed = False
+        for recipient in campaign.get("recipients", []):
+            if recipient.get("status") == "sending":
+                recipient.update(
+                    status="failed",
+                    error="Delivery state was uncertain after an application restart; it was not resent.",
+                    finished_at=utc_now_iso(),
+                )
+                changed = True
+        counts = recipient_counts(campaign.get("recipients", []))
+        status = campaign.get("status")
+        if status == "running":
+            status = "queued"
+            changed = True
+        if counts["pending"] == 0 and counts["sending"] == 0:
+            status = "complete"
+            changed = True
+        if changed:
+            update = {"$set": {
+                "recipients": campaign.get("recipients", []), "status": status,
+                "sent": counts["sent"], "failed": counts["failed"],
+                "pending": counts["pending"] + counts["sending"],
+                "next_batch_at": utc_now_iso() if status == "queued" else campaign.get("next_batch_at"),
+                "claim_id": None, "updated_at": utc_now_iso(),
+            }}
+            if status == "complete":
+                update["$unset"] = {"active_slot": ""}
+            await db.broadcast_campaigns.update_one(
+                {"id": campaign["id"]},
+                update,
+            )
+
+
+async def broadcast_campaign_loop() -> None:
+    while True:
+        try:
+            await process_due_broadcast_campaign()
+        except Exception:
+            logger.exception("Broadcast campaign worker failed")
+        await asyncio.sleep(5)
 
 @api_router.post("/admin/broadcast-email")
 async def send_broadcast_email(
@@ -5336,9 +5646,17 @@ async def send_broadcast_email(
     attachments: List[UploadFile] = File(default=[]),
     admin=Depends(get_admin)
 ):
-    """Send an email to all couples with an email address on their gallery."""
+    """Queue a durable broadcast that sends ten recipients every two minutes."""
     if not subject.strip() or not body.strip():
         raise HTTPException(status_code=400, detail="Subject and body are required")
+    if "\r" in subject or "\n" in subject:
+        raise HTTPException(status_code=400, detail="The subject contains invalid characters")
+
+    existing = await db.broadcast_campaigns.find_one(
+        {"status": {"$in": list(ACTIVE_CAMPAIGN_STATUSES)}}, {"_id": 0, "id": 1}
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="A broadcast campaign is already active")
 
     smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
     if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
@@ -5353,49 +5671,104 @@ async def send_broadcast_email(
     if not galleries:
         raise HTTPException(status_code=400, detail="No couples have email addresses set on their galleries")
 
-    # Read attachment files once
-    att_list = []
-    for att in attachments:
-        data = await att.read()
-        att_list.append({"filename": att.filename, "data": data})
+    recipients = unique_recipients(galleries)
+    campaign_id = str(uuid.uuid4())
+    stored_attachments = await _store_broadcast_attachments(campaign_id, attachments)
 
-    # Convert plain text body to HTML paragraphs
+    # Convert the plain-text editor content into safe HTML paragraphs.
     body_html = ""
     for line in body.strip().split("\n"):
         stripped = line.strip()
         if not stripped:
             body_html += '<br>'
         else:
-            body_html += f'<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">{stripped}</p>\n'
+            body_html += f'<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">{html.escape(stripped)}</p>\n'
 
     html_content = build_branded_email(body_html, get_awards_url(smtp))
+    now = utc_now_iso()
+    campaign = {
+        "id": campaign_id,
+        "active_slot": 1,
+        "status": "queued",
+        "subject": subject.strip(),
+        "html_content": html_content,
+        "attachments": stored_attachments,
+        "recipients": [
+            {
+                "id": str(uuid.uuid4()),
+                "email": recipient["email"],
+                "gallery_names": recipient["gallery_names"],
+                "status": "pending",
+                "error": None,
+            }
+            for recipient in recipients
+        ],
+        "total": len(recipients), "sent": 0, "failed": 0, "pending": len(recipients),
+        "batch_size": BROADCAST_BATCH_SIZE,
+        "batch_delay_seconds": BROADCAST_BATCH_DELAY_SECONDS,
+        "created_at": now, "started_at": None, "next_batch_at": now,
+        "finished_at": None, "updated_at": now,
+        "message": f"Broadcast queued. Up to {BROADCAST_BATCH_SIZE} emails will send every two minutes.",
+    }
+    try:
+        await db.broadcast_campaigns.insert_one(campaign)
+    except DuplicateKeyError:
+        await asyncio.to_thread(_remove_broadcast_attachments, campaign_id)
+        raise HTTPException(status_code=409, detail="A broadcast campaign is already active")
+    except Exception:
+        await asyncio.to_thread(_remove_broadcast_attachments, campaign_id)
+        raise
+    campaign.pop("_id", None)
+    return {"success": True, "campaign": public_campaign(campaign)}
 
-    sent = 0
-    failed = []
-    for g in galleries:
-        try:
-            send_smtp_email(smtp, g["client_email"], subject.strip(), html_content, att_list if att_list else None)
-            sent += 1
-            await db.email_log.insert_one({
-                "type": "broadcast",
-                "subject": subject.strip(),
-                "gallery_name": g["folder_name"],
-                "recipient": g["client_email"],
-                "has_attachment": len(att_list) > 0,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-        except Exception as e:
-            logger.warning(f"Broadcast email failed for {g['client_email']}: {e}")
-            failed.append({"name": g["folder_name"], "email": g["client_email"], "error": str(e)})
 
-    await db.activity_log.insert_one({
-        "action": "broadcast_email",
-        "details": f"Broadcast sent: '{subject}' to {sent} couples" + (f" with attachment" if att_list else ""),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "admin": True
-    })
+@api_router.get("/admin/broadcast-campaign/current")
+async def get_current_broadcast_campaign(admin=Depends(get_admin)):
+    campaign = await db.broadcast_campaigns.find_one({}, {"_id": 0}, sort=[("created_at", -1)])
+    return {"campaign": public_campaign(campaign)}
 
-    return {"success": True, "sent": sent, "failed": len(failed), "failures": failed}
+
+@api_router.post("/admin/broadcast-campaign/{campaign_id}/pause")
+async def pause_broadcast_campaign(campaign_id: str, admin=Depends(get_admin)):
+    result = await db.broadcast_campaigns.update_one(
+        {"id": campaign_id, "status": {"$in": ["queued", "running"]}},
+        {"$set": {"status": "paused", "message": "Broadcast paused.", "updated_at": utc_now_iso()}},
+    )
+    if not result.modified_count:
+        raise HTTPException(status_code=409, detail="This broadcast cannot be paused")
+    campaign = await db.broadcast_campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    return {"campaign": public_campaign(campaign)}
+
+
+@api_router.post("/admin/broadcast-campaign/{campaign_id}/resume")
+async def resume_broadcast_campaign(campaign_id: str, admin=Depends(get_admin)):
+    result = await db.broadcast_campaigns.update_one(
+        {"id": campaign_id, "status": "paused"},
+        {"$set": {
+            "status": "queued", "message": "Broadcast resumed.",
+            "next_batch_at": utc_now_iso(), "updated_at": utc_now_iso(),
+        }},
+    )
+    if not result.modified_count:
+        raise HTTPException(status_code=409, detail="This broadcast cannot be resumed")
+    campaign = await db.broadcast_campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    return {"campaign": public_campaign(campaign)}
+
+
+@api_router.post("/admin/broadcast-campaign/{campaign_id}/cancel")
+async def cancel_broadcast_campaign(campaign_id: str, admin=Depends(get_admin)):
+    result = await db.broadcast_campaigns.update_one(
+        {"id": campaign_id, "status": {"$in": list(ACTIVE_CAMPAIGN_STATUSES)}},
+        {"$set": {
+            "status": "cancelled", "message": "Broadcast cancelled. Unsent recipients were not contacted.",
+            "finished_at": utc_now_iso(), "next_batch_at": None, "updated_at": utc_now_iso(),
+        }, "$unset": {"active_slot": ""}},
+    )
+    if not result.modified_count:
+        raise HTTPException(status_code=409, detail="This broadcast cannot be cancelled")
+    await asyncio.to_thread(_remove_broadcast_attachments, campaign_id)
+    campaign = await db.broadcast_campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    return {"campaign": public_campaign(campaign)}
 
 # ─── Email Log ───
 
@@ -5950,6 +6323,12 @@ async def startup_auto_archive():
         await db.favourites.create_index([("session_id", 1), ("gallery_id", 1)])
         await db.favourites.create_index([("session_id", 1), ("file_id", 1)])
         await db.email_log.create_index("timestamp")
+        await db.broadcast_campaigns.create_index([("status", 1), ("next_batch_at", 1)])
+        await db.broadcast_campaigns.create_index("created_at")
+        await db.broadcast_campaigns.create_index(
+            "active_slot", unique=True,
+            partialFilterExpression={"active_slot": 1},
+        )
         await db.galleries.create_index("id", unique=True)
     except Exception as e:
         logger.warning(f"Index creation: {e}")
@@ -5959,6 +6338,12 @@ async def startup_auto_archive():
     asyncio.create_task(guest_upload_cleanup_loop())
     # Start guest upload link auto-expiry loop (3 days after wedding)
     asyncio.create_task(guest_upload_expiry_loop())
+    # Resume and pace durable broadcast campaigns (10 recipients every 2 minutes).
+    try:
+        await recover_broadcast_campaigns()
+    except Exception as e:
+        logger.warning(f"Broadcast recovery failed: {e}")
+    asyncio.create_task(broadcast_campaign_loop())
 
 
 app.include_router(api_router)

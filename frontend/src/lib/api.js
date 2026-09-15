@@ -295,6 +295,10 @@ export const sendBroadcastEmail = (formData) =>
   apiClient.post('/admin/broadcast-email', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
+export const getCurrentBroadcastCampaign = () => apiClient.get('/admin/broadcast-campaign/current');
+export const pauseBroadcastCampaign = (campaignId) => apiClient.post(`/admin/broadcast-campaign/${campaignId}/pause`);
+export const resumeBroadcastCampaign = (campaignId) => apiClient.post(`/admin/broadcast-campaign/${campaignId}/resume`);
+export const cancelBroadcastCampaign = (campaignId) => apiClient.post(`/admin/broadcast-campaign/${campaignId}/cancel`);
 
 // Gallery-specific email with attachments
 export const sendGalleryEmail = (galleryId, formData) =>

@@ -91,6 +91,108 @@
   color: #1C1917;
 }
 
+/* Admin-only colour system. The class is mounted only by authenticated admin
+   pages, so couple galleries and their own theme picker are never affected. */
+:root {
+  --admin-bg: #FDFCF8;
+  --admin-header-bg: rgba(253, 252, 248, 0.88);
+  --admin-surface: #FFFFFF;
+  --admin-surface-soft: #FAFAF9;
+  --admin-surface-raised: #F5F2EB;
+  --admin-text: #1C1917;
+  --admin-muted: #57534E;
+  --admin-subtle: #78716C;
+  --admin-faint: #A8A29E;
+  --admin-border: #E8E4DC;
+  --admin-border-strong: #D4D4D8;
+}
+
+html.admin-dark {
+  color-scheme: dark;
+  --admin-bg: #11100F;
+  --admin-header-bg: rgba(17, 16, 15, 0.90);
+  --admin-surface: #1B1917;
+  --admin-surface-soft: #211F1C;
+  --admin-surface-raised: #292622;
+  --admin-text: #F5F2EB;
+  --admin-muted: #D6D0C6;
+  --admin-subtle: #B5AEA4;
+  --admin-faint: #918A81;
+  --admin-border: #3A3631;
+  --admin-border-strong: #514B44;
+}
+
+html.admin-dark body { background: var(--admin-bg); color: var(--admin-text); }
+html.admin-dark [data-admin-page] { background: var(--admin-bg) !important; color: var(--admin-text); }
+html.admin-dark [data-admin-page] .bg-white,
+html.admin-dark [data-admin-page] .bg-white\/80,
+html.admin-dark [data-admin-page] .bg-\[\#FDFCF8\],
+html.admin-dark [role="dialog"],
+html.admin-dark [role="alertdialog"],
+html.admin-dark [data-radix-popper-content-wrapper] > div {
+  background-color: var(--admin-surface) !important;
+  color: var(--admin-text) !important;
+}
+html.admin-dark [data-admin-page] .bg-stone-50,
+html.admin-dark [data-admin-page] .bg-stone-100,
+html.admin-dark [data-admin-page] .bg-gray-50,
+html.admin-dark [data-admin-page] .bg-gray-100,
+html.admin-dark [role="dialog"] .bg-stone-50,
+html.admin-dark [role="dialog"] .bg-stone-100,
+html.admin-dark [role="dialog"] .bg-gray-50,
+html.admin-dark [role="dialog"] .bg-gray-100 {
+  background-color: var(--admin-surface-soft) !important;
+}
+html.admin-dark [data-admin-page] .text-\[\#1C1917\],
+html.admin-dark [data-admin-page] .text-gray-900,
+html.admin-dark [data-admin-page] .text-gray-800,
+html.admin-dark [data-admin-page] .text-stone-900,
+html.admin-dark [role="dialog"] .text-\[\#1C1917\],
+html.admin-dark [role="dialog"] .text-gray-900,
+html.admin-dark [role="dialog"] .text-gray-800 {
+  color: var(--admin-text) !important;
+}
+html.admin-dark [data-admin-page] .text-\[\#57534E\],
+html.admin-dark [data-admin-page] .text-gray-700,
+html.admin-dark [data-admin-page] .text-gray-600,
+html.admin-dark [data-admin-page] .text-stone-600,
+html.admin-dark [role="dialog"] .text-\[\#57534E\],
+html.admin-dark [role="dialog"] .text-gray-700,
+html.admin-dark [role="dialog"] .text-gray-600 {
+  color: var(--admin-muted) !important;
+}
+html.admin-dark [data-admin-page] .text-\[\#A8A29E\],
+html.admin-dark [data-admin-page] .text-gray-500,
+html.admin-dark [data-admin-page] .text-gray-400,
+html.admin-dark [role="dialog"] .text-\[\#A8A29E\],
+html.admin-dark [role="dialog"] .text-gray-500,
+html.admin-dark [role="dialog"] .text-gray-400 {
+  color: var(--admin-faint) !important;
+}
+html.admin-dark [data-admin-page] input,
+html.admin-dark [data-admin-page] textarea,
+html.admin-dark [data-admin-page] select,
+html.admin-dark [role="dialog"] input,
+html.admin-dark [role="dialog"] textarea,
+html.admin-dark [role="dialog"] select {
+  background-color: var(--admin-surface-soft) !important;
+  border-color: var(--admin-border-strong) !important;
+  color: var(--admin-text) !important;
+}
+html.admin-dark [data-admin-page] input::placeholder,
+html.admin-dark [data-admin-page] textarea::placeholder,
+html.admin-dark [role="dialog"] input::placeholder,
+html.admin-dark [role="dialog"] textarea::placeholder { color: var(--admin-faint); }
+html.admin-dark [data-admin-page] .border-gray-100,
+html.admin-dark [data-admin-page] .border-gray-200,
+html.admin-dark [data-admin-page] .border-stone-100,
+html.admin-dark [data-admin-page] .border-stone-200,
+html.admin-dark [role="dialog"] .border-gray-200 {
+  border-color: var(--admin-border) !important;
+}
+.admin-theme-toggle { color: var(--admin-muted) !important; }
+html.admin-dark .admin-theme-toggle:hover { background: rgba(212, 175, 55, 0.12) !important; color: #E4C65B !important; }
+
 
 /* Dark mode file card backgrounds */
 .file-card-empty { background-color: var(--card-empty-bg, #F5F2EB); }
