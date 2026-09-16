@@ -75,6 +75,8 @@ export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats'
 export const getDashboardStats = () => apiClient.get('/admin/dashboard-stats');
 export const getNetworkStats = () => apiClient.get('/admin/network-stats');
 export const getSystemHealth = () => apiClient.get('/admin/system-health');
+export const runMaintenanceScan = () => apiClient.get('/admin/maintenance-scan', { timeout: 300000 });
+export const getGalleryReadiness = (id) => apiClient.get(`/admin/galleries/${id}/readiness`);
 export const sendGalleryNotification = (id) => apiClient.post(`/admin/galleries/${id}/notify`);
 
 // SMTP / Email Settings

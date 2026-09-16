@@ -22,12 +22,13 @@ import {
 import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
-  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw, Pencil, Paperclip
+  Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw, Pencil, Paperclip,
+  AlertTriangle, CheckCircle2, ShieldCheck, XCircle
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, createSubfolder, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
-  updateGallery, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail, getVideoHealth,
+  updateGallery, getGalleryReadiness, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail, getVideoHealth,
   startAdminFolderDownload, getAdminFolderDownloadStatus, getDownloadJobFileUrl, getErrorMessage
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
@@ -62,6 +63,9 @@ export default function AdminGalleryDetail() {
   const [transcodeStatus, setTranscodeStatus] = useState({});  // file_id -> {percent, status, method, filename}
   const transcodePollingRef = useRef(null);
   const [sendingNotification, setSendingNotification] = useState(false);
+  const [checkingReadiness, setCheckingReadiness] = useState(false);
+  const [showReadiness, setShowReadiness] = useState(false);
+  const [galleryReadiness, setGalleryReadiness] = useState(null);
   const [editingEmail, setEditingEmail] = useState(false);
   const [clientEmail, setClientEmail] = useState("");
   const [galleryTheme, setGalleryTheme] = useState("classic_gold");
@@ -547,22 +551,30 @@ export default function AdminGalleryDetail() {
   };
 
   const handleNotifyCouple = async () => {
-    if (!clientEmail) {
-      setEditingEmail(true);
-      toast.error("Add the couple's email first");
-      return;
+    setShowReadiness(true);
+    setCheckingReadiness(true);
+    setGalleryReadiness(null);
+    try {
+      const res = await getGalleryReadiness(id);
+      setGalleryReadiness(res.data);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Gallery Ready check failed"));
+      setShowReadiness(false);
+    } finally {
+      setCheckingReadiness(false);
     }
-    if (shares.length === 0) {
-      toast.error("Create a share link first");
-      return;
-    }
+  };
+
+  const handleConfirmNotification = async () => {
+    if (!galleryReadiness?.ready) return;
     setSendingNotification(true);
     try {
       const res = await sendGalleryNotification(id);
       toast.success(res.data.message);
+      setShowReadiness(false);
       loadGallery();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to send notification");
+      toast.error(getErrorMessage(err, "Failed to send notification"));
     } finally { setSendingNotification(false); }
   };
 
@@ -701,9 +713,9 @@ export default function AdminGalleryDetail() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button data-testid="notify-couple-btn" onClick={handleNotifyCouple} disabled={sendingNotification}
+            <Button data-testid="notify-couple-btn" onClick={handleNotifyCouple} disabled={sendingNotification || checkingReadiness}
               variant="outline" className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37]/10">
-              <Mail className="w-3.5 h-3.5" /> {sendingNotification ? "Sending..." : "Notify Couple"}
+              <Mail className="w-3.5 h-3.5" /> {checkingReadiness ? "Checking..." : sendingNotification ? "Sending..." : "Notify Couple"}
             </Button>
             <Button data-testid="send-template-email-btn" onClick={handleOpenSendEmail}
               variant="outline" className="rounded-sm px-4 py-2 text-xs tracking-wider uppercase font-bold gap-2 border-[#57534E] text-[#57534E] hover:bg-[#57534E]/10">
@@ -1474,6 +1486,81 @@ export default function AdminGalleryDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Image-first Gallery Ready check */}
+      <Dialog open={showReadiness} onOpenChange={(open) => { if (!sendingNotification) setShowReadiness(open); }}>
+        <DialogContent className="border-none shadow-2xl rounded-none max-w-xl max-h-[90vh] overflow-y-auto" style={{ backgroundColor: 'var(--admin-bg)' }} data-testid="gallery-readiness-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-medium flex items-center gap-2" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+              <ShieldCheck className="w-6 h-6 text-[#D4AF37]" /> Gallery Ready Check
+            </DialogTitle>
+            <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
+              A final photograph-only check before the couple receives their gallery email. Videos never delay this step.
+            </DialogDescription>
+          </DialogHeader>
+
+          {checkingReadiness ? (
+            <div className="py-12 text-center">
+              <RefreshCw className="w-7 h-7 mx-auto mb-3 text-[#D4AF37] animate-spin" />
+              <p className="text-sm" style={{ color: 'var(--admin-muted)' }}>Checking photographs, share link and backup…</p>
+            </div>
+          ) : galleryReadiness && (
+            <div className="space-y-4 mt-2">
+              <div className="p-4 border rounded-sm flex items-start gap-3"
+                style={{
+                  borderColor: galleryReadiness.ready ? '#86EFAC' : '#FCA5A5',
+                  backgroundColor: galleryReadiness.ready ? 'rgba(22,163,74,0.08)' : 'rgba(185,28,28,0.08)'
+                }}>
+                {galleryReadiness.ready
+                  ? <CheckCircle2 className="w-6 h-6 shrink-0 text-green-700" />
+                  : <XCircle className="w-6 h-6 shrink-0 text-red-700" />}
+                <div>
+                  <p className="font-semibold" style={{ color: 'var(--admin-text)' }}>
+                    {galleryReadiness.ready ? 'Ready to notify the couple' : 'Please fix the blocked items first'}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--admin-muted)' }}>
+                    {galleryReadiness.warnings > 0
+                      ? `${galleryReadiness.warnings} advisory warning${galleryReadiness.warnings === 1 ? '' : 's'} — warnings do not stop you sending.`
+                      : 'All image-delivery checks passed.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border rounded-sm divide-y" style={{ borderColor: 'var(--admin-border)' }}>
+                {galleryReadiness.checks.map(item => {
+                  const ItemIcon = item.status === 'healthy' ? CheckCircle2 : item.status === 'warning' ? AlertTriangle : XCircle;
+                  const colour = item.status === 'healthy' ? '#15803D' : item.status === 'warning' ? '#B45309' : '#B91C1C';
+                  return (
+                    <div key={item.key} className="p-3 flex items-start gap-3" style={{ borderColor: 'var(--admin-border)' }} data-testid={`readiness-${item.key}`}>
+                      <ItemIcon className="w-4 h-4 shrink-0 mt-0.5" style={{ color: colour }} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>{item.title}</p>
+                        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--admin-faint)' }}>{item.detail}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="p-4 rounded-sm border space-y-2" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-soft)' }}>
+                <p className="text-[10px] tracking-[0.12em] uppercase font-bold" style={{ color: 'var(--admin-faint)' }}>Email preview</p>
+                <p className="text-xs"><strong>To:</strong> {galleryReadiness.preview.recipient || 'Not set'}</p>
+                <p className="text-xs break-all"><strong>Link:</strong> {galleryReadiness.preview.gallery_link || 'Not available'}</p>
+                <p className="text-xs"><strong>Password:</strong> {galleryReadiness.preview.password}</p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-4 flex gap-2">
+            <Button variant="outline" onClick={() => setShowReadiness(false)} disabled={sendingNotification} className="rounded-sm">Cancel</Button>
+            <Button data-testid="confirm-gallery-notification" onClick={handleConfirmNotification}
+              disabled={!galleryReadiness?.ready || checkingReadiness || sendingNotification}
+              className="bg-[#1C1917] text-[#FDFCF8] rounded-sm px-6 text-xs tracking-wider uppercase font-bold gap-2">
+              <Mail className="w-3.5 h-3.5" /> {sendingNotification ? 'Sending…' : 'Send Gallery Email'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* File Delete Confirmation Dialog */}
       <Dialog open={fileDeleteConfirm.open} onOpenChange={(open) => !open && setFileDeleteConfirm({ open: false, fileId: null, filename: "", deleteBackup: false, isBulk: false })}>

@@ -43,6 +43,8 @@ from share_security import ShareSessionError, refresh_share_claims, share_is_exp
 from backup_service import BackupManager
 from download_job_service import DownloadJobError, DownloadJobManager
 from album_downloads import album_download_name
+from gallery_readiness import build_gallery_readiness
+from maintenance_scan import scan_gallery_maintenance
 from system_health import backup_health, overall_status, storage_status, utc_now_iso
 from broadcast_service import (
     ACTIVE_CAMPAIGN_STATUSES,
@@ -498,6 +500,22 @@ video_optimise_progress = {}  # gallery_id -> {total, done, current_file, step}
 # Per-file transcoding progress tracking
 file_transcode_progress = {}  # file_id -> {gallery_id, filename, percent, status, method}
 
+
+def queue_video_transcode(file_path: Path, gallery_id: str, file_id: str):
+    """Expose a queued item immediately, then process it in the existing pool."""
+    progress_key = file_id or file_path.stem
+    current = file_transcode_progress.get(progress_key, {})
+    if current.get("status") in {"queued", "transcoding", "processing"}:
+        return None
+    file_transcode_progress[progress_key] = {
+        "gallery_id": gallery_id,
+        "filename": file_path.name,
+        "percent": 0,
+        "status": "queued",
+        "method": "Waiting",
+    }
+    return transcode_executor.submit(create_web_version, file_path, gallery_id, file_id)
+
 # Live visitor tracking (in-memory, ephemeral)
 active_visitors = {}  # session_id -> {gallery_id, gallery_name, action, subfolder, detail, device, last_seen, ip}
 VISITOR_TIMEOUT = 60  # seconds before a visitor is considered gone
@@ -522,6 +540,17 @@ def create_web_version(file_path: Path, gallery_id: str = None, file_id: str = N
     """Create a web-optimised copy (1080p, 5Mbps) for smooth streaming. Tries GPU first, falls back to CPU. Reports real-time progress."""
     web_path = get_web_version_path(file_path)
     if web_path.exists():
+        progress_key = file_id or file_path.stem
+        if progress_key in file_transcode_progress:
+            file_transcode_progress[progress_key].update(
+                percent=100,
+                status="complete",
+                method="Already ready",
+            )
+            def _cleanup_ready():
+                time.sleep(15)
+                file_transcode_progress.pop(progress_key, None)
+            threading.Thread(target=_cleanup_ready, daemon=True).start()
         logger.info(f"Web version already exists: {web_path.name}")
         return True
     
@@ -689,7 +718,7 @@ def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: 
         
         # Kick off web-optimised transcode in SEPARATE pool so it never blocks thumbnail workers
         if file_type == "video":
-            transcode_executor.submit(create_web_version, file_path, gallery_id, file_id)
+            queue_video_transcode(file_path, gallery_id, file_id)
     except Exception as e:
         logger.error(f"Background thumbnail error for {filename}: {e}")
 
@@ -1314,6 +1343,14 @@ async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
         return {"queued": 0, "message": "No video files found"}
     video_optimise_progress[gallery_id] = {"total": len(valid_videos), "done": 0, "current_file": None}
     for file_path, _, fid in valid_videos:
+        progress_key = fid or file_path.stem
+        file_transcode_progress[progress_key] = {
+            "gallery_id": gallery_id,
+            "filename": file_path.name,
+            "percent": 0,
+            "status": "queued",
+            "method": "Waiting",
+        }
         transcode_executor.submit(optimise_video_full, file_path, gallery_id, fid)
     return {"queued": len(valid_videos), "message": f"{len(valid_videos)} video(s) queued for web optimisation"}
 
@@ -4732,6 +4769,24 @@ async def get_system_health(admin=Depends(get_admin)):
         info.get("status") in {"queued", "transcoding", "processing"}
         for info in file_transcode_progress.values()
     )
+    transcode_snapshot = [dict(info) for info in file_transcode_progress.values()]
+    queue_gallery_ids = sorted({
+        info.get("gallery_id") for info in transcode_snapshot if info.get("gallery_id")
+    })
+    gallery_names = {}
+    if queue_gallery_ids:
+        queue_galleries = await db.galleries.find(
+            {"id": {"$in": queue_gallery_ids}},
+            {"_id": 0, "id": 1, "folder_name": 1},
+        ).to_list(len(queue_gallery_ids))
+        gallery_names = {item["id"]: item.get("folder_name", "Gallery") for item in queue_galleries}
+    video_queue = sorted(({
+        "gallery_name": gallery_names.get(info.get("gallery_id"), "Gallery"),
+        "filename": info.get("filename", "Video"),
+        "percent": max(0, min(100, int(info.get("percent", 0)))),
+        "status": info.get("status", "queued"),
+        "method": info.get("method", ""),
+    } for info in transcode_snapshot), key=lambda item: (item["gallery_name"].casefold(), item["filename"].casefold()))
     optimise_active = sum(
         progress.get("done", 0) < progress.get("total", 0)
         for progress in video_optimise_progress.values()
@@ -4783,6 +4838,7 @@ async def get_system_health(admin=Depends(get_admin)):
         "work": {
             "video_optimisations": optimise_active,
             "video_files_transcoding": transcode_active,
+            "video_queue": video_queue,
             "folder_downloads": download_health,
             "backup_running": backup_running,
             "broadcast_campaign": broadcast_health,
@@ -4802,6 +4858,54 @@ async def get_system_health(admin=Depends(get_admin)):
             },
         },
     }
+
+
+@api_router.get("/admin/maintenance-scan")
+async def get_maintenance_scan(admin=Depends(get_admin)):
+    """Run an explicitly requested, read-only consistency scan off the event loop."""
+    galleries = await db.galleries.find({}, {"_id": 0, "id": 1, "folder_name": 1}).to_list(5000)
+    gallery_names = {gallery["id"]: gallery["folder_name"] for gallery in galleries}
+    files = await db.files.find({}, {
+        "_id": 0,
+        "id": 1,
+        "gallery_id": 1,
+        "subfolder": 1,
+        "filename": 1,
+        "file_type": 1,
+    }).to_list(100000)
+
+    expected_originals = []
+    known_original_paths = set()
+    expected_derivatives = set()
+    expected_web_videos = set()
+    for file_doc in files:
+        folder_name = gallery_names.get(file_doc.get("gallery_id"))
+        if not folder_name:
+            continue
+        try:
+            original = get_gallery_file_path(folder_name, file_doc["subfolder"], file_doc["filename"])
+            label = f"{folder_name}/{file_doc['subfolder']}/{file_doc['filename']}"
+            expected_originals.append((original, label))
+            known_original_paths.add(original)
+            if file_doc.get("file_type") in {"photo", "video"}:
+                expected_derivatives.add(get_thumb_path(file_doc["gallery_id"], file_doc["subfolder"], file_doc["filename"]))
+                expected_derivatives.add(get_preview_path(file_doc["gallery_id"], file_doc["subfolder"], file_doc["filename"]))
+            if file_doc.get("file_type") == "video":
+                expected_web_videos.add(get_web_version_path(original))
+        except (HTTPException, KeyError):
+            continue
+
+    return await asyncio.to_thread(
+        scan_gallery_maintenance,
+        upload_root=UPLOAD_DIR,
+        thumbnail_root=CACHE_DIR,
+        download_cache_root=DOWNLOAD_CACHE_DIR,
+        expected_originals=expected_originals,
+        known_original_paths=known_original_paths,
+        expected_derivatives=expected_derivatives,
+        expected_web_videos=expected_web_videos,
+        stale_download_seconds=download_job_manager.ttl_seconds,
+    )
 
 # ─── Video Compression Settings ───
 VIDEO_COMPRESSION_SIZE_THRESHOLD = 200 * 1024 * 1024  # 200MB in bytes
@@ -5030,42 +5134,110 @@ async def test_smtp(admin=Depends(get_admin)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"SMTP error: {str(e)}")
 
+
+def _public_request_base_url(request: Request) -> str:
+    """Prefer the browser's public origin over an internal proxy address."""
+    base_url = str(request.base_url).rstrip("/")
+    origin = request.headers.get("origin") or request.headers.get("referer", "").rstrip("/")
+    if origin:
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        if parsed.scheme and parsed.netloc:
+            base_url = f"{parsed.scheme}://{parsed.netloc}"
+    return base_url
+
+
+def _inspect_gallery_photos(gallery: dict, photo_records: List[dict]):
+    """Perform readiness filesystem checks away from the FastAPI event loop."""
+    missing_photo_names = []
+    missing_thumbnail_names = []
+    backup_matched = 0
+    for file_doc in photo_records:
+        try:
+            live_path = get_gallery_file_path(
+                gallery["folder_name"], file_doc["subfolder"], file_doc["filename"]
+            )
+            if not live_path.is_file():
+                missing_photo_names.append(file_doc["filename"])
+                continue
+            thumb_path = get_thumb_path(
+                gallery["id"], file_doc["subfolder"], file_doc["filename"]
+            )
+            if not thumb_path.is_file():
+                missing_thumbnail_names.append(file_doc["filename"])
+            backup_path = get_backup_file_path(
+                gallery["folder_name"], file_doc["subfolder"], file_doc["filename"]
+            )
+            if backup_path.is_file() and backup_path.stat().st_size == live_path.stat().st_size:
+                backup_matched += 1
+        except (HTTPException, OSError, KeyError):
+            missing_photo_names.append(file_doc.get("filename", "Unknown photograph"))
+    return missing_photo_names, missing_thumbnail_names, backup_matched
+
+
+async def _gallery_readiness_context(gallery: dict, request: Request):
+    """Collect image-only readiness data shared by preview and actual send."""
+    gallery_id = gallery["id"]
+    share_candidates = await db.shares.find(
+        main_gallery_share_query(gallery_id), {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    share = next((candidate for candidate in share_candidates if not is_share_expired(candidate)), None)
+
+    photo_records = await db.files.find({
+        "gallery_id": gallery_id,
+        "file_type": "photo",
+        "subfolder": {"$nin": ["Guest Uploads", "Album Favourites"]},
+        "uploaded_by": {"$ne": "guest"},
+    }, {"_id": 0}).to_list(50000)
+
+    missing_photo_names, missing_thumbnail_names, backup_matched = await asyncio.to_thread(
+        _inspect_gallery_photos, gallery, photo_records
+    )
+
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0, "value": 1})
+    smtp = (smtp_doc or {}).get("value", {})
+    smtp_configured = all(smtp.get(key) for key in ("smtp_server", "smtp_email", "smtp_password"))
+    gallery_link = f"{_public_request_base_url(request)}/s/{share['token']}" if share else ""
+    readiness = build_gallery_readiness(
+        gallery=gallery,
+        share=share,
+        photo_records=photo_records,
+        missing_photo_names=missing_photo_names,
+        missing_thumbnail_names=missing_thumbnail_names,
+        backup_total=len(photo_records),
+        backup_matched=backup_matched,
+        smtp_configured=smtp_configured,
+        gallery_link=gallery_link,
+    )
+    return readiness, share, smtp
+
+
+@api_router.get("/admin/galleries/{gallery_id}/readiness")
+async def get_gallery_readiness(gallery_id: str, request: Request, admin=Depends(get_admin)):
+    """Preview the exact image-gallery delivery checks without sending anything."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    readiness, _, _ = await _gallery_readiness_context(gallery, request)
+    return readiness
+
 @api_router.post("/admin/galleries/{gallery_id}/notify")
 async def send_gallery_notification(gallery_id: str, request: Request, admin=Depends(get_admin)):
     """Send gallery ready notification email to couple."""
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    
-    client_email = gallery.get("client_email", "")
-    if not client_email:
-        raise HTTPException(status_code=400, detail="No client email set for this gallery")
-    
-    # Get SMTP settings
-    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
-    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
-        raise HTTPException(status_code=400, detail="SMTP not configured. Go to Settings > Email to set up.")
-    smtp = smtp_doc["value"]
-    
-    # The gallery-ready email must use the downloadable whole-gallery share.
-    # Never fall back to a QR/guest-upload or subfolder-only share: doing so can
-    # email the couple an upload link instead of their password-protected gallery.
-    share = await db.shares.find_one(main_gallery_share_query(gallery_id), {"_id": 0})
-    if not share:
+
+    readiness, share, smtp = await _gallery_readiness_context(gallery, request)
+    if not readiness["ready"]:
+        blockers = [item["title"] for item in readiness["checks"] if item["status"] == "critical"]
         raise HTTPException(
             status_code=400,
-            detail="No active main gallery download link found. Upload Wedding Images or create a whole-gallery Download share first.",
+            detail="Gallery Ready check failed: " + "; ".join(blockers),
         )
-    
-    # Build gallery URL
-    base_url = str(request.base_url).rstrip("/")
-    # Use Referer/Origin header for the correct public URL
-    origin = request.headers.get("origin") or request.headers.get("referer", "").rstrip("/")
-    if origin:
-        from urllib.parse import urlparse
-        parsed = urlparse(origin)
-        base_url = f"{parsed.scheme}://{parsed.netloc}"
-    gallery_link = f"{base_url}/s/{share['token']}"
+
+    client_email = gallery["client_email"].strip()
+    gallery_link = readiness["preview"]["gallery_link"]
     share_password = share.get("password_raw", "")
     
     couple_name = gallery["folder_name"]

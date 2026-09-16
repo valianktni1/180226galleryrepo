@@ -25,11 +25,15 @@ def test_main_gallery_share_query_excludes_guest_and_subfolder_shares():
 
 def test_gallery_ready_endpoint_uses_guarded_main_share_query():
     tree = ast.parse((BACKEND_DIR / "server.py").read_text(encoding="utf-8"))
-    notify_function = next(
+    context_function = next(
         node
         for node in tree.body
-        if isinstance(node, ast.AsyncFunctionDef)
-        and node.name == "send_gallery_notification"
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_gallery_readiness_context"
+    )
+    notify_function = next(
+        node for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "send_gallery_notification"
     )
 
-    assert "main_gallery_share_query(gallery_id)" in ast.unparse(notify_function)
+    assert "main_gallery_share_query(gallery_id)" in ast.unparse(context_function)
+    assert "_gallery_readiness_context(gallery, request)" in ast.unparse(notify_function)

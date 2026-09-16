@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import {
   Activity, AlertTriangle, ArrowLeft, CheckCircle2, Clock, Cloud,
   Cpu, Database, Download, HardDrive, HeartPulse, Mail, RefreshCw,
-  Server, ShieldCheck, Users, Video, XCircle
+  Server, ShieldCheck, Users, Video, XCircle, ScanSearch, FileWarning,
+  ImageOff, Archive
 } from "lucide-react";
-import { getSystemHealth } from "@/lib/api";
+import { getSystemHealth, runMaintenanceScan } from "@/lib/api";
 import AdminThemeToggle from "@/components/AdminThemeToggle";
 
 const STATUS = {
@@ -104,6 +105,9 @@ export default function AdminSystemHealth() {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [maintenance, setMaintenance] = useState(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -125,10 +129,30 @@ export default function AdminSystemHealth() {
     return () => clearInterval(interval);
   }, [load, navigate]);
 
+  useEffect(() => {
+    if (!(health?.work?.video_queue || []).length) return undefined;
+    const videoInterval = setInterval(() => load(true), 2000);
+    return () => clearInterval(videoInterval);
+  }, [health?.work?.video_queue?.length, load]);
+
+  const runSafeScan = async () => {
+    setScanning(true);
+    setScanError("");
+    try {
+      const response = await runMaintenanceScan();
+      setMaintenance(response.data);
+    } catch (err) {
+      setScanError(err.response?.data?.detail || "The maintenance scan could not be completed.");
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const storage = health?.summary?.storage;
   const backup = health?.summary?.backup;
   const downloads = health?.work?.folder_downloads;
   const broadcast = health?.work?.broadcast_campaign;
+  const videoQueue = health?.work?.video_queue || [];
   const overall = tone(health?.status);
   const OverallIcon = overall.Icon;
 
@@ -147,6 +171,10 @@ export default function AdminSystemHealth() {
           </div>
           <div className="flex items-center gap-2">
             <AdminThemeToggle />
+            <Button variant="outline" size="sm" onClick={runSafeScan} disabled={scanning} className="gap-2" data-testid="run-maintenance-scan">
+              <ScanSearch className={`w-4 h-4 ${scanning ? "animate-pulse" : ""}`} />
+              <span className="hidden sm:inline">{scanning ? "Scanning…" : "Safe Scan"}</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => load()} disabled={loading} className="gap-2" data-testid="refresh-health-btn">
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> <span className="hidden sm:inline">Refresh</span>
             </Button>
@@ -205,6 +233,24 @@ export default function AdminSystemHealth() {
                   title: `${health.work.video_optimisations + health.work.video_files_transcoding} video job(s) active`,
                   detail: "Web optimisation and per-file transcoding queues."
                 }} />
+                {videoQueue.length > 0 && (
+                  <div className="px-5 pb-4 space-y-2" data-testid="video-processing-queue">
+                    {videoQueue.map((item, index) => (
+                      <div key={`${item.gallery_name}-${item.filename}-${index}`} className="p-3 rounded-sm border" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-soft)' }}>
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate" style={{ color: 'var(--admin-text)' }}>{item.filename}</p>
+                            <p className="text-[10px] truncate" style={{ color: 'var(--admin-faint)' }}>{item.gallery_name} · {item.status} · {item.method || 'Waiting'}</p>
+                          </div>
+                          <span className="font-bold tabular-nums text-[#D4AF37]">{item.percent}%</span>
+                        </div>
+                        <div className="h-1.5 mt-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--admin-border)' }}>
+                          <div className="h-full bg-[#D4AF37] transition-all duration-500" style={{ width: `${item.percent}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <HealthRow icon={Download} item={{
                   status: downloads.active > 0 ? "active" : "healthy",
                   title: `${downloads.active} folder download(s) active`,
@@ -236,9 +282,59 @@ export default function AdminSystemHealth() {
                   </div>
                 </Section>
               </div>
+
+              <div className="lg:col-span-2">
+                <Section title="Safe maintenance scan" subtitle="On-demand inspection only — this screen never deletes, renames or repairs files">
+                  {!maintenance && !scanning && !scanError && (
+                    <div className="p-6 text-center">
+                      <ScanSearch className="w-8 h-8 mx-auto mb-2 text-[#D4AF37]" />
+                      <p className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>Run a scan when you want to check housekeeping</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--admin-faint)' }}>It compares database records, originals, thumbnails, generated videos and temporary ZIPs without changing anything.</p>
+                    </div>
+                  )}
+                  {scanning && <div className="p-8 text-center text-sm" style={{ color: 'var(--admin-muted)' }}>Safely scanning gallery records and generated files…</div>}
+                  {scanError && <div className="p-4 text-sm text-red-700 bg-red-50">{scanError}</div>}
+                  {maintenance && !scanning && (
+                    <div data-testid="maintenance-results">
+                      <div className="p-4 sm:p-5 border-b flex flex-wrap items-center justify-between gap-3" style={{ borderColor: 'var(--admin-border)' }}>
+                        <div>
+                          <p className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>
+                            {maintenance.summary.issues === 0 ? 'Everything checked is tidy' : `${maintenance.summary.issues.toLocaleString()} item(s) need reviewing`}
+                          </p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--admin-faint)' }}>
+                            {maintenance.summary.originals_checked.toLocaleString()} originals checked · {formatBytes(maintenance.summary.reclaimable_bytes)} potentially reclaimable
+                          </p>
+                        </div>
+                        <StatusBadge status={maintenance.status === 'clean' ? 'healthy' : 'warning'} />
+                      </div>
+                      {[
+                        [FileWarning, 'Missing originals', maintenance.missing_originals, 'Database records whose live file could not be found.'],
+                        [ImageOff, 'Orphan thumbnails/previews', maintenance.orphan_derivatives, 'Generated previews with no matching database file.'],
+                        [Video, 'Orphan web videos', maintenance.orphan_web_videos, 'Playback copies with no matching original video record.'],
+                        [Video, 'Interrupted video files', maintenance.temporary_video_files, 'Temporary optimisation files left after an interruption.'],
+                        [Archive, 'Stale download ZIPs', maintenance.stale_download_archives, 'Temporary download archives older than four hours.'],
+                      ].map(([Icon, title, item, detail]) => (
+                        <div key={title} className="p-4 sm:px-5 border-b last:border-b-0" style={{ borderColor: 'var(--admin-border)' }}>
+                          <div className="flex items-start gap-3">
+                            <Icon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: item.count ? '#B45309' : '#15803D' }} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>{title}</p>
+                                <span className="text-xs font-bold tabular-nums" style={{ color: item.count ? '#B45309' : '#15803D' }}>{item.count.toLocaleString()}</span>
+                              </div>
+                              <p className="text-xs mt-0.5" style={{ color: 'var(--admin-faint)' }}>{detail}{item.bytes ? ` (${formatBytes(item.bytes)})` : ''}</p>
+                              {item.samples?.length > 0 && <p className="text-[10px] mt-1 break-all" style={{ color: 'var(--admin-faint)' }}>Examples: {item.samples.slice(0, 3).join(' · ')}</p>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              </div>
             </div>
 
-            <p className="text-[10px] text-center text-[#A8A29E] mt-6">Refreshes every 15 seconds. This screen cannot restart, delete or change anything.</p>
+            <p className="text-[10px] text-center text-[#A8A29E] mt-6">Health refreshes every 15 seconds and every 2 seconds while video work is visible. Safe Scan runs only when requested. This screen cannot restart, delete or change anything.</p>
           </motion.div>
         )}
       </main>
