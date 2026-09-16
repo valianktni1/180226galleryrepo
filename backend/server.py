@@ -42,6 +42,7 @@ from share_selection import main_gallery_share_query
 from share_security import ShareSessionError, refresh_share_claims, share_is_expired
 from backup_service import BackupManager
 from download_job_service import DownloadJobError, DownloadJobManager
+from album_downloads import album_download_name
 from system_health import backup_health, overall_status, storage_status, utc_now_iso
 from broadcast_service import (
     ACTIVE_CAMPAIGN_STATUSES,
@@ -1479,10 +1480,14 @@ def _download_entries(gallery: dict, files: List[dict], include_subfolder: bool 
             file_doc["filename"],
         )
         if file_path.is_file():
+            download_name = album_download_name(
+                file_doc,
+                gallery.get("album_cover_choice"),
+            )
             archive_name = (
-                f"{file_doc['subfolder']}/{file_doc['filename']}"
+                f"{file_doc['subfolder']}/{download_name}"
                 if include_subfolder
-                else file_doc["filename"]
+                else download_name
             )
             entries.append((file_path, archive_name))
         else:
