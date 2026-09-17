@@ -5345,7 +5345,7 @@ Best Regards<br>
 <!-- Awards -->
 {f'''<tr><td style="padding:25px 40px 10px;text-align:center;">
 <p style="font-size:11px;color:#A8A29E;margin:0 0 12px 0;letter-spacing:1.5px;text-transform:uppercase;">Award-Winning Photography</p>
-<img src="{smtp.get("site_url", "")}/api/public/email-assets/awards-badges.png" alt="Awards" style="max-width:480px;width:100%;height:auto;" />
+<img src="{get_awards_url(smtp)}" alt="Awards" style="max-width:480px;width:100%;height:auto;" />
 </td></tr>''' if smtp.get("site_url") else ''}
 
 <!-- Footer -->
@@ -5479,7 +5479,9 @@ def get_awards_url(smtp: dict) -> str:
     """Construct the awards badge image URL from site_url in SMTP settings."""
     site_url = smtp.get("site_url", "")
     if site_url:
-        return f"{site_url}/api/public/email-assets/awards-badges.png"
+        # Keep the public filename stable while ensuring email-image proxies fetch
+        # the current artwork instead of a previously cached awards badge.
+        return f"{site_url}/api/public/email-assets/awards-badges.png?v=20260916"
     return ""
 
 def build_branded_email(content_html: str, awards_url: str = "") -> str:
