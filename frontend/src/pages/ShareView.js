@@ -75,12 +75,14 @@ function ShareViewFull() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showAlbumSubmitDialog, setShowAlbumSubmitDialog] = useState(false);
   const [submittingFavourites, setSubmittingFavourites] = useState(false);
   const [showThankYou, setShowThankYou] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [showSlideshow, setShowSlideshow] = useState(false);
   const [albumCoverChoice, setAlbumCoverChoice] = useState(null);
   const [choosingCover, setChoosingCover] = useState(false);
+  const [albumSelection, setAlbumSelection] = useState({ enabled: false });
 
   // Back to top button — show when scrolled past 600px
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -134,6 +136,7 @@ function ShareViewFull() {
     try {
       const res = await submitFavouritesToAlbum(token);
       setSubmittedCount(res.data.copied);
+      if (res.data.album_selection) setAlbumSelection(res.data.album_selection);
       setShowThankYou(true);
       // Refresh files to show updated Album Favourites
       loadFiles();
@@ -152,6 +155,15 @@ function ShareViewFull() {
       setGalleryThemeId(res.data.theme || "classic_gold");
       setSubfolders(res.data.subfolders);
       setCovers(res.data.covers || {});
+      setAlbumSelection(res.data.album_selection || { enabled: false });
+      if (res.data.album_selection?.cover_file_id) {
+        setAlbumCoverChoice({
+          file_id: res.data.album_selection.cover_file_id,
+          filename: res.data.album_selection.cover_filename,
+        });
+      } else {
+        setAlbumCoverChoice(null);
+      }
       setPermissions({
         allowUploads: res.data.allow_uploads,
         allowDownloads: res.data.allow_downloads,
@@ -189,7 +201,10 @@ function ShareViewFull() {
   // Fetch album cover choice
   useEffect(() => {
     if (token) {
-      getAlbumCoverChoice(token).then(res => setAlbumCoverChoice(res.data.choice)).catch(() => {});
+      getAlbumCoverChoice(token).then(res => {
+        setAlbumCoverChoice(res.data.choice);
+        if (res.data.album_selection) setAlbumSelection(res.data.album_selection);
+      }).catch(() => {});
     }
   }, [token]);
 
@@ -198,6 +213,7 @@ function ShareViewFull() {
     try {
       const res = await chooseAlbumCover(token, fileId);
       setAlbumCoverChoice({ file_id: fileId, filename: res.data.filename, chosen_at: new Date().toISOString() });
+      if (res.data.album_selection) setAlbumSelection(res.data.album_selection);
       toast.success(`"${res.data.filename}" chosen as your album cover!`);
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to save cover choice"));
@@ -207,11 +223,12 @@ function ShareViewFull() {
   const handleFavourite = async (fileId) => {
     try {
       const res = await toggleShareFavourite(token, fileId);
+      if (res.data.album_selection) setAlbumSelection(res.data.album_selection);
       setSubfolders(prev => prev.map(sf => ({
         ...sf,
         files: sf.files.map(f => f.id === fileId ? { ...f, is_favourite: res.data.favourited } : f)
       })));
-    } catch { toast.error("Failed to update favourite"); }
+    } catch (err) { toast.error(getErrorMessage(err, "Failed to update album choice")); }
   };
 
   const [downloadProgress, setDownloadProgress] = useState(null); // {fileId, percent, filename}
@@ -410,6 +427,12 @@ function ShareViewFull() {
   }, [lightboxIndex, displayFiles]);
 
   const favCount = allFiles.filter(f => f.is_favourite).length;
+  const albumEnabled = albumSelection.enabled === true;
+  const albumLocked = albumEnabled && albumSelection.locked === true;
+  const albumLimit = albumSelection.limit || 40;
+  const albumReady = albumEnabled && albumSelection.ready_to_submit === true;
+  const isAlbumChoiceFile = (file) => file?.file_type === 'photo' &&
+    !['album favourites', 'guest uploads'].includes((file.subfolder || file._subfolder || '').toLowerCase());
 
   // Clear, folder-specific wording for the prominent bulk-download button.
   // This changes presentation only; every button still uses the existing,
@@ -429,8 +452,12 @@ function ShareViewFull() {
   })();
   const folderDownloadLabel = `Download All ${currentAlbumFiles.length} ${folderDownloadItemLabel}`;
 
-  // Show all subfolders from the gallery (not just ones with files)
-  const visibleAlbums = subfolders;
+  // No-album couples see no album wording or empty Album Favourites folder.
+  // Once a configured album is submitted the completed folder becomes visible.
+  const visibleAlbums = subfolders.filter(sf =>
+    sf.name.toLowerCase() !== 'album favourites' ||
+    (albumEnabled && (albumLocked || sf.files.length > 0))
+  );
 
   // Lightbox
   const currentPhoto = lightboxIndex >= 0 ? displayFiles[lightboxIndex] : null;
@@ -541,12 +568,14 @@ function ShareViewFull() {
                 style={heroImageUrl ? {} : { backgroundColor: '#25D366' }}>
                 <Share2 className="w-4 h-4" /> Share
               </Button>
-              {favCount > 0 && (
+              {albumEnabled && (
                 <Button data-testid="show-favourites-landing" variant="ghost" onClick={() => setShowFavourites(true)}
                   className={`rounded-sm gap-2 text-xs tracking-wider ${heroImageUrl ? 'text-white/90 hover:text-white' : ''}`}
                   style={heroImageUrl ? {} : { color: t.text }}>
                   <Heart className="w-3.5 h-3.5" fill={t.accent} stroke={t.accent} />
-                  <span className="min-w-[1.25rem] h-5 flex items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: t.accent }}>{favCount}</span>
+                  <span className="min-w-[2.5rem] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: albumLocked ? '#16A34A' : t.accent }}>
+                    {albumLocked ? 'Done' : `${favCount}/${albumLimit}`}
+                  </span>
                 </Button>
               )}
             </div>
@@ -632,8 +661,8 @@ function ShareViewFull() {
           </div>
         </motion.section>
 
-        {/* Album Instructions */}
-        <section className="max-w-screen-xl mx-auto px-6 pt-10 md:pt-14">
+        {/* Album Instructions — completely absent when this gallery has no album */}
+        {albumEnabled && <section className="max-w-screen-xl mx-auto px-6 pt-10 md:pt-14" data-testid="album-selection-guide">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -641,17 +670,19 @@ function ShareViewFull() {
             className="mx-auto max-w-3xl text-center px-8 py-10"
           >
             <h3 className="text-2xl font-medium mb-2" style={{ fontFamily: t.headingFont, color: t.headingColor }}>
-              Your Wedding Album
+              {albumLocked ? 'Your Wedding Album Choices Are Submitted' : 'Choose Your Wedding Album'}
             </h3>
             <p className="text-sm mb-10" style={{ fontFamily: t.bodyFont, color: t.textMuted || '#A8A29E' }}>
-              If your package includes an album, follow these three simple steps
+              {albumLocked
+                ? `${albumLimit} album photographs plus your separate cover are safely locked in.`
+                : `Choose exactly ${albumLimit} album photographs plus one separate front cover`}
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-10">
+            {!albumLocked && <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-10">
               {[
-                { step: "1", icon: <Heart className="w-6 h-6" fill={t.accent} stroke={t.accent} />, title: "Heart Your Favourites", desc: "Open your Wedding Images folder and tap the heart on your 40 favourite photos" },
-                { step: "2", icon: <CheckCircle className="w-6 h-6" style={{ color: t.accent }} />, title: "Submit Your Album", desc: "Tap the gold heart at the top, then press Submit for Album" },
-                { step: "3", icon: <ImageIcon className="w-6 h-6" style={{ color: t.accent }} />, title: "Choose Your Cover", desc: "Open Album Favourites and tap Cover on your chosen front-cover image" },
+                { step: "1", icon: <Heart className="w-6 h-6" fill={t.accent} stroke={t.accent} />, title: "Heart Your Album Photos", desc: `Tap the heart on exactly ${albumLimit} photographs for the pages of your album` },
+                { step: "2", icon: <Star className="w-6 h-6" style={{ color: t.accent }} />, title: "Choose Your Cover", desc: "Tap Cover on one photograph — this is separate from your album-photo allowance" },
+                { step: "3", icon: <CheckCircle className="w-6 h-6" style={{ color: t.accent }} />, title: "Submit Your Album", desc: "Open your choices, check the counter and submit when both steps are complete" },
               ].map(({ step, icon, title, desc }) => (
                 <div key={step} className="flex flex-col items-center text-center p-6 border" style={{ borderColor: t.border, backgroundColor: t.bgInstructions, borderRadius: t.cardRadius, borderWidth: t.cardBorderWidth }}>
                   {t.instructionIconBg ? (
@@ -665,13 +696,15 @@ function ShareViewFull() {
                   <p className="text-xs leading-relaxed" style={{ fontFamily: t.bodyFont, color: t.text }}>{desc}</p>
                 </div>
               ))}
-            </div>
+            </div>}
 
             <p className="text-xs" style={{ fontFamily: t.bodyFont, color: t.textMuted || '#A8A29E' }}>
-              Your selections will appear in your <strong style={{ color: t.headingColor }}>Album Favourites</strong> folder. Once there, simply tap the <strong style={{ color: t.accent }}>Cover</strong> button on any image to choose it as your album front cover — Mark will be notified automatically.
+              {albumLocked
+                ? 'If you need to make a change, contact Mark and he can reopen your choices without losing them.'
+                : <>Nothing is final until you press <strong style={{ color: t.headingColor }}>Submit Your Album</strong>. Mark is notified automatically when you submit.</>}
             </p>
           </motion.div>
-        </section>
+        </section>}
 
         {/* Albums Section */}
         <section className="max-w-screen-xl mx-auto px-6 py-12 md:py-16">
@@ -820,13 +853,15 @@ function ShareViewFull() {
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <h1 className="text-lg font-medium" style={{ fontFamily: t.headingFont, color: t.headingColor }}>Your Favourites</h1>
-              <span className="text-xs" style={{ color: t.textSub }}>({favCount})</span>
+              <span className="text-xs font-semibold" style={{ color: albumLocked ? '#16A34A' : t.accent }}>
+                {albumLocked ? 'Submitted' : `${favCount} of ${albumLimit}`}
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              {favCount > 0 && (
-                <Button data-testid="submit-favourites-btn" variant="default" onClick={handleSubmitFavourites} disabled={submittingFavourites}
+              {!albumLocked && (
+                <Button data-testid="submit-favourites-btn" variant="default" onClick={() => setShowAlbumSubmitDialog(true)} disabled={submittingFavourites || !albumReady}
                   className="rounded-sm gap-2 text-xs tracking-wider" style={{ backgroundColor: t.accent, color: 'white' }}>
-                  <Heart className="w-3.5 h-3.5" /> {submittingFavourites ? "Submitting..." : "Submit for Album"}
+                  <CheckCircle className="w-3.5 h-3.5" /> {submittingFavourites ? "Submitting..." : "Submit Your Album"}
                 </Button>
               )}
               {permissions.allowDownloads && (
@@ -840,10 +875,31 @@ function ShareViewFull() {
         </header>
         <main className="max-w-screen-xl mx-auto px-6 py-8">
           <div className="mb-6 p-4 rounded-lg" style={{ backgroundColor: t.bgAlt }}>
-            <p className="text-sm" style={{ color: t.text, fontFamily: t.bodyFont }}>
-              <Heart className="w-4 h-4 inline mr-2" fill={t.accent} stroke={t.accent} />
-              Heart your favourite photos, then click <strong>&quot;Submit for Album&quot;</strong> to send them for your wedding album.
-            </p>
+            {albumLocked ? (
+              <p className="text-sm" style={{ color: t.text, fontFamily: t.bodyFont }}>
+                <CheckCircle className="w-4 h-4 inline mr-2 text-green-600" />
+                Your <strong>{albumLimit} album photos</strong> and separate cover <strong>{albumSelection.cover_filename}</strong> were submitted successfully. Contact Mark if you need them reopened.
+              </p>
+            ) : (
+              <div className="space-y-2" style={{ color: t.text, fontFamily: t.bodyFont }}>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span><Heart className="w-4 h-4 inline mr-2" fill={t.accent} stroke={t.accent} />Album photos</span>
+                  <strong style={{ color: favCount === albumLimit ? '#16A34A' : t.accent }}>{favCount} of {albumLimit}</strong>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span><Star className="w-4 h-4 inline mr-2" style={{ color: t.accent }} />Separate front cover</span>
+                  <strong style={{ color: albumSelection.cover_selected ? '#16A34A' : t.textSub }}>{albumSelection.cover_filename || 'Not chosen yet'}</strong>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: t.border }}>
+                  <div className="h-full transition-all" style={{ width: `${Math.min(100, (favCount / albumLimit) * 100)}%`, backgroundColor: t.accent }} />
+                </div>
+                {!albumReady && <p className="text-xs" style={{ color: t.textSub }}>
+                  {favCount < albumLimit
+                    ? `Choose ${albumLimit - favCount} more album photo${albumLimit - favCount === 1 ? '' : 's'}. You can choose your separate cover from any gallery photo.`
+                    : 'Your photo count is complete — choose a separate cover to unlock Submit Your Album.'}
+                </p>}
+              </div>
+            )}
           </div>
           {displayFiles.length === 0 ? (
             <div className="text-center py-20">
@@ -855,9 +911,11 @@ function ShareViewFull() {
             <div className="masonry-grid">
               {displayFiles.map((file, i) => (
                 <LazyFileCard key={file.id} file={file} index={i} galleryId={galleryId}
-                  onFav={handleFavourite} onDownload={handleDownloadSingle}
+                  onFav={!albumLocked ? handleFavourite : null} onDownload={handleDownloadSingle}
                   onClick={() => setLightboxIndex(i)} permissions={permissions} theme={t}
-                  downloadProgress={downloadProgress} />
+                  downloadProgress={downloadProgress}
+                  isAlbumCover={albumCoverChoice?.file_id === file.id}
+                  onChooseCover={!albumLocked ? handleChooseCover : null} />
               ))}
             </div>
           )}
@@ -880,8 +938,25 @@ function ShareViewFull() {
         </AnimatePresence>
         <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
           setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
-          galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
+          galleryId={galleryId} onFav={!albumLocked ? handleFavourite : null} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
           downloadProgress={downloadProgress} theme={t} />
+        <AlertDialog open={showAlbumSubmitDialog} onOpenChange={setShowAlbumSubmitDialog}>
+          <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: t.bgCard, color: t.text }}>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: t.headingFont, color: t.headingColor }}>Submit Your Album Choices?</AlertDialogTitle>
+              <AlertDialogDescription style={{ color: t.text, fontFamily: t.bodyFont }}>
+                You are submitting <strong>{albumLimit} album photographs</strong> plus the separate cover <strong>{albumSelection.cover_filename}</strong>. Your choices will be locked, but Mark can reopen them for you if anything needs changing.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="rounded-sm">Check Again</AlertDialogCancel>
+              <AlertDialogAction data-testid="confirm-album-submission" onClick={() => { setShowAlbumSubmitDialog(false); handleSubmitFavourites(); }}
+                className="rounded-sm" style={{ backgroundColor: t.accent, color: 'white' }}>
+                Yes, Submit My Album
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <ThankYouModal show={showThankYou} onClose={() => setShowThankYou(false)} count={submittedCount} galleryName={galleryName} theme={t} />
       </div>
     );
@@ -917,11 +992,13 @@ function ShareViewFull() {
                 <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedFiles.size})
               </Button>
             )}
-            {favCount > 0 && !selectMode && (
+            {albumEnabled && !selectMode && (
               <Button data-testid="show-favourites-album" variant="ghost" onClick={() => setShowFavourites(true)}
                 className="rounded-sm gap-2 text-xs tracking-wider" style={{ color: t.text }}>
                 <Heart className="w-3.5 h-3.5" fill={t.accent} stroke={t.accent} />
-                <span className="min-w-[1.25rem] h-5 flex items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: t.accent }}>{favCount}</span>
+                <span className="min-w-[2.5rem] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: albumLocked ? '#16A34A' : t.accent }}>
+                  {albumLocked ? 'Done' : `${favCount}/${albumLimit}`}
+                </span>
               </Button>
             )}
             {activeAlbum && activeAlbum.toLowerCase().includes('wedding') && !selectMode && currentAlbumFiles.filter(f => f.file_type === 'photo').length > 0 && (
@@ -1021,14 +1098,14 @@ function ShareViewFull() {
           <div className="masonry-grid">
             {currentAlbumFiles.map((file, i) => (
               <LazyFileCard key={file.id} file={file} index={i} galleryId={galleryId}
-                onFav={handleFavourite} onDownload={handleDownloadSingle}
+                onFav={albumEnabled && !albumLocked && isAlbumChoiceFile(file) ? handleFavourite : null} onDownload={handleDownloadSingle}
                 onClick={selectMode ? () => toggleSelect(file.id) : () => setLightboxIndex(i)} 
                 permissions={permissions}
                 selectMode={selectMode}
                 isSelected={selectedFiles.has(file.id)} theme={t}
                 downloadProgress={downloadProgress}
-                isAlbumCover={activeAlbum === 'Album Favourites' && albumCoverChoice?.file_id === file.id}
-                onChooseCover={activeAlbum === 'Album Favourites' ? handleChooseCover : null} />
+                isAlbumCover={albumCoverChoice?.file_id === file.id || albumSelection.cover_output_file_id === file.id}
+                onChooseCover={albumEnabled && !albumLocked && isAlbumChoiceFile(file) ? handleChooseCover : null} />
             ))}
           </div>
         )}
@@ -1078,7 +1155,7 @@ function ShareViewFull() {
 
       <Lightbox currentPhoto={currentPhoto} lightboxIndex={lightboxIndex} total={displayFiles.length}
         setLightboxIndex={setLightboxIndex} goNext={goNext} goPrev={goPrev}
-        galleryId={galleryId} onFav={handleFavourite} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
+        galleryId={galleryId} onFav={albumEnabled && !albumLocked && isAlbumChoiceFile(currentPhoto) ? handleFavourite : null} onDownload={handleDownloadSingle} permissions={permissions} shareToken={token}
         downloadProgress={downloadProgress} theme={t} />
       
       {/* Delete Confirmation Dialog */}
@@ -1224,7 +1301,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
         </div>
       )}
       {/* Always visible heart button (bottom-left) - permanent overlay */}
-      {!selectMode && (
+      {!selectMode && onFav && file.file_type === 'photo' && (
         <button 
           data-testid={`fav-btn-${file.id}`} 
           onClick={e => { e.stopPropagation(); onFav(file.id); }}
@@ -1318,10 +1395,10 @@ function Lightbox({ currentPhoto, lightboxIndex, total, setLightboxIndex, goNext
             <X className="w-6 h-6" />
           </button>
           <div className="absolute top-6 left-6 flex items-center gap-3 z-10">
-            <button data-testid="lightbox-fav" onClick={e => { e.stopPropagation(); onFav(currentPhoto.id); }}
+            {onFav && currentPhoto.file_type === 'photo' && <button data-testid="lightbox-fav" onClick={e => { e.stopPropagation(); onFav(currentPhoto.id); }}
               className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
               <Heart className="w-5 h-5" fill={currentPhoto.is_favourite ? theme.accent : 'none'} stroke={currentPhoto.is_favourite ? theme.accent : 'white'} />
-            </button>
+            </button>}
             {permissions.allowDownloads && (
               <button data-testid="lightbox-download" onClick={e => { e.stopPropagation(); if (!isDownloading) onDownload(currentPhoto); }}
                 className="h-10 rounded-full flex items-center justify-center gap-2 px-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)', minWidth: '40px' }}>
@@ -1437,11 +1514,11 @@ function ThankYouModal({ show, onClose, count, galleryName, theme = {} }) {
             Thank You!
           </h2>
           <p className="text-base mb-4" style={{ fontFamily: theme.bodyFont || 'Manrope, sans-serif', color: text }}>
-            Your {count} favourite {count === 1 ? 'photo has' : 'photos have'} been submitted for your wedding album.
+            Your complete wedding album selection has been submitted safely.
           </p>
           <p className="text-sm mb-6 p-3 rounded-lg" style={{ fontFamily: theme.bodyFont || 'Manrope, sans-serif', color: text, backgroundColor: theme.bgAlt || '#FEF9E7' }}>
-            <strong>One final step</strong><br />
-            Open your <strong>Album Favourites</strong> folder and tap <strong>Cover</strong> on the image you want for the front of your album. Mark will be notified automatically - there is no need to email the image number.
+            <strong>{count} files are ready</strong><br />
+            Your album photographs and clearly labelled cover copy are now in <strong>Album Favourites</strong>. Mark has been notified automatically and your choices are locked against accidental changes.
           </p>
           <button
             onClick={onClose}

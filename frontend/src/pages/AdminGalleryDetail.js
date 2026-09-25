@@ -23,13 +23,14 @@ import {
   ArrowLeft, Upload, Trash2, Copy, FolderOpen, Share2, QrCode,
   MoreVertical, Link, Lock, Globe, Image as ImageIcon, Film, Check,
   Download, Plus, X, Heart, Calendar as CalendarIcon, Clock, Star, FileText, Mail, Send, Palette, RefreshCw, Pencil, Paperclip,
-  AlertTriangle, CheckCircle2, ShieldCheck, XCircle
+  AlertTriangle, CheckCircle2, ShieldCheck, XCircle, BookOpen, Unlock, History
 } from "lucide-react";
 import {
   getGallery, uploadFiles, deleteFile, createSubfolder, deleteSubfolder, copyToSubfolder, adminDownloadFile,
   createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
   updateGallery, getGalleryReadiness, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail, getVideoHealth,
-  startAdminFolderDownload, getAdminFolderDownloadStatus, getDownloadJobFileUrl, getErrorMessage
+  startAdminFolderDownload, getAdminFolderDownloadStatus, getDownloadJobFileUrl, getErrorMessage,
+  updateAlbumSelection, reopenAlbumSelection, sendAlbumSelectionInvitation
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 import DownloadJobProgress from "@/components/DownloadJobProgress";
@@ -78,6 +79,8 @@ export default function AdminGalleryDetail() {
   const [sendingTemplate, setSendingTemplate] = useState(false);
   const [galleryEmailAttachments, setGalleryEmailAttachments] = useState([]);
   const [sendingQrPicker, setSendingQrPicker] = useState(false);
+  const [updatingAlbumPlan, setUpdatingAlbumPlan] = useState(false);
+  const [sendingAlbumInvitation, setSendingAlbumInvitation] = useState(false);
 
   // Video health check
   const [videoHealth, setVideoHealth] = useState(null); // { videos: [], summary: {} }
@@ -550,6 +553,48 @@ export default function AdminGalleryDetail() {
     } catch { toast.error("Failed to update theme"); }
   };
 
+  const handleAlbumModeChange = async (mode) => {
+    if ((gallery.album_selection?.mode || 'off') === mode) return;
+    setUpdatingAlbumPlan(true);
+    try {
+      const res = await updateAlbumSelection(id, mode);
+      setGallery(prev => ({ ...prev, album_selection: res.data.album_selection }));
+      toast.success(mode === 'off'
+        ? 'Album choices hidden from the couple'
+        : `${mode} photos plus a separate cover enabled`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to update album plan'));
+    } finally {
+      setUpdatingAlbumPlan(false);
+    }
+  };
+
+  const handleReopenAlbum = async () => {
+    setUpdatingAlbumPlan(true);
+    try {
+      const res = await reopenAlbumSelection(id);
+      setGallery(prev => ({ ...prev, album_selection: res.data.album_selection }));
+      toast.success('Album choices reopened without removing the couple’s selections');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to reopen album choices'));
+    } finally {
+      setUpdatingAlbumPlan(false);
+    }
+  };
+
+  const handleSendAlbumInvitation = async () => {
+    setSendingAlbumInvitation(true);
+    try {
+      const res = await sendAlbumSelectionInvitation(id);
+      toast.success(res.data.message);
+      loadGallery();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to send album instructions'));
+    } finally {
+      setSendingAlbumInvitation(false);
+    }
+  };
+
   const handleNotifyCouple = async () => {
     setShowReadiness(true);
     setCheckingReadiness(true);
@@ -654,6 +699,13 @@ export default function AdminGalleryDetail() {
     }
   }
 
+  const albumSelection = gallery.album_selection || {
+    mode: 'off', limit: 40, selected_file_ids: [], cover_file_id: null,
+    cover_filename: null, locked: false, history: []
+  };
+  const albumSelectedCount = (albumSelection.selected_file_ids || []).length;
+  const albumEnabled = albumSelection.mode === '40' || albumSelection.mode === '60';
+
   return (
     <div className="min-h-screen" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
       {/* Header */}
@@ -734,6 +786,97 @@ export default function AdminGalleryDetail() {
       </header>
 
       <main className="max-w-screen-xl mx-auto px-6 py-6">
+        {/* Album package and couple-selection controls */}
+        <section data-testid="album-selection-admin-card" className="mb-6 border p-5" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface)' }}>
+          <div className="flex flex-col lg:flex-row lg:items-start gap-5">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <BookOpen className="w-4 h-4 text-[#D4AF37]" />
+                <h2 className="text-sm tracking-wider uppercase font-bold" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-text)' }}>Wedding Album Choices</h2>
+                <span className={`text-[10px] px-2 py-0.5 font-bold uppercase ${albumSelection.locked ? 'bg-green-100 text-green-700' : albumEnabled ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-500'}`}>
+                  {albumSelection.locked ? 'Submitted & Locked' : albumEnabled ? 'Open' : 'Off'}
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
+                Off hides every album instruction and control from the couple. Turning it on keeps the existing gallery link and defaults to the 40-photo package.
+              </p>
+
+              {albumEnabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                  <div className="p-3 border" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-soft)' }}>
+                    <p className="text-[10px] uppercase tracking-wider font-bold" style={{ color: 'var(--admin-faint)' }}>Album photos</p>
+                    <p className="text-xl font-semibold mt-1" style={{ color: 'var(--admin-text)' }}>{albumSelectedCount} <span className="text-sm font-normal" style={{ color: 'var(--admin-muted)' }}>/ {albumSelection.limit}</span></p>
+                  </div>
+                  <div className="p-3 border" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-soft)' }}>
+                    <p className="text-[10px] uppercase tracking-wider font-bold" style={{ color: 'var(--admin-faint)' }}>Separate cover</p>
+                    <p className="text-xs font-semibold mt-2 truncate" style={{ color: albumSelection.cover_file_id ? '#16A34A' : 'var(--admin-muted)' }} title={albumSelection.cover_filename || ''}>
+                      {albumSelection.cover_filename || 'Not chosen yet'}
+                    </p>
+                  </div>
+                  <div className="p-3 border" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-soft)' }}>
+                    <p className="text-[10px] uppercase tracking-wider font-bold" style={{ color: 'var(--admin-faint)' }}>Last submission</p>
+                    <p className="text-xs font-semibold mt-2" style={{ color: 'var(--admin-text)' }}>
+                      {albumSelection.submitted_at
+                        ? new Date(albumSelection.submitted_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+                        : 'Not submitted'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="lg:w-[420px] space-y-3">
+              <div className="grid grid-cols-3 border" style={{ borderColor: 'var(--admin-border)' }}>
+                {[
+                  { mode: 'off', label: 'Off' },
+                  { mode: '40', label: '40 + Cover' },
+                  { mode: '60', label: '60 + Cover' },
+                ].map(option => (
+                  <button key={option.mode} data-testid={`album-mode-${option.mode}`}
+                    onClick={() => handleAlbumModeChange(option.mode)} disabled={updatingAlbumPlan}
+                    className="px-3 py-2.5 text-xs font-bold transition-colors disabled:opacity-50"
+                    style={{
+                      fontFamily: 'Manrope, sans-serif',
+                      backgroundColor: albumSelection.mode === option.mode ? '#D4AF37' : 'var(--admin-surface-raised)',
+                      color: albumSelection.mode === option.mode ? '#FFFFFF' : 'var(--admin-muted)',
+                    }}>
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              {albumEnabled && (
+                <div className="flex flex-wrap gap-2">
+                  <Button data-testid="send-album-instructions-btn" variant="outline" onClick={handleSendAlbumInvitation} disabled={sendingAlbumInvitation || !clientEmail}
+                    className="rounded-sm text-xs gap-1.5 border-[#D4AF37] text-[#B08D24]">
+                    <Mail className="w-3.5 h-3.5" /> {sendingAlbumInvitation ? 'Sending...' : 'Email Album Instructions'}
+                  </Button>
+                  {albumSelection.locked && (
+                    <Button data-testid="reopen-album-choices-btn" variant="outline" onClick={handleReopenAlbum} disabled={updatingAlbumPlan}
+                      className="rounded-sm text-xs gap-1.5">
+                      <Unlock className="w-3.5 h-3.5" /> Reopen Choices
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {(albumSelection.history || []).length > 0 && (
+                <details className="text-xs" style={{ color: 'var(--admin-muted)' }}>
+                  <summary className="cursor-pointer flex items-center gap-1.5 font-semibold"><History className="w-3.5 h-3.5" /> Selection history</summary>
+                  <div className="mt-2 space-y-1 max-h-28 overflow-y-auto">
+                    {[...(albumSelection.history || [])].reverse().slice(0, 8).map((item, index) => (
+                      <p key={`${item.at}-${index}`} className="flex justify-between gap-3">
+                        <span>{item.action.replaceAll('_', ' ')}</span>
+                        <span className="whitespace-nowrap">{new Date(item.at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      </p>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* Shares Bar */}
         {shares.length > 0 && (
           <div className="mb-6 p-4 border" style={{ borderColor: 'var(--admin-border)' }}>

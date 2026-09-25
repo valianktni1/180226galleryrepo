@@ -69,6 +69,12 @@ export const listGalleries = getGalleries;  // Alias
 export const getGallery = (id) => apiClient.get(`/admin/galleries/${id}`);
 export const createGallery = (data) => apiClient.post('/admin/galleries', data);
 export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}`, data);
+export const updateAlbumSelection = (id, mode) =>
+  apiClient.put(`/admin/galleries/${id}/album-selection`, { mode });
+export const reopenAlbumSelection = (id) =>
+  apiClient.post(`/admin/galleries/${id}/album-selection/reopen`);
+export const sendAlbumSelectionInvitation = (id) =>
+  apiClient.post(`/admin/galleries/${id}/album-selection/notify`);
 export const deleteGallery = (id, deleteBackup = false) => apiClient.delete(`/admin/galleries/${id}?delete_backup=${deleteBackup}`);
 export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/stats`);
 export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats');

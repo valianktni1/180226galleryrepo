@@ -43,6 +43,18 @@ from share_security import ShareSessionError, refresh_share_claims, share_is_exp
 from backup_service import BackupManager
 from download_job_service import DownloadJobError, DownloadJobManager
 from album_downloads import album_download_name
+from album_selection import (
+    AlbumSelectionError,
+    album_selection_available,
+    choose_album_cover_state,
+    default_album_selection,
+    mark_album_submitted,
+    normalise_album_selection,
+    public_album_selection,
+    reopen_album_selection,
+    set_album_mode,
+    toggle_album_photo,
+)
 from gallery_readiness import build_gallery_readiness
 from maintenance_scan import scan_gallery_maintenance
 from system_health import backup_health, overall_status, storage_status, utc_now_iso
@@ -158,6 +170,9 @@ class GalleryUpdate(BaseModel):
     folder_name: Optional[str] = None
     client_email: Optional[str] = None
     theme: Optional[str] = None
+
+class AlbumSelectionSettings(BaseModel):
+    mode: str
 
 class SubfolderCreate(BaseModel):
     name: str
@@ -971,6 +986,9 @@ async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
         "template_id": data.template_id,
         "client_email": data.client_email or "",
         "theme": data.theme or "classic_gold",
+        # Album controls are deliberately off until Mark enables the right
+        # package. Enabling a plan defaults to 40 photos plus one cover.
+        "album_selection": default_album_selection(),
         "file_counts": {sf: 0 for sf in subfolders},
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
@@ -1026,6 +1044,7 @@ async def get_gallery_detail(gallery_id: str, admin=Depends(get_admin)):
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
+
     files = await db.files.find({"gallery_id": gallery_id}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
     shares = await db.shares.find({"gallery_id": gallery_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
     
@@ -1037,6 +1056,7 @@ async def get_gallery_detail(gallery_id: str, admin=Depends(get_admin)):
         gallery["subfolders"] = gallery.get("subfolders", []) + sorted(missing)
         await db.galleries.update_one({"id": gallery_id}, {"$set": {"subfolders": gallery["subfolders"]}})
     
+    gallery["album_selection"] = normalise_album_selection(gallery)
     gallery["files"] = files
     gallery["shares"] = shares
     return gallery
@@ -1061,6 +1081,108 @@ async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get
     await db.galleries.update_one({"id": gallery_id}, {"$set": update})
     updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     return updated
+
+@api_router.put("/admin/galleries/{gallery_id}/album-selection")
+async def update_album_selection_settings(
+    gallery_id: str,
+    data: AlbumSelectionSettings,
+    admin=Depends(get_admin),
+):
+    """Enable/disable the album workflow or switch its 40/60-photo allowance."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    try:
+        state = set_album_mode(gallery, data.mode)
+    except AlbumSelectionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {
+            "album_selection": state,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"success": True, "album_selection": state}
+
+
+@api_router.post("/admin/galleries/{gallery_id}/album-selection/reopen")
+async def reopen_gallery_album_selection(gallery_id: str, admin=Depends(get_admin)):
+    """Unlock a submitted album without removing any of the couple's choices."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    try:
+        state = reopen_album_selection(gallery)
+    except AlbumSelectionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {
+            "album_selection": state,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"success": True, "album_selection": state}
+
+
+@api_router.post("/admin/galleries/{gallery_id}/album-selection/notify")
+async def send_album_selection_invitation(
+    gallery_id: str,
+    request: Request,
+    admin=Depends(get_admin),
+):
+    """Email the couple when an album is added to an existing gallery."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    state = normalise_album_selection(gallery)
+    if state["mode"] == "off":
+        raise HTTPException(status_code=409, detail="Enable an album plan before sending instructions")
+    recipient = (gallery.get("client_email") or "").strip()
+    if not recipient:
+        raise HTTPException(status_code=409, detail="Add the couple's email address first")
+    share_candidates = await db.shares.find(
+        main_gallery_share_query(gallery_id), {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    share = next(
+        (candidate for candidate in share_candidates if not is_share_expired(candidate)),
+        None,
+    )
+    if not share:
+        raise HTTPException(status_code=409, detail="Create an active full-gallery download share first")
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        raise HTTPException(status_code=400, detail="Email settings are not configured")
+
+    smtp = smtp_doc["value"]
+    site_url = smtp.get("site_url", "").rstrip("/") or _public_request_base_url(request)
+    gallery_link = f"{site_url}/s/{share.get('custom_slug') or share['token']}"
+    awards_url = get_awards_url(smtp)
+    email_html = build_branded_email(f"""
+<p style="font-size:22px;color:#1C1917;font-family:Georgia,'Times New Roman',serif;margin:0 0 8px 0;">Your Wedding Album Choices Are Ready</p>
+<p style="font-size:15px;color:#57534E;line-height:1.8;">Your gallery has now been opened for your wedding album choices.</p>
+<ol style="font-size:15px;color:#57534E;line-height:1.9;padding-left:22px;">
+<li>Heart exactly <strong>{state['limit']} photographs</strong> for the album.</li>
+<li>Choose <strong>one separate photograph</strong> for the front cover.</li>
+<li>Review everything and press <strong>Submit Your Album</strong>.</li>
+</ol>
+<p style="text-align:center;margin:28px 0;"><a href="{gallery_link}" style="display:inline-block;background:#1C1917;color:#FFFFFF;text-decoration:none;padding:14px 26px;border-radius:3px;font-weight:bold;">Open Your Gallery</a></p>
+<p style="font-size:13px;color:#78716C;">Nothing is final until you press Submit. Once submitted, contact Mark if you need the choices reopened.</p>
+""", awards_url)
+    send_smtp_email(
+        smtp,
+        recipient,
+        f"Choose Your Wedding Album — {gallery['folder_name']}",
+        email_html,
+    )
+    sent_at = datetime.now(timezone.utc).isoformat()
+    state["invitation_sent_at"] = sent_at
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {"album_selection": state, "updated_at": sent_at}},
+    )
+    return {"success": True, "message": f"Album instructions sent to {recipient}", "sent_at": sent_at}
 
 @api_router.post("/admin/galleries/{gallery_id}/subfolders")
 async def create_subfolder(gallery_id: str, data: SubfolderCreate, admin=Depends(get_admin)):
@@ -1420,6 +1542,18 @@ async def delete_file(gallery_id: str, file_id: str, delete_backup: bool = Query
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
 
+    album_state = normalise_album_selection(gallery)
+    album_changed = False
+    if not album_state["locked"]:
+        if file_id in album_state["selected_file_ids"]:
+            album_state["selected_file_ids"].remove(file_id)
+            album_changed = True
+        if album_state.get("cover_file_id") == file_id:
+            album_state["cover_file_id"] = None
+            album_state["cover_filename"] = None
+            album_state.pop("cover_chosen_at", None)
+            album_changed = True
+
     # Delete physical file
     file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
     if file_path.exists():
@@ -1441,10 +1575,10 @@ async def delete_file(gallery_id: str, file_id: str, delete_backup: bool = Query
     await db.favourites.delete_many({"file_id": file_id})
 
     count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": f["subfolder"]})
-    await db.galleries.update_one(
-        {"id": gallery_id},
-        {"$set": {f"file_counts.{f['subfolder']}": count}}
-    )
+    gallery_update = {f"file_counts.{f['subfolder']}": count}
+    if album_changed:
+        gallery_update["album_selection"] = album_state
+    await db.galleries.update_one({"id": gallery_id}, {"$set": gallery_update})
     return {"success": True, "backup_deleted": delete_backup}
 
 # ─── Copy to Album Favourites ───
@@ -3056,16 +3190,22 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
             files_by_sf.setdefault(f["subfolder"], []).append(f)
         subfolders_data = [{"name": sf, "files": files_by_sf.get(sf, [])} for sf in gallery["subfolders"]]
 
-    # Get favourites
-    favs = await db.favourites.find({"session_id": session["sub"], "gallery_id": gallery_id}, {"_id": 0}).to_list(50000)
-    fav_ids = {f["file_id"] for f in favs}
+    # Album choices are gallery-owned (shared across the couple's devices).
+    # Legacy browser-session favourites remain untouched for galleries where
+    # the optional album workflow is disabled.
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    album_policy = public_album_selection(gallery, share)
+    if album_policy.get("enabled"):
+        fav_ids = set(album_policy.get("selected_file_ids", []))
+    else:
+        favs = await db.favourites.find(
+            {"session_id": session["sub"], "gallery_id": gallery_id}, {"_id": 0}
+        ).to_list(50000)
+        fav_ids = {f["file_id"] for f in favs}
 
     for sf_data in subfolders_data:
         for f in sf_data["files"]:
             f["is_favourite"] = f["id"] in fav_ids
-
-    # Get share doc for additional flags
-    share = await db.shares.find_one({"token": token}, {"_id": 0})
 
     return {
         "gallery_id": gallery_id,
@@ -3077,231 +3217,331 @@ async def get_share_files(token: str, session=Depends(get_share_session)):
         "allow_uploads": session.get("allow_uploads", False),
         "allow_downloads": session.get("allow_downloads", True),
         "allow_delete": session.get("allow_delete", False),
-        "allow_all_file_types": share.get("allow_all_file_types", False) if share else False
+        "allow_all_file_types": share.get("allow_all_file_types", False) if share else False,
+        "album_selection": album_policy,
     }
 
 @api_router.post("/share/{token}/favourite")
 async def toggle_share_favourite(token: str, data: FavouriteToggle, session=Depends(get_share_session)):
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
-    visible_file = await db.files.find_one(share_file_query(session, id=data.file_id), {"_id": 0, "id": 1})
+    gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not gallery or not album_selection_available(gallery, share):
+        raise HTTPException(status_code=403, detail="Album selection is not enabled for this gallery")
+    visible_file = await db.files.find_one(
+        share_file_query(session, id=data.file_id),
+        {"_id": 0},
+    )
     if not visible_file:
         raise HTTPException(status_code=404, detail="File not found")
-    existing = await db.favourites.find_one({
-        "session_id": session["sub"],
-        "file_id": data.file_id,
-        "gallery_id": session["gallery_id"]
-    })
-    if existing:
-        await db.favourites.delete_one({"_id": existing["_id"]})
-        return {"favourited": False}
-    await db.favourites.insert_one({
-        "id": str(uuid.uuid4()),
-        "session_id": session["sub"],
-        "file_id": data.file_id,
-        "gallery_id": session["gallery_id"],
-        "created_at": datetime.now(timezone.utc).isoformat()
-    })
-    return {"favourited": True}
+    if visible_file.get("file_type") != "photo" or visible_file.get("subfolder") in (
+        "Album Favourites", "Guest Uploads"
+    ):
+        raise HTTPException(status_code=400, detail="Only gallery photos can be chosen for the album")
+    try:
+        state, selected_now = toggle_album_photo(gallery, data.file_id)
+    except AlbumSelectionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    await db.galleries.update_one(
+        {"id": session["gallery_id"]},
+        {"$set": {
+            "album_selection": state,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {
+        "favourited": selected_now,
+        "album_selection": public_album_selection(
+            {**gallery, "album_selection": state}, share
+        ),
+    }
 
 @api_router.post("/share/{token}/submit-favourites")
 async def submit_favourites_to_album(token: str, request: Request, session=Depends(get_share_session)):
-    """Copy all favourited files to Album Favourites folder."""
+    """Validate, copy and lock one complete album selection."""
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
-    
-    # Get client IP
+
     client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
-    
+
     gallery_id = session["gallery_id"]
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    
-    # Get all favourites for this session
-    favs = await db.favourites.find({
-        "session_id": session["sub"],
-        "gallery_id": gallery_id
-    }, {"_id": 0}).to_list(50000)
-    
-    if not favs:
-        raise HTTPException(status_code=400, detail="No favourites selected")
-    
-    # Ensure Album Favourites folder exists
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not album_selection_available(gallery, share):
+        raise HTTPException(status_code=403, detail="Album selection is not enabled for this gallery")
+
+    try:
+        submitted_state = mark_album_submitted(gallery)
+    except AlbumSelectionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    selected_ids = submitted_state["selected_file_ids"]
+    selected_files = await db.files.find({
+        "gallery_id": gallery_id,
+        "id": {"$in": selected_ids},
+        "file_type": "photo",
+        "subfolder": {"$nin": ["Album Favourites", "Guest Uploads"]},
+    }, {"_id": 0}).to_list(100)
+    selected_by_id = {item["id"]: item for item in selected_files}
+    selected_files = [selected_by_id[file_id] for file_id in selected_ids if file_id in selected_by_id]
+    if len(selected_files) != submitted_state["limit"]:
+        raise HTTPException(
+            status_code=409,
+            detail="One or more selected photos is no longer available. Please reopen the gallery choices and review them.",
+        )
+
+    cover_source = await db.files.find_one({
+        "gallery_id": gallery_id,
+        "id": submitted_state["cover_file_id"],
+        "file_type": "photo",
+        "subfolder": {"$nin": ["Album Favourites", "Guest Uploads"]},
+    }, {"_id": 0})
+    if not cover_source:
+        raise HTTPException(status_code=409, detail="The chosen cover photo is no longer available")
+
+    sources = [*selected_files, cover_source]
+    for source in sources:
+        source_path = get_gallery_file_path(
+            gallery["folder_name"], source["subfolder"], source["filename"]
+        )
+        if not source_path.is_file():
+            raise HTTPException(
+                status_code=409,
+                detail=f"{source.get('original_filename') or source['filename']} is missing from storage",
+            )
+
     target_subfolder = "Album Favourites"
     if target_subfolder not in gallery["subfolders"]:
-        gallery["subfolders"].append(target_subfolder)
-        await db.galleries.update_one(
-            {"id": gallery_id},
-            {"$set": {"subfolders": gallery["subfolders"]}}
-        )
-    
+        gallery["subfolders"] = [*gallery.get("subfolders", []), target_subfolder]
+
     target_dir = get_gallery_subfolder_path(gallery["folder_name"], target_subfolder)
     target_dir.mkdir(parents=True, exist_ok=True)
-    
-    copied = 0
-    already_exists = 0
-    
-    for fav in favs:
-        f = await db.files.find_one(share_file_query(session, id=fav["file_id"]), {"_id": 0})
-        if not f:
-            continue
-        
-        # Check if file already exists in Album Favourites
-        existing = await db.files.find_one({
-            "gallery_id": gallery_id,
-            "subfolder": target_subfolder,
-            "original_filename": f["original_filename"]
-        })
-        if existing:
-            already_exists += 1
-            continue
-        
-        src_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
-        if not src_path.exists():
-            continue
-        
-        dest_name = safe_filename(f["filename"], target_dir)
-        dest_path = get_gallery_file_path(gallery["folder_name"], target_subfolder, dest_name)
-        shutil.copy2(src_path, dest_path)
-        
-        # Generate thumbnails for the copy
-        has_thumb = False
-        has_preview = False
-        if f["file_type"] == "photo":
-            has_thumb = make_thumbnail(dest_path, get_thumb_path(gallery_id, target_subfolder, dest_name))
-            has_preview = make_preview(dest_path, get_preview_path(gallery_id, target_subfolder, dest_name))
-        
+
+    # Keep the previous completed revision intact until every new file has
+    # copied successfully. If a disk error occurs, the new partial copies are
+    # removed and the last good submission remains available.
+    previous_generated = await db.files.find({
+        "gallery_id": gallery_id,
+        "subfolder": target_subfolder,
+        "album_revision": {"$exists": True},
+    }, {"_id": 0}).to_list(500)
+    created_docs = []
+    created_paths = []
+    created_cache_paths = []
+
+    async def copy_choice(source: dict, uploaded_by: str, preferred_name: str | None = None) -> dict:
+        src_path = get_gallery_file_path(
+            gallery["folder_name"], source["subfolder"], source["filename"]
+        )
+        dest_name = safe_filename(preferred_name or source["filename"], target_dir)
+        dest_path = get_gallery_file_path(
+            gallery["folder_name"], target_subfolder, dest_name
+        )
+        thumb_path = get_thumb_path(gallery_id, target_subfolder, dest_name)
+        preview_path = get_preview_path(gallery_id, target_subfolder, dest_name)
+        created_paths.append(dest_path)
+        created_cache_paths.extend([thumb_path, preview_path])
+
+        def prepare_copy():
+            shutil.copy2(src_path, dest_path)
+            has_thumb = make_thumbnail(dest_path, thumb_path)
+            has_preview = make_preview(dest_path, preview_path)
+            return dest_path.stat().st_size, has_thumb, has_preview
+
+        # Copying and rendering up to 61 full-resolution photographs is disk
+        # and CPU work. Keep it off FastAPI's event loop so other couples can
+        # continue browsing and downloading during submission.
+        file_size, has_thumb, has_preview = await asyncio.to_thread(prepare_copy)
         new_doc = {
             "id": str(uuid.uuid4()),
             "gallery_id": gallery_id,
             "subfolder": target_subfolder,
             "filename": dest_name,
-            "original_filename": f["original_filename"],
-            "file_type": f["file_type"],
-            "file_size": f["file_size"],
+            "original_filename": source.get("original_filename") or source["filename"],
+            "file_type": "photo",
+            "file_size": file_size,
             "has_thumb": has_thumb,
             "has_preview": has_preview,
-            "uploaded_by": "client_favourite",
-            "uploaded_at": datetime.now(timezone.utc).isoformat()
+            "uploaded_by": uploaded_by,
+            "source_file_id": source["id"],
+            "album_revision": submitted_state["revision"],
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.files.insert_one(new_doc)
-        copied += 1
-    
-    # Update file count
+        created_docs.append(new_doc)
+        return new_doc
+
+    try:
+        for source in selected_files:
+            await copy_choice(source, "client_favourite")
+        cover_copy = await copy_choice(
+            cover_source,
+            "client_album_cover",
+            f"COVER - {cover_source['filename']}",
+        )
+    except Exception:
+        if created_docs:
+            await db.files.delete_many({"id": {"$in": [doc["id"] for doc in created_docs]}})
+        for created_path in created_paths:
+            created_path.unlink(missing_ok=True)
+        for cache_path in created_cache_paths:
+            cache_path.unlink(missing_ok=True)
+        raise
+
+    # The complete new revision now exists; retire only earlier generated
+    # revisions. Admin-added or legacy files are never deleted here.
+    if previous_generated:
+        await db.files.delete_many({"id": {"$in": [doc["id"] for doc in previous_generated]}})
+        for old_doc in previous_generated:
+            old_path = get_gallery_file_path(
+                gallery["folder_name"], target_subfolder, old_doc["filename"]
+            )
+            old_path.unlink(missing_ok=True)
+            get_thumb_path(gallery_id, target_subfolder, old_doc["filename"]).unlink(missing_ok=True)
+            get_preview_path(gallery_id, target_subfolder, old_doc["filename"]).unlink(missing_ok=True)
+
+    album_cover_choice = {
+        "file_id": cover_copy["id"],
+        "source_file_id": cover_source["id"],
+        "filename": cover_copy["filename"],
+        "original_filename": cover_source.get("original_filename") or cover_source["filename"],
+        "chosen_at": submitted_state.get("cover_chosen_at"),
+        "submitted_at": submitted_state["submitted_at"],
+        "revision": submitted_state["revision"],
+    }
     count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": target_subfolder})
     await db.galleries.update_one(
         {"id": gallery_id},
-        {"$set": {f"file_counts.{target_subfolder}": count, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {"$set": {
+            "subfolders": gallery["subfolders"],
+            "album_selection": submitted_state,
+            "album_cover_choice": album_cover_choice,
+            f"file_counts.{target_subfolder}": count,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
     )
-    
-    # Log the activity
-    share = await db.shares.find_one({"token": token}, {"_id": 0})
+
     await db.activity_log.insert_one({
         "id": str(uuid.uuid4()),
         "gallery_id": gallery_id,
         "gallery_name": gallery.get("folder_name", "Unknown"),
         "share_label": share.get("label", token) if share else token,
         "action": "favourites_submitted",
-        "details": f"{copied} photos submitted for album",
+        "details": (
+            f"Album revision {submitted_state['revision']} submitted: "
+            f"{submitted_state['limit']} photos plus cover {submitted_state['cover_filename']}"
+        ),
         "ip_address": client_ip,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
-    
-    return {"copied": copied, "already_existed": already_exists, "total_favourites": len(favs)}
+
+    try:
+        smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+        if smtp_doc and smtp_doc.get("value", {}).get("smtp_email"):
+            smtp = smtp_doc["value"]
+            admin_email = smtp.get("smtp_email", "")
+            awards_url = get_awards_url(smtp)
+            couple_name = gallery["folder_name"]
+            email_html = build_branded_email(f"""
+<p style="font-size:22px;color:#1C1917;font-family:Georgia,'Times New Roman',serif;margin:0 0 8px 0;">Album Choices Submitted</p>
+<p style="font-size:15px;color:#57534E;line-height:1.8;"><strong>{couple_name}</strong> has completed and locked their album choices.</p>
+<table style="width:100%;border-collapse:collapse;margin:18px 0;">
+<tr><td style="padding:10px;border-bottom:1px solid #E8E4DC;">Album photos</td><td style="padding:10px;border-bottom:1px solid #E8E4DC;text-align:right;"><strong>{submitted_state['limit']}</strong></td></tr>
+<tr><td style="padding:10px;border-bottom:1px solid #E8E4DC;">Separate cover</td><td style="padding:10px;border-bottom:1px solid #E8E4DC;text-align:right;"><strong>{submitted_state['cover_filename']}</strong></td></tr>
+<tr><td style="padding:10px;">Revision</td><td style="padding:10px;text-align:right;"><strong>{submitted_state['revision']}</strong></td></tr>
+</table>
+<p style="font-size:14px;color:#57534E;">The completed files are ready in the <strong>Album Favourites</strong> folder. The cover copy is clearly named <strong>COVER</strong>.</p>
+""", awards_url)
+            send_smtp_email(
+                smtp,
+                admin_email,
+                f"Album Choices Submitted — {couple_name}",
+                email_html,
+            )
+    except Exception as exc:
+        logger.warning("Failed to send album submission notification email: %s", exc)
+
+    return {
+        "copied": len(created_docs),
+        "total_favourites": submitted_state["limit"],
+        "cover_filename": submitted_state["cover_filename"],
+        "album_selection": public_album_selection(
+            {
+                **gallery,
+                "album_selection": submitted_state,
+                "album_cover_choice": album_cover_choice,
+            },
+            share,
+        ),
+    }
 
 
 @api_router.post("/share/{token}/choose-album-cover")
 async def choose_album_cover(token: str, request: Request, session=Depends(get_share_session)):
-    """Couple selects their preferred album cover from Album Favourites."""
+    """Save the separate cover choice before the final album submission."""
     if session.get("token") != token:
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     body = await request.json()
     file_id = body.get("file_id")
     if not file_id:
         raise HTTPException(status_code=400, detail="No file selected")
-    
+
     gallery_id = session["gallery_id"]
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    
-    # Verify the file exists in Album Favourites
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not album_selection_available(gallery, share):
+        raise HTTPException(status_code=403, detail="Album selection is not enabled for this gallery")
+
     file_doc = await db.files.find_one({
-        "id": file_id, "gallery_id": gallery_id, "subfolder": "Album Favourites"
+        "id": file_id,
+        "gallery_id": gallery_id,
+        "file_type": "photo",
+        "subfolder": {"$nin": ["Album Favourites", "Guest Uploads"]},
     }, {"_id": 0})
     if not file_doc:
-        raise HTTPException(status_code=404, detail="Photo not found in Album Favourites")
-    
+        raise HTTPException(status_code=404, detail="Cover photo not found in this gallery")
+
     filename = file_doc.get("original_filename") or file_doc["filename"]
-    
-    # Save the choice on the gallery
+    try:
+        state = choose_album_cover_state(gallery, file_id, filename)
+    except AlbumSelectionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
     await db.galleries.update_one(
         {"id": gallery_id},
         {"$set": {
-            "album_cover_choice": {
-                "file_id": file_id,
-                "filename": file_doc["filename"],
-                "original_filename": filename,
-                "chosen_at": datetime.now(timezone.utc).isoformat()
-            }
-        }}
+            "album_selection": state,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
     )
-    
-    # Log activity
-    import re
+
     folder_name = gallery["folder_name"]
-    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
-    
-    share = await db.shares.find_one({"token": token}, {"_id": 0})
     await db.activity_log.insert_one({
         "id": str(uuid.uuid4()),
         "gallery_id": gallery_id,
         "gallery_name": folder_name,
         "share_label": share.get("label", token) if share else token,
         "action": "album_cover_chosen",
-        "details": f"{couple_name} chose {filename} as their album cover",
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "details": f"Cover choice staged: {filename}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
-    
-    # Email the admin
-    try:
-        smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
-        if smtp_doc and smtp_doc.get("value", {}).get("smtp_email"):
-            smtp = smtp_doc["value"]
-            admin_email = smtp.get("smtp_email", "")
-            site_url = smtp.get("site_url", "").rstrip("/")
-            awards_url = get_awards_url(smtp)
-            
-            # Build thumbnail URL for the email
-            thumb_link = f"{site_url}/api/share/{token}/files/{file_id}/thumb" if site_url else ""
-            
-            email_html = build_branded_email(f"""
-<p style="font-size:22px;color:#1C1917;font-family:Georgia,'Times New Roman',serif;margin:0 0 8px 0;font-weight:normal;">
-Album Cover Selected!
-</p>
-<p style="font-size:15px;color:#57534E;margin:0 0 20px 0;line-height:1.8;">
-<strong>{couple_name}</strong> has chosen their album cover image:
-</p>
-<div style="text-align:center;margin:20px 0;">
-<p style="font-size:18px;color:#1C1917;font-weight:bold;margin:0 0 12px 0;font-family:Georgia,serif;">
-{filename}
-</p>
-{f'<img src="{thumb_link}" alt="{filename}" style="max-width:400px;width:100%;border-radius:4px;border:2px solid #E8E4DC;" />' if thumb_link else ''}
-</div>
-<p style="font-size:14px;color:#A8A29E;margin:20px 0 0 0;">
-Gallery: {folder_name}
-</p>
-""", awards_url)
-            
-            send_smtp_email(smtp, admin_email, f"Album Cover Chosen — {couple_name}", email_html)
-    except Exception as e:
-        logger.warning(f"Failed to send album cover notification email: {e}")
-    
-    return {"success": True, "message": "Cover choice saved!", "filename": filename}
+
+    return {
+        "success": True,
+        "message": "Cover choice saved!",
+        "filename": filename,
+        "album_selection": public_album_selection(
+            {**gallery, "album_selection": state}, share
+        ),
+    }
 
 
 @api_router.get("/share/{token}/album-cover-choice")
@@ -3314,8 +3554,16 @@ async def get_album_cover_choice(token: str, session=Depends(get_share_session))
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
     
-    choice = gallery.get("album_cover_choice")
-    return {"choice": choice}
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    policy = public_album_selection(gallery, share)
+    choice = None
+    if policy.get("enabled") and policy.get("cover_file_id"):
+        choice = {
+            "file_id": policy["cover_file_id"],
+            "filename": policy.get("cover_filename"),
+            "chosen_at": normalise_album_selection(gallery).get("cover_chosen_at"),
+        }
+    return {"choice": choice, "album_selection": policy}
 
 
 
@@ -3738,23 +3986,27 @@ async def download_share_favourites_direct(token: str, request: Request, jwt_tok
         raise HTTPException(status_code=403, detail="Downloads not allowed")
     
     gallery_id = payload["gallery_id"]
-    session_id = payload["sub"]
-    
     gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    
-    # Get all favourites for this session
-    favs = await db.favourites.find({
-        "session_id": session_id,
-        "gallery_id": gallery_id
-    }, {"_id": 0}).to_list(50000)
-    
-    if not favs:
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if album_selection_available(gallery, share):
+        fav_ids = normalise_album_selection(gallery)["selected_file_ids"]
+    else:
+        favs = await db.favourites.find({
+            "session_id": payload["sub"],
+            "gallery_id": gallery_id
+        }, {"_id": 0}).to_list(50000)
+        fav_ids = [f["file_id"] for f in favs]
+
+    if not fav_ids:
         raise HTTPException(status_code=404, detail="No favourites to download")
-    
-    fav_ids = [f["file_id"] for f in favs]
-    files = await db.files.find(share_file_query(payload, id={"$in": fav_ids}), {"_id": 0}).to_list(50000)
+
+    file_docs = await db.files.find(
+        share_file_query(payload, id={"$in": fav_ids}), {"_id": 0}
+    ).to_list(50000)
+    files_by_id = {file_doc["id"]: file_doc for file_doc in file_docs}
+    files = [files_by_id[file_id] for file_id in fav_ids if file_id in files_by_id]
     
     if not files:
         raise HTTPException(status_code=404, detail="No files found")
@@ -3763,7 +4015,6 @@ async def download_share_favourites_direct(token: str, request: Request, jwt_tok
     client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
-    share = await db.shares.find_one({"token": token}, {"_id": 0})
     await _log_download(gallery_id, gallery.get("folder_name", "Unknown"),
                         share.get("label", token) if share else token, client_ip,
                         "favourites", [f["filename"] for f in files], "Favourites",
@@ -4411,11 +4662,8 @@ async def get_gallery_stats(gallery_id: str, admin=Depends(get_admin)):
     # Count unique visitors (by IP) from activity log
     unique_ips = await db.activity_log.distinct("ip_address", {"gallery_id": gallery_id, "ip_address": {"$ne": None}})
     
-    # Check if album has been submitted (files exist in Album Favourites)
-    album_submitted = await db.files.count_documents({
-        "gallery_id": gallery_id,
-        "subfolder": "Album Favourites"
-    }) > 0
+    album_state = normalise_album_selection(gallery)
+    album_submitted = album_state["mode"] != "off" and album_state["locked"]
     
     return {
         "total_views": gallery.get("total_views", 0),
@@ -4450,10 +4698,12 @@ async def get_dashboard_stats(admin=Depends(get_admin)):
         "timestamp": {"$gte": week_ago}
     })
 
-    # Pending albums — galleries where Album Favourites subfolder has 0 files (single aggregation)
-    galleries_with_album_files = await db.files.distinct("gallery_id", {"subfolder": "Album Favourites"})
-    active_galleries_count = await db.galleries.count_documents({})
-    pending_albums = active_galleries_count - len(galleries_with_album_files)
+    # Pending albums — only galleries where an album plan is enabled and the
+    # couple has not made their final locked submission.
+    pending_albums = await db.galleries.count_documents({
+        "album_selection.mode": {"$in": ["40", "60"]},
+        "album_selection.locked": {"$ne": True},
+    })
 
     # Storage used — sum of all file sizes
     pipeline = [{"$group": {"_id": None, "total": {"$sum": "$file_size"}}}]
@@ -4628,7 +4878,7 @@ async def get_network_stats(admin=Depends(get_admin)):
 @api_router.get("/admin/galleries-stats")
 async def get_all_galleries_stats(admin=Depends(get_admin)):
     """Get summary stats for all galleries (for dashboard cards)."""
-    galleries = await db.galleries.find({}, {"_id": 0, "id": 1}).to_list(1000)
+    galleries = await db.galleries.find({}, {"_id": 0, "id": 1, "album_selection": 1}).to_list(1000)
     
     stats = {}
     for gallery in galleries:
@@ -4640,11 +4890,8 @@ async def get_all_galleries_stats(admin=Depends(get_admin)):
         # Count unique visitors
         unique_ips = await db.activity_log.distinct("ip_address", {"gallery_id": gid, "ip_address": {"$ne": None}})
         
-        # Check album submitted
-        album_submitted = await db.files.count_documents({
-            "gallery_id": gid,
-            "subfolder": "Album Favourites"
-        }) > 0
+        album_state = normalise_album_selection(gallery)
+        album_submitted = album_state["mode"] != "off" and album_state["locked"]
         
         stats[gid] = {
             "total_views": gallery_doc.get("total_views", 0) if gallery_doc else 0,
@@ -5241,6 +5488,36 @@ async def send_gallery_notification(gallery_id: str, request: Request, admin=Dep
     share_password = share.get("password_raw", "")
     
     couple_name = gallery["folder_name"]
+    album_state = normalise_album_selection(gallery)
+    album_limit = album_state["limit"]
+    album_email_section = ""
+    album_next_section = ""
+    if album_state["mode"] != "off":
+        album_email_section = f"""
+<!-- Album Section -->
+<div style="margin:0 0 25px 0;">
+<p style="font-size:14px;color:#1C1917;margin:0 0 12px 0;font-weight:bold;letter-spacing:1px;">
+&#x1F4D6; CREATING YOUR KEEPSAKE ALBUM
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 10px 0;line-height:1.8;">
+Your gallery includes a wedding album. Choose exactly <strong>{album_limit} album photos</strong> using the Heart buttons, then choose <strong>one separate front cover</strong> using the Cover button.
+</p>
+<p style="font-size:14px;color:#57534E;margin:0;line-height:1.7;">
+The gallery will show your progress as <strong>0 of {album_limit}</strong>. When all {album_limit} photos and the cover are ready, tap <strong>Submit Album Choices</strong>. I will be notified automatically&mdash;there is no need to email any image numbers.
+</p>
+</div>
+"""
+        album_next_section = f"""
+<!-- What Happens Next -->
+<div style="background-color:#F5F2EB;border-left:4px solid #D4AF37;padding:20px 25px;margin:0 0 30px 0;">
+<p style="font-size:14px;color:#1C1917;margin:0 0 8px 0;font-weight:bold;letter-spacing:1px;">
+&#x1F552; WHAT HAPPENS NEXT?
+</p>
+<p style="font-size:15px;color:#57534E;margin:0;line-height:1.8;">
+Once you submit your {album_limit} photos and separate cover, your choices will be locked and sent to me ready for the album design. If anything needs changing afterwards, just contact me and I can reopen them without losing your choices.
+</p>
+</div>
+"""
     
     # Build HTML email
     html_body = f"""<!DOCTYPE html>
@@ -5289,46 +5566,8 @@ VIEW YOUR GALLERY
 {f'<p style="font-size:13px;color:#A8A29E;margin:10px 0 0 0;">Password: <strong style="color:#1C1917;">{share_password}</strong></p>' if share_password else ''}
 </div>
 
-<!-- Album Section -->
-<div style="margin:0 0 25px 0;">
-<p style="font-size:14px;color:#1C1917;margin:0 0 12px 0;font-weight:bold;letter-spacing:1px;">
-&#x1F4D6; CREATING YOUR KEEPSAKE ALBUM
-</p>
-<p style="font-size:15px;color:#57534E;margin:0 0 10px 0;line-height:1.8;">
-If your package includes a wedding album, let's get the design process started!<br>
-Select Your Favourites: Browse your gallery and click the "Heart" icon on the photos you love most.
-</p>
-
-<p style="font-size:14px;color:#1C1917;margin:15px 0 8px 0;font-weight:bold;">
-How Many Images to Choose:
-</p>
-<table cellpadding="8" cellspacing="0" style="border:1px solid #E8E4DC;margin:0 0 10px 0;width:100%;">
-<tr style="background-color:#F5F2EB;">
-<td style="font-size:13px;color:#57534E;border-bottom:1px solid #E8E4DC;font-weight:bold;">Standard / Special Offer Albums</td>
-<td style="font-size:13px;color:#1C1917;border-bottom:1px solid #E8E4DC;text-align:right;">Up to <strong>40 images</strong> + 1 front cover</td>
-</tr>
-<tr>
-<td style="font-size:13px;color:#57534E;font-weight:bold;">Full-Price Albums</td>
-<td style="font-size:13px;color:#1C1917;text-align:right;">Up to <strong>60 images</strong> + 1 front cover</td>
-</tr>
-</table>
-<p style="font-size:14px;color:#57534E;margin:0 0 10px 0;line-height:1.6;">
-<strong>Final Step:</strong> Once you've submitted your favourites, open the Album Favourites folder and click the "Cover" button on the image you'd like for the front of your album. I'll be notified automatically - there is no need to email the image number.
-</p>
-<p style="font-size:14px;color:#A8A29E;margin:0;line-height:1.6;font-style:italic;">
-Need help? I've included some "How-To" videos right inside your gallery folder to guide you through the process!
-</p>
-</div>
-
-<!-- What Happens Next -->
-<div style="background-color:#F5F2EB;border-left:4px solid #D4AF37;padding:20px 25px;margin:0 0 30px 0;">
-<p style="font-size:14px;color:#1C1917;margin:0 0 8px 0;font-weight:bold;letter-spacing:1px;">
-&#x1F552; WHAT HAPPENS NEXT?
-</p>
-<p style="font-size:15px;color:#57534E;margin:0;line-height:1.8;">
-Once I receive your final selection, I'll get to work on the design. Your custom album will be designed, printed, and delivered to your door within 4 to 6 weeks.
-</p>
-</div>
+{album_email_section}
+{album_next_section}
 
 <p style="font-size:15px;color:#57534E;margin:0 0 25px 0;line-height:1.8;">
 Enjoy your photos&mdash;it was such an honour to capture your big day!
