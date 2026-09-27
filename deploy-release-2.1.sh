@@ -40,7 +40,7 @@ docker run --rm --entrypoint sh 180226galleryrepo-frontend:latest -lc '
 nginx -t &&
 grep -R -q "favourites-download-jobs" /usr/share/nginx/html/static/js &&
 grep -R -q "Backup queued" /usr/share/nginx/html/static/js &&
-grep -R -q "Background Activity" /usr/share/nginx/html/static/js &&
+grep -R -q "Background activity" /usr/share/nginx/html/static/js &&
 ! grep -R -q "/download-favourites" /usr/share/nginx/html/static/js &&
 ! grep -R -q "/download-zip" /usr/share/nginx/html/static/js &&
 echo "Release 2.1 frontend checks passed"

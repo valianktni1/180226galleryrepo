@@ -8,8 +8,10 @@ from bson import BSON, json_util
 
 from database_backup_service import (
     DatabaseBackupError,
+    MONGODB_DATABASE_NAME_LIMIT,
     SNAPSHOT_FORMAT,
     inspect_snapshot_archive,
+    verification_database_name,
 )
 
 
@@ -51,6 +53,12 @@ class DatabaseBackupArchiveTests(unittest.TestCase):
             self._write_snapshot(snapshot, checksum_override="0" * 64)
             with self.assertRaises(DatabaseBackupError):
                 inspect_snapshot_archive(snapshot)
+
+    def test_verification_database_names_are_unique_and_within_mongodb_limit(self):
+        names = {verification_database_name() for _ in range(100)}
+        self.assertEqual(len(names), 100)
+        self.assertTrue(all(name.startswith("wbm_restore_verify_") for name in names))
+        self.assertTrue(all(len(name.encode("utf-8")) <= MONGODB_DATABASE_NAME_LIMIT for name in names))
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ from pymongo import MongoClient
 logger = logging.getLogger(__name__)
 SNAPSHOT_FORMAT = 1
 MAX_BSON_DOCUMENT_BYTES = 16 * 1024 * 1024 + 1024
+MONGODB_DATABASE_NAME_LIMIT = 63
 
 
 class DatabaseBackupError(RuntimeError):
@@ -38,6 +39,19 @@ def _utc_now() -> datetime:
 
 def _utc_now_iso() -> str:
     return _utc_now().isoformat()
+
+
+def verification_database_name() -> str:
+    """Return a short unique name that is always valid for MongoDB.
+
+    The production database name must not be included here: combining it with
+    the restore suffix and a full UUID can exceed MongoDB's 63-character
+    database-name limit.
+    """
+    name = f"wbm_restore_verify_{uuid.uuid4().hex}"
+    if len(name.encode("utf-8")) > MONGODB_DATABASE_NAME_LIMIT:
+        raise DatabaseBackupError("Temporary verification database name is too long")
+    return name
 
 
 def _collection_member(collection_name: str) -> str:
@@ -195,7 +209,7 @@ class DatabaseBackupService:
             collection.create_index(keys, **options)
 
     def _restore_and_verify(self, client: MongoClient, snapshot_path: Path, manifest: Dict) -> Dict:
-        verification_name = f"{self.database_name}_restore_verify_{uuid.uuid4().hex}"
+        verification_name = verification_database_name()
         restored = client[verification_name]
         try:
             with zipfile.ZipFile(snapshot_path, "r") as archive:
