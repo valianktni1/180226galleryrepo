@@ -57,6 +57,7 @@ from album_selection import (
     toggle_album_photo,
 )
 from gallery_readiness import build_gallery_readiness
+from maintenance_cleanup import MaintenanceCleanupError, clean_generated_files
 from maintenance_scan import scan_gallery_maintenance
 from system_health import (
     backup_health,
@@ -575,6 +576,11 @@ def get_web_version_path(file_path: Path) -> Path:
     """Get the path for the web-optimised version of a video."""
     return file_path.parent / f"{file_path.stem}.web.mp4"
 
+
+def get_web_temporary_path(file_path: Path) -> Path:
+    """Get the temporary path used while a web video is being created."""
+    return file_path.parent / f"{file_path.stem}.web.tmp.mp4"
+
 def create_web_version(file_path: Path, gallery_id: str = None, file_id: str = None):
     """Create a web-optimised copy (1080p, 5Mbps) for smooth streaming. Tries GPU first, falls back to CPU. Reports real-time progress."""
     web_path = get_web_version_path(file_path)
@@ -595,7 +601,7 @@ def create_web_version(file_path: Path, gallery_id: str = None, file_id: str = N
     
     duration = get_video_duration(file_path)
     progress_key = file_id or file_path.stem
-    temp_path = file_path.parent / f"{file_path.stem}.web.tmp.mp4"
+    temp_path = get_web_temporary_path(file_path)
     
     def _run_ffmpeg_with_progress(cmd, method):
         """Run FFmpeg with real-time progress tracking. Returns True on success."""
@@ -1587,6 +1593,9 @@ async def delete_file(gallery_id: str, file_id: str, delete_backup: bool = Query
 
     # Delete physical file
     file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
+    if f.get("file_type") == "video":
+        get_web_version_path(file_path).unlink(missing_ok=True)
+        get_web_temporary_path(file_path).unlink(missing_ok=True)
     if file_path.exists():
         file_path.unlink()
     # Delete thumbnails
@@ -1598,6 +1607,9 @@ async def delete_file(gallery_id: str, file_id: str, delete_backup: bool = Query
     # Delete backup copy if requested
     if delete_backup:
         backup_file = get_backup_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
+        if f.get("file_type") == "video":
+            get_web_version_path(backup_file).unlink(missing_ok=True)
+            get_web_temporary_path(backup_file).unlink(missing_ok=True)
         if backup_file.exists():
             backup_file.unlink()
             logger.info(f"Deleted backup for file '{f['filename']}' in gallery '{gallery['folder_name']}'")
@@ -4049,6 +4061,9 @@ async def guest_delete_files(token: str, data: DeleteFilesRequest, session=Depen
             continue
         # Delete physical file
         file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
+        if f.get("file_type") == "video":
+            get_web_version_path(file_path).unlink(missing_ok=True)
+            get_web_temporary_path(file_path).unlink(missing_ok=True)
         if file_path.exists():
             file_path.unlink()
         # Delete thumbnails
@@ -4916,9 +4931,8 @@ async def get_system_health(admin=Depends(get_admin)):
     }
 
 
-@api_router.get("/admin/maintenance-scan")
-async def get_maintenance_scan(admin=Depends(get_admin)):
-    """Run an explicitly requested, read-only consistency scan off the event loop."""
+async def _maintenance_scan_inputs() -> dict:
+    """Build the expected-file sets shared by preview and confirmed cleanup."""
     galleries = await db.galleries.find({}, {"_id": 0, "id": 1, "folder_name": 1}).to_list(5000)
     gallery_names = {gallery["id"]: gallery["folder_name"] for gallery in galleries}
     files = await db.files.find({}, {
@@ -4951,17 +4965,75 @@ async def get_maintenance_scan(admin=Depends(get_admin)):
         except (HTTPException, KeyError):
             continue
 
+    return {
+        "upload_root": UPLOAD_DIR,
+        "thumbnail_root": CACHE_DIR,
+        "download_cache_root": DOWNLOAD_CACHE_DIR,
+        "expected_originals": expected_originals,
+        "known_original_paths": known_original_paths,
+        "expected_derivatives": expected_derivatives,
+        "expected_web_videos": expected_web_videos,
+        "stale_download_seconds": download_job_manager.ttl_seconds,
+        "guest_upload_retention_days": GUEST_UPLOAD_MAX_AGE_DAYS,
+    }
+
+
+@api_router.get("/admin/maintenance-scan")
+async def get_maintenance_scan(admin=Depends(get_admin)):
+    """Run an explicitly requested, read-only consistency scan off the event loop."""
+    scan_inputs = await _maintenance_scan_inputs()
+
     return await asyncio.to_thread(
         scan_gallery_maintenance,
-        upload_root=UPLOAD_DIR,
-        thumbnail_root=CACHE_DIR,
-        download_cache_root=DOWNLOAD_CACHE_DIR,
-        expected_originals=expected_originals,
-        known_original_paths=known_original_paths,
-        expected_derivatives=expected_derivatives,
-        expected_web_videos=expected_web_videos,
-        stale_download_seconds=download_job_manager.ttl_seconds,
+        **scan_inputs,
     )
+
+
+class MaintenanceCleanupRequest(BaseModel):
+    confirmation: str
+
+
+@api_router.post("/admin/maintenance-cleanup")
+async def run_maintenance_cleanup(data: MaintenanceCleanupRequest, admin=Depends(get_admin)):
+    """Rescan and remove only generated candidates behind strict path boundaries."""
+    if data.confirmation != "DELETE GENERATED FILES":
+        raise HTTPException(status_code=400, detail="Cleanup confirmation did not match")
+
+    scan_inputs = await _maintenance_scan_inputs()
+
+    def clean_after_fresh_scan():
+        with heavy_job_coordinator.acquire("maintenance_cleanup", exclusive=True):
+            before = scan_gallery_maintenance(
+                **scan_inputs,
+                include_cleanup_candidates=True,
+            )
+            candidates = before.pop("_cleanup_candidates")
+            cleanup = clean_generated_files(
+                upload_root=UPLOAD_DIR,
+                thumbnail_root=CACHE_DIR,
+                download_cache_root=DOWNLOAD_CACHE_DIR,
+                candidates=candidates,
+            )
+            after = scan_gallery_maintenance(**scan_inputs)
+            return cleanup, after
+
+    try:
+        cleanup, scan = await asyncio.to_thread(clean_after_fresh_scan)
+    except MaintenanceCleanupError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "action": "generated_file_cleanup",
+        "admin": True,
+        "details": (
+            f"Safely removed {cleanup['deleted']} generated housekeeping file(s); "
+            f"{cleanup['bytes']} bytes released; {cleanup['skipped']} already absent. "
+            "Missing-original database records were not changed."
+        ),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"success": True, "cleanup": cleanup, "scan": scan}
 
 # ─── Video Compression Settings ───
 VIDEO_COMPRESSION_SIZE_THRESHOLD = 200 * 1024 * 1024  # 200MB in bytes

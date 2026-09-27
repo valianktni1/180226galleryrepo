@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Dict, Iterable, Set, Tuple
 
 
+VIDEO_SUFFIXES = (".mp4", ".mov", ".avi", ".mkv", ".webm", ".mts")
+
+
 def _sample_label(path: Path, root: Path) -> str:
     try:
         return str(path.relative_to(root))
@@ -30,6 +33,36 @@ def _bucket(paths, root: Path, sample_limit: int = 8) -> Dict:
     }
 
 
+def _is_older_than(path: Path, cutoff: float) -> bool:
+    try:
+        return path.stat().st_mtime < cutoff
+    except OSError:
+        return False
+
+
+def _matching_video_original_exists(web_path: Path) -> bool:
+    """Return true only when a normal source video exists beside a web copy."""
+    suffix = ".web.mp4"
+    if not web_path.name.casefold().endswith(suffix):
+        return False
+    base_name = web_path.name[:-len(suffix)].casefold()
+    try:
+        for sibling in web_path.parent.iterdir():
+            if not sibling.is_file() or sibling == web_path:
+                continue
+            if sibling.stem.casefold() != base_name:
+                continue
+            if sibling.suffix.casefold() in VIDEO_SUFFIXES:
+                return True
+    except OSError:
+        return False
+    return False
+
+
+def _is_guest_upload(path: Path) -> bool:
+    return any(part.casefold() == "guest uploads" for part in path.parts)
+
+
 def scan_gallery_maintenance(
     *,
     upload_root: Path,
@@ -40,6 +73,9 @@ def scan_gallery_maintenance(
     expected_derivatives: Set[Path],
     expected_web_videos: Set[Path],
     stale_download_seconds: int = 4 * 60 * 60,
+    stale_temporary_seconds: int = 6 * 60 * 60,
+    guest_upload_retention_days: int = 90,
+    include_cleanup_candidates: bool = False,
 ) -> Dict:
     """Inspect known paths without deleting, renaming or writing anything."""
     upload_root = Path(upload_root)
@@ -60,6 +96,7 @@ def scan_gallery_maintenance(
 
     orphan_web = []
     temporary_video = []
+    temporary_cutoff = time.time() - stale_temporary_seconds
     for gallery_path in upload_root.iterdir() if upload_root.exists() else []:
         if not gallery_path.is_dir() or gallery_path.name.startswith("."):
             continue
@@ -69,8 +106,16 @@ def scan_gallery_maintenance(
         )
         temporary_video.extend(
             path for path in gallery_path.rglob("*.web.tmp.mp4")
-            if path not in known_original_paths
+            if path not in known_original_paths and _is_older_than(path, temporary_cutoff)
         )
+
+    guest_cutoff = time.time() - (guest_upload_retention_days * 24 * 60 * 60)
+    cleanable_web = [
+        path for path in orphan_web
+        if _matching_video_original_exists(path)
+        or (_is_guest_upload(path) and _is_older_than(path, guest_cutoff))
+    ]
+    protected_web = [path for path in orphan_web if path not in cleanable_web]
 
     cutoff = time.time() - stale_download_seconds
     stale_archives = []
@@ -83,13 +128,22 @@ def scan_gallery_maintenance(
                 pass
 
     derivatives = _bucket(orphan_derivatives, upload_root)
-    web_videos = _bucket(orphan_web, upload_root)
+    web_videos = _bucket(cleanable_web, upload_root)
+    protected_videos = _bucket(protected_web, upload_root)
     temporary = _bucket(temporary_video, upload_root)
     archives = _bucket(stale_archives, upload_root)
-    issue_count = len(missing_labels) + derivatives["count"] + web_videos["count"] + temporary["count"] + archives["count"]
+    issue_count = (
+        len(missing_labels)
+        + derivatives["count"]
+        + web_videos["count"]
+        + protected_videos["count"]
+        + temporary["count"]
+        + archives["count"]
+    )
     reclaimable = derivatives["bytes"] + web_videos["bytes"] + temporary["bytes"] + archives["bytes"]
+    cleanable_count = derivatives["count"] + web_videos["count"] + temporary["count"] + archives["count"]
 
-    return {
+    result = {
         "status": "clean" if issue_count == 0 else "attention",
         "read_only": True,
         "scanned_at": datetime.now(timezone.utc).isoformat(),
@@ -97,6 +151,7 @@ def scan_gallery_maintenance(
             "issues": issue_count,
             "originals_checked": originals_checked,
             "reclaimable_bytes": reclaimable,
+            "cleanable_items": cleanable_count,
         },
         "missing_originals": {
             "count": len(missing_labels),
@@ -105,6 +160,15 @@ def scan_gallery_maintenance(
         },
         "orphan_derivatives": derivatives,
         "orphan_web_videos": web_videos,
+        "protected_web_videos": protected_videos,
         "temporary_video_files": temporary,
         "stale_download_archives": archives,
     }
+    if include_cleanup_candidates:
+        result["_cleanup_candidates"] = {
+            "orphan_derivatives": orphan_derivatives,
+            "orphan_web_videos": cleanable_web,
+            "temporary_video_files": temporary_video,
+            "stale_download_archives": stale_archives,
+        }
+    return result

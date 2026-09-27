@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import {
   Activity, AlertTriangle, ArrowLeft, CheckCircle2, Clock, Cloud,
   Cpu, Database, Download, HardDrive, HeartPulse, Mail, RefreshCw,
   Server, ShieldCheck, Users, Video, XCircle, ScanSearch, FileWarning,
-  ImageOff, Archive
+  ImageOff, Archive, Trash2, ShieldAlert
 } from "lucide-react";
-import { getSystemHealth, runMaintenanceScan } from "@/lib/api";
+import { getSystemHealth, runMaintenanceCleanup, runMaintenanceScan } from "@/lib/api";
 import AdminThemeToggle from "@/components/AdminThemeToggle";
 
 const STATUS = {
@@ -108,6 +113,9 @@ export default function AdminSystemHealth() {
   const [maintenance, setMaintenance] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState(null);
   const videoQueueLength = health?.work?.video_queue?.length || 0;
 
   const load = useCallback(async (quiet = false) => {
@@ -142,10 +150,31 @@ export default function AdminSystemHealth() {
     try {
       const response = await runMaintenanceScan();
       setMaintenance(response.data);
+      setCleanupResult(null);
     } catch (err) {
       setScanError(err.response?.data?.detail || "The maintenance scan could not be completed.");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const cleanGeneratedFiles = async () => {
+    setCleaning(true);
+    setScanError("");
+    try {
+      const response = await runMaintenanceCleanup();
+      setMaintenance(response.data.scan);
+      setCleanupResult(response.data.cleanup);
+      setCleanupOpen(false);
+      toast.success(
+        `${response.data.cleanup.deleted.toLocaleString()} generated file(s) safely removed`
+      );
+    } catch (err) {
+      const message = err.response?.data?.detail || "Generated-file cleanup could not be completed.";
+      setScanError(message);
+      toast.error(message);
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -291,7 +320,7 @@ export default function AdminSystemHealth() {
               </div>
 
               <div className="lg:col-span-2">
-                <Section title="Safe maintenance scan" subtitle="On-demand inspection only — this screen never deletes, renames or repairs files">
+                <Section title="Safe maintenance scan" subtitle="The scan is read-only; generated-file cleanup requires a separate confirmation">
                   {!maintenance && !scanning && !scanError && (
                     <div className="p-6 text-center">
                       <ScanSearch className="w-8 h-8 mx-auto mb-2 text-[#D4AF37]" />
@@ -314,10 +343,39 @@ export default function AdminSystemHealth() {
                         </div>
                         <StatusBadge status={maintenance.status === 'clean' ? 'healthy' : 'warning'} />
                       </div>
+                      {cleanupResult && (
+                        <div className="m-4 sm:m-5 p-4 rounded-sm border border-green-200 bg-green-50 text-green-900" data-testid="maintenance-cleanup-result">
+                          <p className="text-sm font-semibold">Generated-file cleanup completed</p>
+                          <p className="text-xs mt-1">
+                            {cleanupResult.deleted.toLocaleString()} file(s) removed · {formatBytes(cleanupResult.bytes)} released
+                            {cleanupResult.skipped ? ` · ${cleanupResult.skipped.toLocaleString()} already absent` : ''}.
+                            {' '}Missing-original database records were not changed.
+                          </p>
+                        </div>
+                      )}
+                      {maintenance.summary.cleanable_items > 0 && (
+                        <div className="p-4 sm:px-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface-soft)' }} data-testid="maintenance-cleanup-preview">
+                          <div className="flex items-start gap-3">
+                            <Trash2 className="w-4 h-4 mt-0.5 shrink-0 text-[#B45309]" />
+                            <div>
+                              <p className="text-sm font-semibold" style={{ color: 'var(--admin-text)' }}>
+                                {maintenance.summary.cleanable_items.toLocaleString()} generated file(s) can be safely cleaned
+                              </p>
+                              <p className="text-xs mt-0.5" style={{ color: 'var(--admin-faint)' }}>
+                                Up to {formatBytes(maintenance.summary.reclaimable_bytes)}. Originals and database records are excluded.
+                              </p>
+                            </div>
+                          </div>
+                          <Button variant="outline" onClick={() => setCleanupOpen(true)} disabled={cleaning} className="gap-2 shrink-0" data-testid="open-maintenance-cleanup">
+                            <Trash2 className="w-4 h-4" /> Review cleanup
+                          </Button>
+                        </div>
+                      )}
                       {[
                         [FileWarning, 'Missing originals', maintenance.missing_originals, 'Database records whose live file could not be found.'],
                         [ImageOff, 'Orphan thumbnails/previews', maintenance.orphan_derivatives, 'Generated previews with no matching database file.'],
-                        [Video, 'Orphan web videos', maintenance.orphan_web_videos, 'Playback copies with no matching original video record.'],
+                        [Video, 'Safe orphan web videos', maintenance.orphan_web_videos, 'Generated playback copies with a matching original, or expired Guest Upload copies.'],
+                        [ShieldAlert, 'Protected orphan web videos', maintenance.protected_web_videos, 'No matching original was found. These are reported but never automatically deleted.'],
                         [Video, 'Interrupted video files', maintenance.temporary_video_files, 'Temporary optimisation files left after an interruption.'],
                         [Archive, 'Stale download ZIPs', maintenance.stale_download_archives, 'Temporary download archives older than four hours.'],
                       ].map(([Icon, title, item, detail]) => (
@@ -341,10 +399,38 @@ export default function AdminSystemHealth() {
               </div>
             </div>
 
-            <p className="text-[10px] text-center text-[#A8A29E] mt-6">Health refreshes every 15 seconds and every 2 seconds while video work is visible. Safe Scan runs only when requested. This screen cannot restart, delete or change anything.</p>
+            <p className="text-[10px] text-center text-[#A8A29E] mt-6">Health refreshes every 15 seconds and every 2 seconds while video work is visible. Safe Scan runs only when requested. Cleanup is limited to generated files shown in its preview.</p>
           </motion.div>
         )}
       </main>
+
+      <AlertDialog open={cleanupOpen} onOpenChange={(open) => { if (!cleaning) setCleanupOpen(open); }}>
+        <AlertDialogContent className="border-none shadow-2xl rounded-sm" style={{ backgroundColor: 'var(--admin-bg)' }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle style={{ color: 'var(--admin-text)', fontFamily: 'Cormorant Garamond, serif' }}>
+              Clean generated housekeeping files?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm" style={{ color: 'var(--admin-muted)' }}>
+                <p>A fresh scan will run immediately before deletion. It may safely remove:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>orphan thumbnails and previews;</li>
+                  <li>web-video copies only when a matching original exists, or an expired Guest Upload copy;</li>
+                  <li>interrupted video files older than six hours; and</li>
+                  <li>download ZIPs older than their expiry time.</li>
+                </ul>
+                <p className="font-semibold">Original photographs, original videos, backups and database records are never included.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cleaning}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={(event) => { event.preventDefault(); cleanGeneratedFiles(); }} disabled={cleaning} className="bg-[#991B1B] hover:bg-[#7F1D1D] text-white gap-2" data-testid="confirm-maintenance-cleanup">
+              <Trash2 className="w-4 h-4" /> {cleaning ? 'Cleaning…' : 'Clean generated files'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
