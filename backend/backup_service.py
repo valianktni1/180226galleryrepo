@@ -13,6 +13,7 @@ import logging
 import shutil
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
@@ -138,10 +139,20 @@ def incremental_backup(
 class BackupManager:
     """Own one background backup job and expose a thread-safe status snapshot."""
 
-    def __init__(self, source_root: Path, backup_root: Path, state_file: Optional[Path] = None):
+    def __init__(
+        self,
+        source_root: Path,
+        backup_root: Path,
+        state_file: Optional[Path] = None,
+        *,
+        coordinator=None,
+        database_backup: Optional[Callable[[], Dict]] = None,
+    ):
         self.source_root = source_root
         self.backup_root = backup_root
         self.state_file = Path(state_file) if state_file else None
+        self.coordinator = coordinator
+        self.database_backup = database_backup
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gallery-backup")
         self._lock = threading.Lock()
         self._state = self._load_state()
@@ -161,6 +172,7 @@ class BackupManager:
             "galleries_total": 0,
             "galleries_done": 0,
             "current_gallery": None,
+            "database_backup": None,
         }
 
     def status(self) -> Dict:
@@ -176,7 +188,7 @@ class BackupManager:
                 return self._idle_state()
             loaded = self._idle_state()
             loaded.update({key: state[key] for key in loaded if key in state})
-            if loaded["status"] == "running":
+            if loaded["status"] in {"queued", "running"}:
                 loaded.update(
                     status="failed",
                     message="The previous gallery backup was interrupted by an application restart.",
@@ -200,13 +212,18 @@ class BackupManager:
 
     def start(self) -> Tuple[bool, Dict]:
         with self._lock:
-            if self._state["status"] == "running":
+            if self._state["status"] in {"queued", "running"}:
                 return False, copy.deepcopy(self._state)
 
+            previous_database_backup = copy.deepcopy(self._state.get("database_backup"))
             self._state = self._idle_state()
+            self._state["database_backup"] = previous_database_backup
             self._state.update(
-                status="running",
-                message="Backup started.",
+                status="queued" if self.coordinator else "running",
+                message=(
+                    "Backup is queued behind other heavy work."
+                    if self.coordinator else "Backup started."
+                ),
                 started_at=utc_now_iso(),
             )
             self._persist_state()
@@ -222,11 +239,40 @@ class BackupManager:
 
     def _run(self) -> None:
         try:
-            stats = incremental_backup(self.source_root, self.backup_root, self._set_progress)
-            message = (
-                f"Backup complete. {stats['copied']} original files copied, "
-                f"{stats['skipped']} unchanged, {stats['excluded']} generated files excluded."
+            queue_slot = (
+                self.coordinator.acquire("backup", exclusive=True)
+                if self.coordinator else nullcontext()
             )
+            with queue_slot:
+                with self._lock:
+                    self._state.update(
+                        status="running",
+                        message="Backing up gallery originals.",
+                    )
+                    self._persist_state()
+
+                stats = incremental_backup(self.source_root, self.backup_root, self._set_progress)
+                database_result = None
+                if self.database_backup:
+                    with self._lock:
+                        self._state.update(
+                            status="running",
+                            message="Gallery originals checked. Creating and verifying the database snapshot.",
+                            current_gallery=None,
+                        )
+                        self._persist_state()
+                    database_result = self.database_backup()
+                    stats["database_backup"] = database_result
+
+                database_suffix = (
+                    " Database snapshot restored and verified."
+                    if database_result else ""
+                )
+                message = (
+                    f"Backup complete. {stats['copied']} original files copied, "
+                    f"{stats['skipped']} unchanged, {stats['excluded']} generated files excluded."
+                    f"{database_suffix}"
+                )
             with self._lock:
                 self._state.update(stats)
                 self._state.update(
@@ -242,7 +288,7 @@ class BackupManager:
             with self._lock:
                 self._state.update(
                     status="failed",
-                    message=f"Backup failed: {exc}",
+                    message="Backup or database verification failed. Check the backend log before retrying.",
                     finished_at=utc_now_iso(),
                     current_gallery=None,
                 )

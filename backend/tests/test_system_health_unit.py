@@ -2,7 +2,7 @@ import ast
 import unittest
 from pathlib import Path
 
-from system_health import backup_health, overall_status, storage_status
+from system_health import backup_health, database_backup_health, overall_status, storage_status
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -24,6 +24,19 @@ class SystemHealthTests(unittest.TestCase):
         result = backup_health({"status": "failed", "message": "secret path and internal exception", "finished_at": "now"})
         self.assertEqual(result["status"], "warning")
         self.assertNotIn("secret", result["detail"])
+
+    def test_verified_database_restore_is_reported_without_paths(self):
+        result = database_backup_health({
+            "status": "verified",
+            "verified_at": "2026-09-27T12:00:00+00:00",
+            "collections": 8,
+            "documents": 1250,
+            "snapshot_name": "gallery-database-test.zip",
+            "bytes": 1024,
+        }, warning_after_days=100000)
+        self.assertEqual(result["status"], "healthy")
+        self.assertIn("1,250", result["detail"])
+        self.assertNotIn("/backup", repr(result))
 
     def test_health_route_is_admin_only_and_read_only(self):
         route = next(

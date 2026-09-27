@@ -147,9 +147,9 @@ class TestDownloadPermissionEnforcement:
         """View-only share should get 403 when trying to download zip"""
         jwt = self.get_jwt_for_share(SHARE_TOKENS["view"])
         response = requests.post(
-            f"{BASE_URL}/api/share/{SHARE_TOKENS['view']}/download-zip",
+            f"{BASE_URL}/api/share/{SHARE_TOKENS['view']}/download-jobs",
             headers={"Authorization": f"Bearer {jwt}"},
-            json=[]
+            json={"subfolder": "Wedding Images"}
         )
         assert response.status_code == 403
         assert "Downloads not allowed" in response.json().get("detail", "")

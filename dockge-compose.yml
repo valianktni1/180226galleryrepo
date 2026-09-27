@@ -48,9 +48,13 @@ services:
       # IMPORTANT: Generate your own secret with: openssl rand -hex 32
       - JWT_SECRET=CHANGE_THIS_TO_YOUR_GENERATED_SECRET_KEY_HERE
       - UPLOAD_DIR=/data/userfiles
+      - BACKUP_DIR=/backup
+      - HEAVY_JOB_MAX_PARALLEL=2
+      - DATABASE_BACKUP_RETENTION=14
     volumes:
       # User files (photos, videos) - SMB accessible storage
       - /mnt/nextcloud/newwedidngsbymarkuserfiles:/data/userfiles
+      - /mnt/couplesgalleriesbackup/180226:/backup
     depends_on:
       mongodb:
         condition: service_healthy

@@ -7,8 +7,8 @@ Tests for:
 - Share link creation
 - Client share access
 - Single file download
-- ZIP download (POST /download-zip)
-- Album download (GET /download-album)
+- Disk-backed ZIP download job
+- Retirement of the former in-memory ZIP routes
 - Diagnose gallery endpoint
 """
 
@@ -18,6 +18,7 @@ import os
 import io
 import zipfile
 import base64
+import time
 from datetime import datetime
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
@@ -28,6 +29,29 @@ ADMIN_PASSWORD = "test123"
 
 # Test data prefix for cleanup
 TEST_PREFIX = "TEST_DOWNLOAD_"
+
+
+def complete_download_job(token, jwt_token, start_response):
+    """Poll a prepared ZIP job and return its streamed response."""
+    assert start_response.status_code == 200, start_response.text
+    job = start_response.json()
+    deadline = time.time() + 20
+    headers = {"Authorization": f"Bearer {jwt_token}"}
+    while time.time() < deadline:
+        status_response = requests.get(
+            f"{BASE_URL}/api/share/{token}/download-jobs/{job['id']}",
+            headers=headers,
+        )
+        assert status_response.status_code == 200, status_response.text
+        status = status_response.json()
+        if status["status"] == "ready":
+            return requests.get(
+                f"{BASE_URL}/api/download-jobs/{job['id']}/file",
+                params={"ticket": job["ticket"]},
+            )
+        assert status["status"] not in {"failed"}, status
+        time.sleep(0.1)
+    raise AssertionError("Download job did not become ready")
 
 
 class TestAdminLogin:
@@ -272,20 +296,20 @@ class TestDownloadWorkflow:
         
         print(f"Single file download successful: {len(content)} bytes")
     
-    def test_07_download_zip_post(self, share_link, share_jwt, uploaded_files):
-        """Client can download ZIP via POST - P0 BUG TEST"""
+    def test_07_download_zip_job(self, share_link, share_jwt, uploaded_files):
+        """Client can prepare and stream a disk-backed folder ZIP."""
         token = share_link["token"]
         headers = {
             "Authorization": f"Bearer {share_jwt}",
             "Content-Type": "application/json"
         }
         
-        # Download all files (empty array = all)
-        response = requests.post(
-            f"{BASE_URL}/api/share/{token}/download-zip",
+        start_response = requests.post(
+            f"{BASE_URL}/api/share/{token}/download-jobs",
             headers=headers,
-            json=[]
+            json={"subfolder": "Wedding Images"}
         )
+        response = complete_download_job(token, share_jwt, start_response)
         
         assert response.status_code == 200, f"ZIP download failed: {response.status_code} - {response.text}"
         
@@ -309,37 +333,17 @@ class TestDownloadWorkflow:
         
         print(f"ZIP download successful: {len(content)} bytes, {len(file_list)} files")
     
-    def test_08_download_album_get(self, share_link, share_jwt):
-        """Client can download album via GET - P0 BUG TEST"""
+    def test_08_legacy_memory_zip_routes_are_retired(self, share_link, share_jwt):
+        """Old whole-gallery in-memory ZIP routes no longer exist."""
         token = share_link["token"]
-        
-        # Use JWT in query param (as frontend does)
-        response = requests.get(
-            f"{BASE_URL}/api/share/{token}/download-album",
-            params={"t": share_jwt}
-        )
-        
-        assert response.status_code == 200, f"Album download failed: {response.status_code} - {response.text}"
-        
-        content = response.content
-        assert len(content) > 0, "Album ZIP is empty"
-        
-        # Verify it's a valid ZIP
-        assert content[:2] == b'PK', f"Downloaded content is not a valid ZIP: {content[:10]}"
-        
-        # Verify ZIP contains files
-        zip_buffer = io.BytesIO(content)
-        with zipfile.ZipFile(zip_buffer, 'r') as zf:
-            file_list = zf.namelist()
-            assert len(file_list) > 0, "Album ZIP is empty (no files inside)"
-            print(f"Album ZIP contains {len(file_list)} files: {file_list}")
-            
-            # Verify each file has content
-            for name in file_list:
-                file_content = zf.read(name)
-                assert len(file_content) > 0, f"File {name} in album ZIP is empty"
-        
-        print(f"Album download successful: {len(content)} bytes, {len(file_list)} files")
+        headers = {"Authorization": f"Bearer {share_jwt}"}
+        for method, path in (
+            (requests.post, "download-zip"),
+            (requests.get, "download-album"),
+            (requests.get, "download-favourites"),
+        ):
+            response = method(f"{BASE_URL}/api/share/{token}/{path}", headers=headers)
+            assert response.status_code in {404, 405}
     
     def test_09_diagnose_gallery(self, admin_headers, test_gallery):
         """Admin diagnostic endpoint shows correct file count"""
@@ -389,8 +393,8 @@ class TestDownloadPermissions:
     def test_download_zip_without_auth_fails(self):
         """ZIP download without auth should fail"""
         response = requests.post(
-            f"{BASE_URL}/api/share/fake_token/download-zip",
-            json=[]
+            f"{BASE_URL}/api/share/fake_token/download-jobs",
+            json={"subfolder": "Wedding Images"}
         )
         assert response.status_code in [401, 403], f"Expected auth error, got {response.status_code}"
 
@@ -437,15 +441,7 @@ class TestExistingShareDownload:
             if dl_response.status_code == 200:
                 assert len(dl_response.content) > 0, "Downloaded file is empty"
         
-        # Test album download
-        album_response = requests.get(
-            f"{BASE_URL}/api/share/{existing_token}/download-album",
-            params={"t": jwt}
-        )
-        print(f"Existing share album download: {album_response.status_code}")
-        if album_response.status_code == 200:
-            assert len(album_response.content) > 0, "Album ZIP is empty"
-            assert album_response.content[:2] == b'PK', "Not a valid ZIP"
+        # Folder ZIP behaviour is exercised by TestDownloadWorkflow above.
 
 
 if __name__ == "__main__":

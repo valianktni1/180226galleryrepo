@@ -136,12 +136,6 @@ export const copyToSubfolder = (galleryId, fileIds, targetSubfolder) =>
     target_subfolder: targetSubfolder
   });
 
-// Download subfolder as zip (streaming, handles 1000+ files)
-export const downloadSubfolderZip = (galleryId, subfolder) => {
-  const token = localStorage.getItem('admin_token');
-  return `${BACKEND_URL}/api/admin/galleries/${galleryId}/download-subfolder?subfolder=${encodeURIComponent(subfolder)}&token=${encodeURIComponent(token)}`;
-};
-
 // Progress-aware, disk-backed folder downloads
 export const startAdminFolderDownload = (galleryId, subfolder) =>
   apiClient.post(`/admin/galleries/${galleryId}/download-jobs`, { subfolder });
@@ -151,6 +145,8 @@ export const startShareFolderDownload = (token, subfolder) =>
   apiClient.post(`/share/${token}/download-jobs`, { subfolder });
 export const getShareFolderDownloadStatus = (token, jobId) =>
   apiClient.get(`/share/${token}/download-jobs/${jobId}`);
+export const startShareFavouritesDownload = (token) =>
+  apiClient.post(`/share/${token}/favourites-download-jobs`);
 export const getDownloadJobFileUrl = (jobId, ticket) =>
   `${BACKEND_URL}/api/download-jobs/${encodeURIComponent(jobId)}/file?ticket=${encodeURIComponent(ticket)}`;
 
@@ -233,27 +229,6 @@ export const downloadShareFile = (token, fileId) => {
   return fetch(`${BACKEND_URL}/api/share/${token}/download/${fileId}`, {
     headers: { Authorization: `Bearer ${jwt}` }
   });
-};
-export const downloadShareZip = (token, fileIds = []) =>
-  apiClient.post(`/share/${token}/download-zip`, fileIds, {
-    responseType: 'blob',
-    timeout: 600000,
-  });
-
-// Direct download URL for share albums (better for large files)
-export const getShareDownloadUrl = (token, subfolder = null) => {
-  const jwt = localStorage.getItem('share_token');
-  let url = `${BACKEND_URL}/api/share/${token}/download-album?t=${encodeURIComponent(jwt)}`;
-  if (subfolder) {
-    url += `&subfolder=${encodeURIComponent(subfolder)}`;
-  }
-  return url;
-};
-
-// Direct download URL for favourites
-export const getShareFavouritesDownloadUrl = (token) => {
-  const jwt = localStorage.getItem('share_token');
-  return `${BACKEND_URL}/api/share/${token}/download-favourites?t=${encodeURIComponent(jwt)}`;
 };
 export const guestUpload = (token, files, onProgress) => {
   const formData = new FormData();

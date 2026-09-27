@@ -108,6 +108,7 @@ export default function AdminSystemHealth() {
   const [maintenance, setMaintenance] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
+  const videoQueueLength = health?.work?.video_queue?.length || 0;
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -130,10 +131,10 @@ export default function AdminSystemHealth() {
   }, [load, navigate]);
 
   useEffect(() => {
-    if (!(health?.work?.video_queue || []).length) return undefined;
+    if (!videoQueueLength) return undefined;
     const videoInterval = setInterval(() => load(true), 2000);
     return () => clearInterval(videoInterval);
-  }, [health?.work?.video_queue?.length, load]);
+  }, [videoQueueLength, load]);
 
   const runSafeScan = async () => {
     setScanning(true);
@@ -151,6 +152,7 @@ export default function AdminSystemHealth() {
   const storage = health?.summary?.storage;
   const backup = health?.summary?.backup;
   const downloads = health?.work?.folder_downloads;
+  const heavyQueue = health?.work?.heavy_queue || { active: 0, waiting: 0, max_parallel: 2 };
   const broadcast = health?.work?.broadcast_campaign;
   const videoQueue = health?.work?.video_queue || [];
   const overall = tone(health?.status);
@@ -255,6 +257,11 @@ export default function AdminSystemHealth() {
                   status: downloads.active > 0 ? "active" : "healthy",
                   title: `${downloads.active} folder download(s) active`,
                   detail: `${formatBytes(downloads.cache_bytes)} currently held in the temporary ZIP cache.`
+                }} />
+                <HealthRow icon={Activity} item={{
+                  status: heavyQueue.active > 0 || heavyQueue.waiting > 0 ? "active" : "healthy",
+                  title: `${heavyQueue.active} heavy job(s) running · ${heavyQueue.waiting} queued`,
+                  detail: `At most ${heavyQueue.max_parallel} download or video jobs run together; backups receive a safe exclusive turn.`
                 }} />
                 <HealthRow icon={Users} item={{
                   status: health.work.couples_online > 0 ? "active" : "healthy",

@@ -152,5 +152,39 @@ class BackupServiceTests(unittest.TestCase):
             finally:
                 restored._executor.shutdown(wait=True)
 
+    def test_database_snapshot_result_is_saved_with_backup_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            backup = root / "backup"
+            source.mkdir()
+            backup.mkdir()
+            (source / "Couple").mkdir()
+            database_result = {
+                "status": "verified",
+                "snapshot_name": "gallery-database-test.zip",
+                "verified_at": "2026-09-27T12:00:00+00:00",
+                "collections": 5,
+                "documents": 100,
+                "bytes": 500,
+            }
+            manager = BackupManager(
+                source,
+                backup,
+                database_backup=lambda: database_result,
+            )
+            try:
+                started, _ = manager.start()
+                self.assertTrue(started)
+                deadline = time.monotonic() + 2
+                while manager.status()["status"] == "running" and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                status = manager.status()
+                self.assertEqual(status["status"], "complete")
+                self.assertEqual(status["database_backup"], database_result)
+                self.assertIn("restored and verified", status["message"])
+            finally:
+                manager._executor.shutdown(wait=True)
+
 if __name__ == "__main__":
     unittest.main()

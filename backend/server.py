@@ -10,7 +10,6 @@ import io
 import html
 import logging
 import shutil
-import zipfile
 import secrets
 import subprocess
 from pathlib import Path
@@ -41,7 +40,9 @@ from email.utils import formataddr
 from share_selection import main_gallery_share_query
 from share_security import ShareSessionError, refresh_share_claims, share_is_expired
 from backup_service import BackupManager
+from database_backup_service import DatabaseBackupService
 from download_job_service import DownloadJobError, DownloadJobManager
+from heavy_job_queue import HeavyJobCoordinator
 from album_downloads import album_download_name
 from album_selection import (
     AlbumSelectionError,
@@ -57,7 +58,13 @@ from album_selection import (
 )
 from gallery_readiness import build_gallery_readiness
 from maintenance_scan import scan_gallery_maintenance
-from system_health import backup_health, overall_status, storage_status, utc_now_iso
+from system_health import (
+    backup_health,
+    database_backup_health,
+    overall_status,
+    storage_status,
+    utc_now_iso,
+)
 from broadcast_service import (
     ACTIVE_CAMPAIGN_STATUSES,
     pending_batch,
@@ -84,7 +91,12 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR = UPLOAD_DIR / ".cache" / "thumbs"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 DOWNLOAD_CACHE_DIR = UPLOAD_DIR / ".cache" / "downloads"
-download_job_manager = DownloadJobManager(DOWNLOAD_CACHE_DIR)
+HEAVY_JOB_MAX_PARALLEL = max(1, min(4, int(os.environ.get("HEAVY_JOB_MAX_PARALLEL", "2"))))
+heavy_job_coordinator = HeavyJobCoordinator(max_parallel=HEAVY_JOB_MAX_PARALLEL)
+download_job_manager = DownloadJobManager(
+    DOWNLOAD_CACHE_DIR,
+    coordinator=heavy_job_coordinator,
+)
 BROADCAST_CACHE_DIR = UPLOAD_DIR / ".cache" / "broadcasts"
 BROADCAST_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 BROADCAST_BATCH_SIZE = 10
@@ -529,7 +541,19 @@ def queue_video_transcode(file_path: Path, gallery_id: str, file_id: str):
         "status": "queued",
         "method": "Waiting",
     }
-    return transcode_executor.submit(create_web_version, file_path, gallery_id, file_id)
+    return transcode_executor.submit(
+        run_controlled_video_job,
+        create_web_version,
+        file_path,
+        gallery_id,
+        file_id,
+    )
+
+
+def run_controlled_video_job(job_function, *args):
+    """Run FFmpeg work through the shared heavy-job queue."""
+    with heavy_job_coordinator.acquire("video"):
+        return job_function(*args)
 
 # Live visitor tracking (in-memory, ephemeral)
 active_visitors = {}  # session_id -> {gallery_id, gallery_name, action, subfolder, detail, device, last_seen, ip}
@@ -712,13 +736,14 @@ def generate_thumbnails_background(file_path: Path, gallery_id: str, subfolder: 
             has_thumb = make_thumbnail(file_path, thumb_p)
             has_preview = make_preview(file_path, preview_p)
         elif file_type == "video":
-            # First ensure faststart (moov atom at beginning) for smooth streaming
-            ensure_video_faststart(file_path)
-            # Generate thumbnails FIRST so they appear instantly in the UI
-            thumb_p = get_thumb_path(gallery_id, subfolder, filename)
-            preview_p = get_preview_path(gallery_id, subfolder, filename)
-            has_thumb = make_video_thumbnail(file_path, thumb_p)
-            has_preview = make_video_preview(file_path, preview_p)
+            # Video probing, faststart and thumbnail FFmpeg work share the same
+            # bounded queue as ZIP preparation and backups.
+            with heavy_job_coordinator.acquire("video"):
+                ensure_video_faststart(file_path)
+                thumb_p = get_thumb_path(gallery_id, subfolder, filename)
+                preview_p = get_preview_path(gallery_id, subfolder, filename)
+                has_thumb = make_video_thumbnail(file_path, thumb_p)
+                has_preview = make_video_preview(file_path, preview_p)
         
         # Update the file record with thumbnail status using sync pymongo
         from pymongo import MongoClient
@@ -1473,7 +1498,13 @@ async def reprocess_videos(gallery_id: str, admin=Depends(get_admin)):
             "status": "queued",
             "method": "Waiting",
         }
-        transcode_executor.submit(optimise_video_full, file_path, gallery_id, fid)
+        transcode_executor.submit(
+            run_controlled_video_job,
+            optimise_video_full,
+            file_path,
+            gallery_id,
+            fid,
+        )
     return {"queued": len(valid_videos), "message": f"{len(valid_videos)} video(s) queued for web optimisation"}
 
 @api_router.get("/admin/galleries/{gallery_id}/reprocess-progress")
@@ -1766,6 +1797,7 @@ async def start_share_download_job(
             filename=f"{gallery['folder_name']} - {data.subfolder}.zip",
             entries=entries,
             share_token=token,
+            scope_subfolder=data.subfolder,
         )
     except DownloadJobError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1790,6 +1822,88 @@ async def start_share_download_job(
     await log_bandwidth_event(
         "file_download", total_bytes,
         f"Album ZIP job: {data.subfolder} ({len(entries)} files)",
+    )
+    return {**state, "ticket": ticket}
+
+
+@api_router.post("/share/{token}/favourites-download-jobs")
+async def start_share_favourites_download_job(
+    token: str,
+    request: Request,
+    session=Depends(get_share_session),
+):
+    """Prepare favourites with the same bounded, disk-backed ZIP worker."""
+    session = await validate_live_share_session(session, expected_token=token)
+    if not session.get("allow_downloads", False):
+        raise HTTPException(status_code=403, detail="Downloads not allowed")
+
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+
+    if album_selection_available(gallery, share):
+        favourite_ids = normalise_album_selection(gallery)["selected_file_ids"]
+    else:
+        favourites = await db.favourites.find({
+            "session_id": session["sub"],
+            "gallery_id": gallery_id,
+        }, {"_id": 0, "file_id": 1}).to_list(50000)
+        favourite_ids = [item["file_id"] for item in favourites]
+    if not favourite_ids:
+        raise HTTPException(status_code=404, detail="No favourites to download")
+
+    file_docs = await db.files.find(
+        share_file_query(session, id={"$in": favourite_ids}),
+        {"_id": 0},
+    ).to_list(50000)
+    files_by_id = {item["id"]: item for item in file_docs}
+    files = [files_by_id[file_id] for file_id in favourite_ids if file_id in files_by_id]
+    entries, missing = _download_entries(gallery, files)
+    if missing:
+        logger.warning(
+            "Favourites download job omitted %s missing file(s) from %s",
+            len(missing), gallery["folder_name"],
+        )
+    if not entries:
+        raise HTTPException(status_code=404, detail="No favourites are available to download")
+
+    owner_id = f"{token}:{session['sub']}"
+    try:
+        state, ticket = download_job_manager.start(
+            owner_kind="share",
+            owner_id=owner_id,
+            gallery_id=gallery_id,
+            label="Favourites",
+            filename=f"{gallery['folder_name']} - Favourites.zip",
+            entries=entries,
+            share_token=token,
+            scope_subfolder=session.get("subfolder"),
+        )
+    except DownloadJobError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    client_ip = request.headers.get(
+        "X-Forwarded-For",
+        request.client.host if request.client else "unknown",
+    ).split(",")[0].strip()
+    await _log_download(
+        gallery_id,
+        gallery.get("folder_name", "Unknown"),
+        share.get("label", token) if share else token,
+        client_ip,
+        "favourites",
+        [item["filename"] for item in files],
+        "Favourites",
+        len(entries),
+        len(files),
+    )
+    total_bytes = sum(path.stat().st_size for path, _ in entries)
+    await log_bandwidth_event(
+        "file_download",
+        total_bytes,
+        f"Favourites ZIP job: {len(entries)} files",
     )
     return {**state, "ticket": ticket}
 
@@ -1829,7 +1943,10 @@ async def download_prepared_job(job_id: str, ticket: str = Query(...)):
             or is_share_expired(share)
             or share.get("gallery_id") != context["gallery_id"]
             or share.get("access_level", "download") not in allowed_levels
-            or (share.get("subfolder") and share.get("subfolder") != context["label"])
+            or (
+                share.get("subfolder")
+                and share.get("subfolder") != context.get("scope_subfolder")
+            )
         ):
             raise HTTPException(status_code=401, detail="Share is no longer available")
 
@@ -1845,66 +1962,6 @@ async def download_prepared_job(job_id: str, ticket: str = Query(...)):
         },
     )
 
-
-# ─── Legacy streaming downloads (kept for backwards compatibility) ───
-@api_router.get("/admin/galleries/{gallery_id}/download-subfolder")
-async def download_subfolder_zip(gallery_id: str, subfolder: str = Query(...), admin=Depends(get_admin)):
-    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
-    if not gallery:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-    if subfolder not in gallery.get("subfolders", []):
-        raise HTTPException(status_code=404, detail="Subfolder not found")
-    folder_path = get_gallery_subfolder_path(gallery["folder_name"], subfolder)
-    if not folder_path.exists():
-        raise HTTPException(status_code=404, detail="Subfolder not found")
-
-    files = await db.files.find({"gallery_id": gallery_id, "subfolder": subfolder}, {"_id": 0}).to_list(50000)
-    if not files:
-        raise HTTPException(status_code=404, detail="No files in this subfolder")
-
-    logger.info(f"Admin subfolder download: gallery='{gallery['folder_name']}', subfolder='{subfolder}', folder_path={folder_path}, exists={folder_path.exists()}, file_count={len(files)}")
-
-    def iter_zip():
-        buf = io.BytesIO()
-        added = 0
-        missing = []
-        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
-            for f in files:
-                fp = get_gallery_file_path(gallery["folder_name"], subfolder, f["filename"])
-                if fp.exists():
-                    zf.write(fp, f["filename"])
-                    added += 1
-                else:
-                    missing.append(f["filename"])
-        if missing:
-            logger.error(f"Admin ZIP: {len(missing)}/{len(files)} files NOT found in '{folder_path}'. First 5: {missing[:5]}")
-            try:
-                disk_files = [x.name for x in folder_path.iterdir()][:10]
-                logger.error(f"  Actual disk contents (first 10): {disk_files}")
-            except Exception as e:
-                logger.error(f"  Could not list dir: {e}")
-        logger.info(f"Admin ZIP: added {added}/{len(files)} files")
-        buf.seek(0)
-        while True:
-            chunk = buf.read(1024 * 1024)
-            if not chunk:
-                break
-            yield chunk
-
-    zip_name = f"{gallery['folder_name']} - {subfolder}.zip".replace(' ', '_')
-
-    # Track download bandwidth
-    total_dl_bytes = sum(f.get("file_size", 0) for f in files)
-    await log_bandwidth_event("file_download", total_dl_bytes, f"Admin ZIP: {subfolder} ({len(files)} files)")
-
-    return StreamingResponse(
-        iter_zip(),
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{zip_name}"',
-            "Cache-Control": "no-cache"
-        }
-    )
 
 @api_router.get("/admin/galleries/{gallery_id}/download-file/{file_id}")
 async def admin_download_file(gallery_id: str, file_id: str, admin=Depends(get_admin)):
@@ -3795,267 +3852,6 @@ async def download_share_file(token: str, file_id: str, request: Request, sessio
     
     return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
 
-@api_router.post("/share/{token}/download-zip")
-async def download_share_zip(token: str, request: Request, file_ids: List[str] = [], session=Depends(get_share_session)):
-    if session.get("token") != token:
-        raise HTTPException(status_code=403, detail="Access denied")
-    if not session.get("allow_downloads", False):
-        raise HTTPException(status_code=403, detail="Downloads not allowed on this share")
-    gallery_id = session["gallery_id"]
-    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
-    if not gallery:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-
-    subfolder = session.get("subfolder")
-    if file_ids:
-        query = share_file_query(session, id={"$in": file_ids})
-    else:
-        query = share_file_query(session)
-    files = await db.files.find(query, {"_id": 0}).to_list(50000)
-    
-    if not files:
-        raise HTTPException(status_code=404, detail="No files to download")
-
-    # Count total available files for completeness tracking
-    total_query = {"gallery_id": gallery_id}
-    if subfolder:
-        total_query["subfolder"] = subfolder
-    total_available = await db.files.count_documents(total_query)
-
-    # Log detailed download
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
-    share = await db.shares.find_one({"token": token}, {"_id": 0})
-    dl_type = "selection" if file_ids else "album"
-    sub = files[0]["subfolder"] if files else subfolder
-    await _log_download(gallery_id, gallery.get("folder_name", "Unknown"),
-                        share.get("label", token) if share else token, client_ip,
-                        dl_type, [f["filename"] for f in files], sub,
-                        len(files), total_available)
-    
-    if not files:
-        raise HTTPException(status_code=404, detail="No files to download")
-
-    # Use ZIP_STORED for speed (same as admin panel)
-    gallery_path = get_gallery_path(gallery["folder_name"])
-    logger.info(f"Download ZIP (POST): gallery='{gallery['folder_name']}', gallery_path={gallery_path}, exists={gallery_path.exists()}, file_count={len(files)}")
-
-    def iter_zip():
-        buf = io.BytesIO()
-        added = 0
-        missing = []
-        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
-            for f in files:
-                fp = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
-                if fp.exists():
-                    arcname = f"{f['subfolder']}/{f['filename']}"
-                    zf.write(fp, arcname)
-                    added += 1
-                else:
-                    missing.append(f"{f['subfolder']}/{f['filename']}")
-        if missing:
-            logger.error(f"Download ZIP: {len(missing)}/{len(files)} files NOT found. First 5: {missing[:5]}")
-            try:
-                gp = get_gallery_path(gallery["folder_name"])
-                if gp.exists():
-                    for sd in gp.iterdir():
-                        if sd.is_dir():
-                            contents = list(sd.iterdir())[:5]
-                            logger.error(f"  Subfolder '{sd.name}': {len(list(sd.iterdir()))} files, first 5: {[x.name for x in contents]}")
-                else:
-                    logger.error(f"  Gallery dir does NOT exist: {gp}")
-            except Exception as e:
-                logger.error(f"  Could not list gallery dir: {e}")
-        logger.info(f"Download ZIP: added {added}/{len(files)} files to archive")
-        buf.seek(0)
-        while True:
-            chunk = buf.read(1024 * 1024)  # 1MB chunks
-            if not chunk:
-                break
-            yield chunk
-
-    # Track download bandwidth (sum of all file sizes)
-    total_dl_bytes = sum(f.get("file_size", 0) for f in files)
-    await log_bandwidth_event("file_download", total_dl_bytes, f"ZIP: {len(files)} files")
-
-    zip_name = f"{gallery['folder_name'].replace(' ', '_')}.zip"
-    return StreamingResponse(
-        iter_zip(),
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{zip_name}"',
-            "Cache-Control": "no-cache"
-        }
-    )
-
-# Direct GET endpoint for share ZIP download (better browser support)
-@api_router.get("/share/{token}/download-album")
-async def download_share_album_direct(token: str, request: Request, subfolder: str = Query(None), jwt_token: str = Query(..., alias="t")):
-    # Verify JWT from query param
-    payload = await validate_live_share_session(verify_jwt(jwt_token), expected_token=token)
-    if not payload.get("allow_downloads", False):
-        raise HTTPException(status_code=403, detail="Downloads not allowed")
-    
-    gallery_id = payload["gallery_id"]
-    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
-    if not gallery:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-    
-    share_subfolder = payload.get("subfolder")
-    if share_subfolder and subfolder and subfolder != share_subfolder:
-        raise HTTPException(status_code=403, detail="Access denied")
-    effective_subfolder = share_subfolder or subfolder
-    query = share_file_query(payload)
-    if effective_subfolder:
-        query["subfolder"] = effective_subfolder
-    files = await db.files.find(query, {"_id": 0}).to_list(50000)
-    
-    if not files:
-        raise HTTPException(status_code=404, detail="No files to download")
-
-    # Log detailed download
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
-    share = await db.shares.find_one({"token": token}, {"_id": 0})
-    total_available = len(files)
-    await _log_download(gallery_id, gallery.get("folder_name", "Unknown"),
-                        share.get("label", token) if share else token, client_ip,
-                        "album", [f["filename"] for f in files], subfolder,
-                        len(files), total_available)
-
-    gallery_path = get_gallery_path(gallery["folder_name"])
-    logger.info(f"Download album: gallery='{gallery['folder_name']}', UPLOAD_DIR={UPLOAD_DIR}, gallery_path={gallery_path}, exists={gallery_path.exists()}, file_count={len(files)}")
-
-    def iter_zip():
-        buf = io.BytesIO()
-        added = 0
-        missing = []
-        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
-            for f in files:
-                fp = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
-                if fp.exists():
-                    arcname = f["filename"] if subfolder else f"{f['subfolder']}/{f['filename']}"
-                    zf.write(fp, arcname)
-                    added += 1
-                else:
-                    missing.append(str(fp))
-        if missing:
-            logger.error(f"Download album ZIP: {len(missing)}/{len(files)} files NOT found on disk. First 5 missing: {missing[:5]}")
-            # Also log what IS on disk at the gallery path for debugging
-            try:
-                gp = get_gallery_path(gallery["folder_name"])
-                if gp.exists():
-                    disk_contents = list(gp.iterdir())[:10]
-                    logger.error(f"  Gallery dir contents (first 10): {[str(x.name) for x in disk_contents]}")
-                else:
-                    logger.error(f"  Gallery dir does NOT exist: {gp}")
-            except Exception as e:
-                logger.error(f"  Could not list gallery dir: {e}")
-        logger.info(f"Download album ZIP: added {added}/{len(files)} files to archive")
-        buf.seek(0)
-        while True:
-            chunk = buf.read(1024 * 1024)
-            if not chunk:
-                break
-            yield chunk
-
-    folder_name = subfolder if subfolder else gallery['folder_name']
-    zip_name = f"{folder_name.replace(' ', '_')}.zip"
-
-    # Track download bandwidth
-    total_dl_bytes = sum(f.get("file_size", 0) for f in files)
-    await log_bandwidth_event("file_download", total_dl_bytes, f"Album ZIP: {len(files)} files")
-
-    return StreamingResponse(
-        iter_zip(),
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{zip_name}"',
-            "Cache-Control": "no-cache"
-        }
-    )
-
-# Direct GET endpoint for downloading favourites
-@api_router.get("/share/{token}/download-favourites")
-async def download_share_favourites_direct(token: str, request: Request, jwt_token: str = Query(..., alias="t")):
-    # Verify JWT from query param
-    payload = await validate_live_share_session(verify_jwt(jwt_token), expected_token=token)
-    if not payload.get("allow_downloads", False):
-        raise HTTPException(status_code=403, detail="Downloads not allowed")
-    
-    gallery_id = payload["gallery_id"]
-    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
-    if not gallery:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-    share = await db.shares.find_one({"token": token}, {"_id": 0})
-    if album_selection_available(gallery, share):
-        fav_ids = normalise_album_selection(gallery)["selected_file_ids"]
-    else:
-        favs = await db.favourites.find({
-            "session_id": payload["sub"],
-            "gallery_id": gallery_id
-        }, {"_id": 0}).to_list(50000)
-        fav_ids = [f["file_id"] for f in favs]
-
-    if not fav_ids:
-        raise HTTPException(status_code=404, detail="No favourites to download")
-
-    file_docs = await db.files.find(
-        share_file_query(payload, id={"$in": fav_ids}), {"_id": 0}
-    ).to_list(50000)
-    files_by_id = {file_doc["id"]: file_doc for file_doc in file_docs}
-    files = [files_by_id[file_id] for file_id in fav_ids if file_id in files_by_id]
-    
-    if not files:
-        raise HTTPException(status_code=404, detail="No files found")
-
-    # Log detailed download
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
-    await _log_download(gallery_id, gallery.get("folder_name", "Unknown"),
-                        share.get("label", token) if share else token, client_ip,
-                        "favourites", [f["filename"] for f in files], "Favourites",
-                        len(files), len(files))
-
-    def iter_zip():
-        buf = io.BytesIO()
-        added = 0
-        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
-            for f in files:
-                fp = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
-                if fp.exists():
-                    zf.write(fp, f["filename"])
-                    added += 1
-                else:
-                    logger.error(f"Favourites ZIP: file not found: {fp}")
-        if added == 0:
-            logger.error(f"Favourites ZIP: 0 files found. Gallery='{gallery['folder_name']}', UPLOAD_DIR={UPLOAD_DIR}")
-        logger.info(f"Favourites ZIP: added {added}/{len(files)} files")
-        buf.seek(0)
-        while True:
-            chunk = buf.read(1024 * 1024)
-            if not chunk:
-                break
-            yield chunk
-
-    zip_name = f"{gallery['folder_name'].replace(' ', '_')}_favourites.zip"
-
-    # Track download bandwidth
-    total_dl_bytes = sum(f.get("file_size", 0) for f in files)
-    await log_bandwidth_event("file_download", total_dl_bytes, f"Favourites ZIP: {len(files)} files")
-
-    return StreamingResponse(
-        iter_zip(),
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{zip_name}"',
-            "Cache-Control": "no-cache"
-        }
-    )
-
 # ─── Guest Upload (via share) ───
 @api_router.post("/share/{token}/upload")
 async def guest_upload(
@@ -4904,7 +4700,20 @@ async def get_all_galleries_stats(admin=Depends(get_admin)):
 
 # ─── Backup Endpoint ───
 BACKUP_DIR = Path(os.environ.get('BACKUP_DIR', '/backup'))
-backup_manager = BackupManager(UPLOAD_DIR, BACKUP_DIR, UPLOAD_DIR / ".cache" / "backup-status.json")
+DATABASE_BACKUP_DIR = BACKUP_DIR / ".database"
+database_backup_service = DatabaseBackupService(
+    mongo_url,
+    os.environ['DB_NAME'],
+    DATABASE_BACKUP_DIR,
+    keep_snapshots=int(os.environ.get("DATABASE_BACKUP_RETENTION", "14")),
+)
+backup_manager = BackupManager(
+    UPLOAD_DIR,
+    BACKUP_DIR,
+    UPLOAD_DIR / ".cache" / "backup-status.json",
+    coordinator=heavy_job_coordinator,
+    database_backup=database_backup_service.run,
+)
 
 @api_router.post("/admin/backup")
 async def run_backup(admin=Depends(get_admin)):
@@ -5039,7 +4848,10 @@ async def get_system_health(admin=Depends(get_admin)):
         for progress in video_optimise_progress.values()
     )
     download_health = download_job_manager.health_snapshot()
-    backup = backup_health(backup_manager.status())
+    backup_status = backup_manager.status()
+    backup = backup_health(backup_status)
+    database_backup = database_backup_health(backup_status.get("database_backup"))
+    heavy_queue = heavy_job_coordinator.snapshot()
     backup_running = backup["status"] == "active"
     try:
         active_broadcast = await db.broadcast_campaigns.find_one(
@@ -5053,7 +4865,7 @@ async def get_system_health(admin=Depends(get_admin)):
         + int(backup_running) + int(bool(active_broadcast))
     )
 
-    monitored = [database_health, storage_health, email_health, gpu_health, backup]
+    monitored = [database_health, storage_health, email_health, gpu_health, backup, database_backup]
     status = overall_status(monitored)
     overall_titles = {
         "healthy": "All monitored systems look healthy",
@@ -5087,17 +4899,14 @@ async def get_system_health(admin=Depends(get_admin)):
             "video_files_transcoding": transcode_active,
             "video_queue": video_queue,
             "folder_downloads": download_health,
+            "heavy_queue": heavy_queue,
             "backup_running": backup_running,
             "broadcast_campaign": broadcast_health,
             "couples_online": current_visitors,
         },
         "protection": {
             "gallery_backup": backup,
-            "database_backup": {
-                "status": "neutral",
-                "title": "MongoDB backup managed externally",
-                "detail": "The gallery app does not inspect or change the TrueNAS database backup schedule.",
-            },
+            "database_backup": database_backup,
             "offsite_backup": {
                 "status": "neutral",
                 "title": "Off-site backup managed externally",

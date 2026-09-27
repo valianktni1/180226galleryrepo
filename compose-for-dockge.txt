@@ -24,6 +24,9 @@ services:
       - CORS_ORIGINS=*
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - UPLOAD_DIR=/data/userfiles
+      - BACKUP_DIR=/backup
+      - HEAVY_JOB_MAX_PARALLEL=2
+      - DATABASE_BACKUP_RETENTION=14
       - NGINX_VIDEO_URL=enabled
       - NGINX_VIDEO_SECRET=${NGINX_VIDEO_SECRET:?NGINX_VIDEO_SECRET must be set}
     volumes:

@@ -13,8 +13,8 @@ import {
   ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun, Share2, Star, Clock
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, getShareFavouritesDownloadUrl, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl, chooseAlbumCover, getAlbumCoverChoice,
-  startShareFolderDownload, getShareFolderDownloadStatus, getDownloadJobFileUrl
+  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl, chooseAlbumCover, getAlbumCoverChoice,
+  startShareFolderDownload, startShareFavouritesDownload, getShareFolderDownloadStatus, getDownloadJobFileUrl
 } from "@/lib/api";
 import { getTheme } from "@/lib/themes";
 import InstallBanner from "@/components/InstallBanner";
@@ -313,16 +313,26 @@ function ShareViewFull() {
       return;
     }
     
-    // For favourites, use direct URL
+    // Favourites use the same bounded, disk-backed worker as every folder.
     if (showFavourites) {
       if (favCount === 0) {
         toast.error("No favourites selected");
         return;
       }
-      const url = getShareFavouritesDownloadUrl(token);
-      window.open(url, '_blank');
-      toast.success("Download started");
-      trackDownload(token);
+      if (downloading) return;
+      if (downloadPollRef.current) clearTimeout(downloadPollRef.current);
+      setDownloading(true);
+      setDownloadJob({ status: "queued", files_done: 0, files_total: favCount, percent: 0, label: "Favourites" });
+      downloadStartedRef.current = null;
+      try {
+        const response = await startShareFavouritesDownload(token);
+        setDownloadJob(response.data);
+        pollShareDownload(response.data.id, response.data.ticket);
+      } catch (err) {
+        setDownloading(false);
+        setDownloadJob(null);
+        toast.error(getErrorMessage(err, "Download failed"));
+      }
       return;
     }
     
@@ -901,6 +911,9 @@ function ShareViewFull() {
               </div>
             )}
           </div>
+          {downloadJob?.label === "Favourites" && (
+            <DownloadJobProgress job={downloadJob} accent={t.accent} dark={darkMode} className="mb-6" />
+          )}
           {displayFiles.length === 0 ? (
             <div className="text-center py-20">
               <Heart className="w-12 h-12 mx-auto mb-4 text-[#D4D4D8]" strokeWidth={1} />

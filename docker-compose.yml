@@ -46,9 +46,13 @@ services:
       - CORS_ORIGINS=*
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-key-to-something-secure}
       - UPLOAD_DIR=/data/userfiles
+      - BACKUP_DIR=/backup
+      - HEAVY_JOB_MAX_PARALLEL=2
+      - DATABASE_BACKUP_RETENTION=14
     volumes:
       # User files (photos, videos) - your SMB-accessible storage
       - /mnt/nextcloud/newwedidngsbymarkuserfiles:/data/userfiles
+      - /mnt/couplesgalleriesbackup/180226:/backup
     depends_on:
       mongodb:
         condition: service_healthy

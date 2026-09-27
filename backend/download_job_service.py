@@ -10,6 +10,7 @@ import time
 import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
@@ -32,10 +33,11 @@ def _safe_download_name(value: str) -> str:
 class DownloadJobManager:
     """Prepare ZIP files off the request thread and stream them with progress."""
 
-    def __init__(self, cache_dir: Path, ttl_seconds: int = 4 * 60 * 60):
+    def __init__(self, cache_dir: Path, ttl_seconds: int = 4 * 60 * 60, coordinator=None):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.ttl_seconds = ttl_seconds
+        self.coordinator = coordinator
         # One preparer keeps large archive work from saturating the gallery disks.
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gallery-download")
         self._lock = threading.Lock()
@@ -76,7 +78,7 @@ class DownloadJobManager:
         state = {
             key: copy.deepcopy(value)
             for key, value in job.items()
-            if key not in {"ticket", "archive_path", "entries", "owner_kind", "owner_id", "share_token", "created_ts", "claimed"}
+            if key not in {"ticket", "archive_path", "entries", "owner_kind", "owner_id", "share_token", "scope_subfolder", "created_ts", "claimed"}
         }
         if job["status"] == "preparing":
             total = job["source_bytes_total"]
@@ -100,6 +102,7 @@ class DownloadJobManager:
         filename: str,
         entries: Iterable[Tuple[Path, str]],
         share_token: str | None = None,
+        scope_subfolder: str | None = None,
     ) -> Tuple[Dict, str]:
         self._cleanup_expired()
         entry_list = [(Path(path), arcname) for path, arcname in entries]
@@ -137,6 +140,7 @@ class DownloadJobManager:
             "owner_kind": owner_kind,
             "owner_id": owner_id,
             "share_token": share_token,
+            "scope_subfolder": scope_subfolder,
             "gallery_id": gallery_id,
             "label": label,
             "filename": _safe_download_name(filename),
@@ -168,40 +172,50 @@ class DownloadJobManager:
             job = self._jobs.get(job_id)
             if not job:
                 return
-            job["status"] = "preparing"
-            job["message"] = "Preparing ZIP…"
             entries = list(job["entries"])
             archive_path = job["archive_path"]
 
         try:
-            with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
-                for file_number, (source_path, arcname) in enumerate(entries, start=1):
-                    info = zipfile.ZipInfo.from_file(source_path, arcname=arcname)
-                    info.compress_type = zipfile.ZIP_STORED
-                    with source_path.open("rb") as source, archive.open(info, "w", force_zip64=True) as target:
-                        while True:
-                            chunk = source.read(8 * 1024 * 1024)
-                            if not chunk:
-                                break
-                            target.write(chunk)
-                            with self._lock:
-                                current = self._jobs.get(job_id)
-                                if not current:
-                                    return
-                                current["bytes_prepared"] += len(chunk)
-                    with self._lock:
-                        current = self._jobs.get(job_id)
-                        if not current:
-                            return
-                        current["files_done"] = file_number
+            queue_slot = (
+                self.coordinator.acquire("download")
+                if self.coordinator else nullcontext()
+            )
+            with queue_slot:
+                with self._lock:
+                    current = self._jobs.get(job_id)
+                    if not current:
+                        return
+                    current["status"] = "preparing"
+                    current["message"] = "Preparing ZIP…"
 
-            with self._lock:
-                current = self._jobs.get(job_id)
-                if not current:
-                    return
-                current["bytes_total"] = archive_path.stat().st_size
-                current["status"] = "ready"
-                current["message"] = "ZIP ready. Your browser download is starting…"
+                with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+                    for file_number, (source_path, arcname) in enumerate(entries, start=1):
+                        info = zipfile.ZipInfo.from_file(source_path, arcname=arcname)
+                        info.compress_type = zipfile.ZIP_STORED
+                        with source_path.open("rb") as source, archive.open(info, "w", force_zip64=True) as target:
+                            while True:
+                                chunk = source.read(8 * 1024 * 1024)
+                                if not chunk:
+                                    break
+                                target.write(chunk)
+                                with self._lock:
+                                    current = self._jobs.get(job_id)
+                                    if not current:
+                                        return
+                                    current["bytes_prepared"] += len(chunk)
+                        with self._lock:
+                            current = self._jobs.get(job_id)
+                            if not current:
+                                return
+                            current["files_done"] = file_number
+
+                with self._lock:
+                    current = self._jobs.get(job_id)
+                    if not current:
+                        return
+                    current["bytes_total"] = archive_path.stat().st_size
+                    current["status"] = "ready"
+                    current["message"] = "ZIP ready. Your browser download is starting…"
         except Exception as exc:
             try:
                 archive_path.unlink(missing_ok=True)
@@ -293,6 +307,7 @@ class DownloadJobManager:
                 "gallery_id": job["gallery_id"],
                 "label": job["label"],
                 "share_token": job["share_token"],
+                "scope_subfolder": job["scope_subfolder"],
             }
 
     def health_snapshot(self) -> Dict:

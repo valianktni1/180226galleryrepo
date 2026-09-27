@@ -102,11 +102,14 @@ class DownloadJobManagerTests(unittest.TestCase):
             owner_kind="share", owner_id="viewer", gallery_id="gallery-1",
             label="Wedding Images", filename="download.zip",
             entries=[(source, "one.jpg")], share_token="couple-share",
+            scope_subfolder="Wedding Images",
         )
         self.assertNotIn("share_token", state)
+        self.assertNotIn("scope_subfolder", state)
         context = self.manager.access_context(state["id"], ticket)
         self.assertEqual(context["share_token"], "couple-share")
         self.assertEqual(context["label"], "Wedding Images")
+        self.assertEqual(context["scope_subfolder"], "Wedding Images")
 
     def test_same_owner_can_recover_an_active_job_after_page_refresh(self):
         source = self.source_dir / "one.jpg"

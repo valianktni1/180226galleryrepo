@@ -120,15 +120,16 @@ export default function AdminDashboard() {
         if (!mounted) return;
         const status = res.data;
         setBackupStatus(status);
-        setBackingUp(status.status === "running");
+        const active = ["queued", "running"].includes(status.status);
+        setBackingUp(active);
 
-        if (previousStatus === "running" && status.status === "complete") {
+        if (["queued", "running"].includes(previousStatus) && status.status === "complete") {
           if ((status.errors || []).length > 0) {
             toast.warning(status.message);
           } else {
             toast.success(status.message);
           }
-        } else if (previousStatus === "running" && status.status === "failed") {
+        } else if (["queued", "running"].includes(previousStatus) && status.status === "failed") {
           toast.error(status.message || "Backup failed");
         }
         previousStatus = status.status;
@@ -301,12 +302,14 @@ export default function AdminDashboard() {
               variant="ghost"
               onClick={handleBackup}
               disabled={backingUp}
-              title={backingUp && backupStatus?.current_gallery ? `Backing up ${backupStatus.current_gallery}` : "Back up gallery originals"}
+              title={backupStatus?.status === "queued" ? "Backup is safely queued" : backingUp && backupStatus?.current_gallery ? `Backing up ${backupStatus.current_gallery}` : "Back up gallery originals and verify the database restore"}
               className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider"
             >
               <HardDrive className={`w-4 h-4 ${backingUp ? 'animate-pulse' : ''}`} />
               {backingUp
-                ? (backupStatus?.galleries_total
+                ? (backupStatus?.status === "queued"
+                    ? "Backup queued"
+                    : backupStatus?.galleries_total
                     ? `Backup ${backupStatus.galleries_done}/${backupStatus.galleries_total}`
                     : 'Backing up...')
                 : 'Backup'}
