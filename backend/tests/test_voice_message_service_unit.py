@@ -53,3 +53,29 @@ def test_real_conversion_is_stereo_48khz_192kbps(tmp_path: Path):
     assert 180_000 <= probe_audio(output)["bit_rate"] <= 205_000
     assert not any(tmp_path.glob("*.converting.mp3"))
 
+
+def test_mediarecorder_webm_without_container_duration_converts(tmp_path: Path):
+    """Android browsers commonly produce live WebM files with no duration tag."""
+    source = tmp_path / "android-mediarecorder.webm"
+    output = tmp_path / "personal-message.mp3"
+    generated = subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+            "-i", "sine=frequency=440:duration=1.2", "-c:a", "libopus",
+            "-f", "webm", "-live", "1", str(source),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert generated.returncode == 0, generated.stderr
+
+    source_info = probe_audio(source, allow_unknown_duration=True)
+    assert source_info["duration"] == 0
+
+    output_info = convert_voice_message(source, output)
+    assert output.is_file()
+    assert output_info["duration"] > 0
+    assert output_info["channels"] == 2
+    assert output_info["sample_rate"] == 48_000
+
