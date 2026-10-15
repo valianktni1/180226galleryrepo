@@ -45,12 +45,17 @@ def voice_message_filename(guest_name: str, now: datetime | None = None) -> str:
     return f"Personal Message - {safe_name} - {stamp}-{secrets.token_hex(2)}.mp3"
 
 
-def probe_audio(path: Path) -> Dict:
-    """Read the first audio stream and duration using ffprobe."""
+def probe_audio(path: Path, *, allow_unknown_duration: bool = False) -> Dict:
+    """Read the first audio stream and duration using ffprobe.
+
+    Browser MediaRecorder WebM files can contain perfectly valid Opus audio
+    without declaring a container duration.  Conversion may accept that input;
+    the resulting MP3 must still report and pass its real duration checks.
+    """
     result = subprocess.run(
         [
             "ffprobe", "-v", "error", "-show_entries",
-            "format=duration:stream=codec_type,sample_rate,channels,bit_rate",
+            "format=duration:stream=codec_type,duration,sample_rate,channels,bit_rate",
             "-of", "json", str(path),
         ],
         capture_output=True,
@@ -65,10 +70,15 @@ def probe_audio(path: Path) -> Dict:
             stream for stream in payload.get("streams", [])
             if stream.get("codec_type") == "audio"
         )
-        duration = float(payload.get("format", {}).get("duration") or 0)
+        duration_value = (
+            payload.get("format", {}).get("duration")
+            or audio_stream.get("duration")
+            or 0
+        )
+        duration = float(duration_value)
     except (ValueError, TypeError, StopIteration, json.JSONDecodeError) as exc:
         raise VoiceMessageError("That recording does not contain playable audio") from exc
-    if duration <= 0:
+    if duration <= 0 and not allow_unknown_duration:
         raise VoiceMessageError("That recording does not contain playable audio")
     return {
         "duration": duration,
@@ -80,7 +90,7 @@ def probe_audio(path: Path) -> Dict:
 
 def convert_voice_message(source_path: Path, output_path: Path) -> Dict:
     """Normalise one browser recording to a 48 kHz, stereo, 192 kbps MP3."""
-    source_info = probe_audio(source_path)
+    source_info = probe_audio(source_path, allow_unknown_duration=True)
     if source_info["duration"] > MAX_VOICE_MESSAGE_SECONDS + 1:
         raise VoiceMessageError("Personal messages can be no longer than 4 minutes")
 
@@ -104,6 +114,8 @@ def convert_voice_message(source_path: Path, output_path: Path) -> Dict:
         if result.returncode != 0 or not temporary_output.is_file():
             raise VoiceMessageError("We could not prepare that recording. Please try again")
         output_info = probe_audio(temporary_output)
+        if output_info["duration"] > MAX_VOICE_MESSAGE_SECONDS + 1:
+            raise VoiceMessageError("Personal messages can be no longer than 4 minutes")
         if output_info["sample_rate"] != VOICE_SAMPLE_RATE or output_info["channels"] != VOICE_CHANNELS:
             raise VoiceMessageError("The converted recording did not pass its audio checks")
         temporary_output.replace(output_path)
