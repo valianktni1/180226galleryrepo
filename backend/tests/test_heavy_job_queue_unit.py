@@ -62,19 +62,32 @@ class HeavyJobCoordinatorTests(unittest.TestCase):
             with coordinator.acquire("video"):
                 with lock:
                     started.append(number)
-                release.wait(timeout=2)
+                release.wait(timeout=10)
 
         threads = [threading.Thread(target=worker, args=(number,)) for number in range(3)]
         for thread in threads:
             thread.start()
-        deadline = time.monotonic() + 1
-        while len(started) < 2 and time.monotonic() < deadline:
-            time.sleep(0.01)
-        self.assertEqual(len(started), 2)
-        self.assertEqual(coordinator.snapshot()["waiting"], 1)
-        release.set()
-        for thread in threads:
-            thread.join(timeout=1)
+        try:
+            # Containerised production hosts can be busy immediately after an
+            # image build. Wait for both the active and queued states instead
+            # of assuming all three threads are scheduled within one second.
+            deadline = time.monotonic() + 5
+            started_count = 0
+            snapshot = coordinator.snapshot()
+            while time.monotonic() < deadline:
+                with lock:
+                    started_count = len(started)
+                snapshot = coordinator.snapshot()
+                if started_count == 2 and snapshot["waiting"] == 1:
+                    break
+                time.sleep(0.01)
+
+            self.assertEqual(started_count, 2)
+            self.assertEqual(snapshot["waiting"], 1)
+        finally:
+            release.set()
+            for thread in threads:
+                thread.join(timeout=5)
 
 
 if __name__ == "__main__":
