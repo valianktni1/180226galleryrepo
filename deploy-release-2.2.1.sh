@@ -3,7 +3,7 @@ set -euo pipefail
 
 STACK_DIR="/mnt/apps/dockge/data/180226galleryrepo"
 COMPOSE_FILE="$STACK_DIR/compose.yaml"
-RELEASE_COMMIT="bc4f702d97dded9044add667e51dfe6489205530"
+RELEASE_COMMIT="863f52c780b6ca01f2833f2cdf8ba4430437f901"
 RELEASE_COMPOSE="$(mktemp "$STACK_DIR/compose.release-2.2.1.XXXXXX")"
 
 cleanup_release_compose() {
