@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 74257)
-Total output lines: 6876
-
 from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, Form, Query, Header, Request, Body
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from dotenv import load_dotenv
@@ -2357,7 +2354,2140 @@ async def get_share_qr_frame(share_id: str, base_url: str = Query(...), token: O
         lb = draw.textbbox((0, 0), "Love", font=sf)
         sw = sb[2] - sb[0]
         tw2 = tb[2] - tb[0]
-        total_w = sw + t…24257 tokens truncated…st.client.host if request.client else "unknown")
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#555555')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#555555')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+
+    elif design == 5:
+        # ── BLUSH PEONY ── Romantic pink floral corners
+        frame = Image.open(str(TEMPLATES_DIR / "design_5_blush_peony.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#8B5E6B', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#A8808C', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#8B5E6B', font=sf)
+        
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#A8808C')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#A8808C')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#8B5E6B')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#A8808C')
+        add_brand(draw)
+
+    else:
+        # ── MINIMAL ── Clean white, built entirely from scratch
+        img = Image.new('RGB', (FW, FH), (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        
+        # "Share the Love" heading at y=15%
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        lw = lb[2] - lb[0]
+        total_w = sw + tw2 + lw + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        
+        # QR code at y=48%, ~28% width
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        qr_x = (FW - qr_size) // 2
+        qr_y = int(FH * 0.48) - qr_size // 2
+        img.paste(qr_img, (qr_x, qr_y))
+        draw = ImageDraw.Draw(img)
+        
+        # Instructions at y=68%
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#888888')
+        
+        # Couple name at y=78%
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        
+        # Date at y=87%
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        
+        add_brand(draw)
+    
+    # Save as PDF
+    buf = io.BytesIO()
+    img.save(buf, format="PDF", resolution=300.0)
+    buf.seek(0)
+    
+    safe_name = couple_name.replace(' ', '_').replace('&', 'and')
+    design_names = {1: "Floral", 2: "Wavy", 3: "Minimal", 4: "Classic_Noir", 5: "Blush_Peony"}
+    
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}_QR_{design_names.get(design, "Frame")}.pdf"'
+        }
+    )
+
+_qr_preview_cache = {}
+
+@api_router.get("/admin/qr-design-preview/{design_num}")
+async def get_qr_design_preview(design_num: int, token: Optional[str] = Query(None)):
+    """Return a small PNG thumbnail preview of a QR frame design (the template itself)."""
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            if payload.get("role") != "admin":
+                raise HTTPException(status_code=403)
+        except Exception:
+            raise HTTPException(status_code=401)
+    else:
+        raise HTTPException(status_code=401)
+
+    if design_num not in (1, 2, 3, 4, 5):
+        design_num = 1
+
+    if design_num in _qr_preview_cache:
+        buf = io.BytesIO(_qr_preview_cache[design_num])
+        return StreamingResponse(buf, media_type="image/png")
+
+    TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
+    names = {1: "design_1_botanical_gold.png", 2: "design_2_hearts.png", 3: "design_3_minimal.png", 4: "design_4_classic_noir.png", 5: "design_5_blush_peony.png"}
+    img = Image.open(str(TEMPLATES_DIR / names[design_num])).convert('RGB')
+    thumb = img.resize((480, 360), Image.LANCZOS)
+    buf = io.BytesIO()
+    thumb.save(buf, format="PNG", optimize=True)
+    _qr_preview_cache[design_num] = buf.getvalue()
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
+
+# ─── QR Picker Email System ───
+# Sends a branded email with 3 QR design previews. Couple clicks one → auto-emails the PDF.
+
+def _generate_qr_preview_png(share_url: str, couple_name: str, date_str: str, design: int, width=560, height=420) -> bytes:
+    """Generate a small preview PNG of a QR frame design with the actual QR code."""
+    from PIL import ImageDraw, ImageFont
+    
+    TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
+    FONTS_DIR = ROOT_DIR / "assets" / "fonts"
+    
+    FW, FH = width, height
+    
+    script_f = lambda s: ImageFont.truetype(str(FONTS_DIR / "GreatVibes-Regular.ttf"), s)
+    serif_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", s)
+    serif_bf = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf", s)
+    serif_if = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf", s)
+    sans_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", s)
+    
+    def make_qr_img(url, size=120):
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=6, border=1)
+        qr.add_data(url)
+        qr.make(fit=True)
+        qi = qr.make_image(fill_color="black", back_color="white").convert('RGB')
+        return qi.resize((size, size), Image.LANCZOS)
+    
+    def tc(draw, text, font, y, fill='black'):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((FW - tw) // 2, y), text, fill=fill, font=font)
+    
+    names = {1: "design_1_botanical_gold.png", 2: "design_2_hearts.png", 4: "design_4_classic_noir.png", 5: "design_5_blush_peony.png"}
+    
+    if design in names:
+        frame = Image.open(str(TEMPLATES_DIR / names[design])).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+    else:
+        img = Image.new('RGB', (FW, FH), (255, 255, 255))
+    
+    draw = ImageDraw.Draw(img)
+    
+    if design == 1:
+        sf = script_f(20)
+        tc(draw, "Share the Love", sf, int(FH * 0.10), fill='#1C1917')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name, script_f(16), int(FH * 0.72), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    elif design == 2:
+        tc(draw, "Capture THE LOVE", serif_bf(16), int(FH * 0.12), fill='#1C1917')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name.upper(), serif_bf(14), int(FH * 0.72), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    elif design == 4:
+        # Classic Noir — black & gold border, elegant serif text
+        tc(draw, "Share the Love", script_f(20), int(FH * 0.10), fill='#1C1917')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name, script_f(16), int(FH * 0.72), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    elif design == 5:
+        # Blush Peony — romantic floral corners, soft text
+        tc(draw, "Share the Love", script_f(20), int(FH * 0.10), fill='#8B5E6B')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name, script_f(16), int(FH * 0.72), fill='#8B5E6B')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#A8808C')
+    else:
+        sf = script_f(20)
+        tc(draw, "Share the Love", sf, int(FH * 0.10), fill='#1C1917')
+        qr_size = int(FW * 0.25)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.28)))
+        draw = ImageDraw.Draw(img)
+        tc(draw, couple_name, script_f(16), int(FH * 0.72), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(10), int(FH * 0.84), fill='#555555')
+    
+    # Add a subtle border
+    draw.rectangle([(0, 0), (FW - 1, FH - 1)], outline='#E8E4DC', width=2)
+    
+    # Design label at bottom
+    labels = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal", 4: "Classic Noir", 5: "Blush Peony"}
+    label = labels.get(design, "Design")
+    tc(draw, label, sans_f(11), FH - 22, fill='#A8A29E')
+    
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def _make_qr_picker_token(gallery_id: str) -> str:
+    """Create a signed JWT for the QR picker flow, valid for 60 days."""
+    return jwt.encode(
+        {"gallery_id": gallery_id, "purpose": "qr_pick", "exp": datetime.now(timezone.utc) + timedelta(days=60)},
+        JWT_SECRET, algorithm="HS256"
+    )
+
+def _verify_qr_picker_token(token: str) -> str:
+    """Verify and return gallery_id from a QR picker token."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        if payload.get("purpose") != "qr_pick":
+            raise HTTPException(status_code=403, detail="Invalid token")
+        return payload["gallery_id"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=410, detail="This link has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=403, detail="Invalid link")
+
+
+@api_router.get("/public/qr-preview/{token}/{design}")
+async def public_qr_preview(token: str, design: int):
+    """Public endpoint: serves a QR design preview PNG (used as img src in emails)."""
+    gallery_id = _verify_qr_picker_token(token)
+    
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404)
+    
+    # Find guest upload share
+    share = await db.shares.find_one(
+        {"gallery_id": gallery_id, "is_active": True, "guest_upload_mode": True}, {"_id": 0}
+    )
+    if not share:
+        # Fallback to any active share
+        share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="No share link found")
+    
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    site_url = smtp_doc.get("value", {}).get("site_url", "") if smtp_doc else ""
+    share_url = f"{site_url}/s/{share.get('custom_slug') or share['token']}" if site_url else f"/s/{share['token']}"
+    
+    import re
+    folder_name = gallery["folder_name"]
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
+    date_match = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{2,4})$', folder_name.strip())
+    date_str = f"{date_match.group(1)}.{date_match.group(2)}.{date_match.group(3)}" if date_match else ""
+    
+    if design not in (1, 2, 3, 4, 5):
+        design = 1
+    
+    png_bytes = _generate_qr_preview_png(share_url, couple_name, date_str, design)
+    
+    return StreamingResponse(
+        io.BytesIO(png_bytes),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+
+@api_router.get("/public/qr-select/{token}/{design}")
+async def public_qr_select(token: str, design: int, request: Request):
+    """Public endpoint: couple clicks a QR design → generates PDF and emails it to them."""
+    gallery_id = _verify_qr_picker_token(token)
+    
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404)
+    
+    client_email = gallery.get("client_email", "")
+    if not client_email:
+        return Response(
+            content="<html><body style='font-family:Georgia;text-align:center;padding:60px;'><h2>Sorry, no email address on file.</h2><p>Please contact your photographer.</p></body></html>",
+            media_type="text/html"
+        )
+    
+    # Find the guest upload share
+    share = await db.shares.find_one(
+        {"gallery_id": gallery_id, "is_active": True, "guest_upload_mode": True}, {"_id": 0}
+    )
+    if not share:
+        share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True}, {"_id": 0})
+    if not share:
+        return Response(
+            content="<html><body style='font-family:Georgia;text-align:center;padding:60px;'><h2>No share link found.</h2></body></html>",
+            media_type="text/html"
+        )
+    
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        return Response(
+            content="<html><body style='font-family:Georgia;text-align:center;padding:60px;'><h2>Email not configured.</h2></body></html>",
+            media_type="text/html"
+        )
+    smtp = smtp_doc["value"]
+    site_url = smtp.get("site_url", "")
+    share_url = f"{site_url}/s/{share.get('custom_slug') or share['token']}" if site_url else f"/s/{share['token']}"
+    
+    if design not in (1, 2, 3, 4, 5):
+        design = 1
+    
+    import re
+    folder_name = gallery["folder_name"]
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
+    
+    design_names = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal", 4: "Classic Noir", 5: "Blush Peony"}
+    design_label = design_names.get(design, "Design")
+    
+    # Generate the full PDF by calling the existing qr-frame logic
+    # We need to build it here to avoid auth issues
+    date_match = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{2,4})$', folder_name.strip())
+    date_str = f"{date_match.group(1)}.{date_match.group(2)}.{date_match.group(3)}" if date_match else ""
+    
+    from PIL import ImageDraw, ImageFont
+    FW, FH = 2400, 1800
+    FONTS_DIR = ROOT_DIR / "assets" / "fonts"
+    TEMPLATES_DIR = ROOT_DIR / "assets" / "qr_templates"
+    
+    script_f = lambda s: ImageFont.truetype(str(FONTS_DIR / "GreatVibes-Regular.ttf"), s)
+    serif_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", s)
+    serif_bf = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf", s)
+    serif_if = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf", s)
+    sans_f = lambda s: ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", s)
+    
+    def make_qr_img(url, size=550):
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=2)
+        qr.add_data(url)
+        qr.make(fit=True)
+        qi = qr.make_image(fill_color="black", back_color="white").convert('RGB')
+        return qi.resize((size, size), Image.LANCZOS)
+    
+    def tc(draw, text, font, y, fill='black'):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((FW - tw) // 2, y), text, fill=fill, font=font)
+    
+    def add_brand(draw):
+        b = "Designed and hosted by Weddings By Mark"
+        bf = sans_f(22)
+        bbox = draw.textbbox((0, 0), b, font=bf)
+        draw.text((FW - (bbox[2] - bbox[0]) - 60, FH - 60), b, fill='#AAAAAA', font=bf)
+    
+    SX = FW / 1264.0
+    SY = FH / 848.0
+    
+    if design == 1:
+        frame = Image.open(str(TEMPLATES_DIR / "design_1_botanical_gold.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        lw = lb[2] - lb[0]
+        total_w = sw + tw2 + lw + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#888888')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    elif design == 2:
+        frame = Image.open(str(TEMPLATES_DIR / "design_2_hearts.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        cap_font = script_f(int(60 * SX))
+        love_font = serif_bf(int(40 * SX))
+        cap_bb = draw.textbbox((0, 0), "Capture", font=cap_font)
+        love_bb = draw.textbbox((0, 0), "THE LOVE", font=love_font)
+        cap_w = cap_bb[2] - cap_bb[0]
+        total = cap_w + (love_bb[2] - love_bb[0]) + 30
+        sx = (FW - total) // 2
+        head_y = int(FH * 0.22)
+        draw.text((sx, head_y), "Capture", fill='#1C1917', font=cap_font)
+        draw.text((sx + cap_w + 30, head_y + int(25 * SY)), "THE LOVE", fill='#1C1917', font=love_font)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.50) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(17 * SX)), int(FH * 0.71), fill='#333333')
+        tc(draw, "JUST SCAN THE QR CODE", sans_f(int(14 * SX)), int(FH * 0.74), fill='#555555')
+        tc(draw, couple_name.upper(), serif_bf(int(35 * SX)), int(FH * 0.79), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    elif design == 4:
+        frame = Image.open(str(TEMPLATES_DIR / "design_4_classic_noir.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#555555')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#555555')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    elif design == 5:
+        frame = Image.open(str(TEMPLATES_DIR / "design_5_blush_peony.png")).convert('RGB')
+        img = frame.resize((FW, FH), Image.LANCZOS)
+        draw = ImageDraw.Draw(img)
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#8B5E6B', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#A8808C', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#8B5E6B', font=sf)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#A8808C')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#A8808C')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#8B5E6B')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#A8808C')
+        add_brand(draw)
+    else:
+        img = Image.new('RGB', (FW, FH), (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        sf = script_f(int(75 * SX))
+        tf = serif_if(int(25 * SX))
+        sb = draw.textbbox((0, 0), "Share", font=sf)
+        tb = draw.textbbox((0, 0), "the", font=tf)
+        lb = draw.textbbox((0, 0), "Love", font=sf)
+        sw = sb[2] - sb[0]
+        tw2 = tb[2] - tb[0]
+        total_w = sw + tw2 + (lb[2] - lb[0]) + int(40 * SX)
+        sx = (FW - total_w) // 2
+        ty = int(FH * 0.15)
+        draw.text((sx, ty), "Share", fill='#1C1917', font=sf)
+        draw.text((sx + sw + int(20 * SX), ty + int(40 * SY)), "the", fill='#666666', font=tf)
+        draw.text((sx + sw + int(20 * SX) + tw2 + int(20 * SX), ty), "Love", fill='#1C1917', font=sf)
+        qr_size = int(FW * 0.28)
+        qr_img = make_qr_img(share_url, qr_size)
+        img.paste(qr_img, ((FW - qr_size) // 2, int(FH * 0.48) - qr_size // 2))
+        draw = ImageDraw.Draw(img)
+        tc(draw, "PLEASE SCAN THIS CODE TO UPLOAD &", sans_f(int(15 * SX)), int(FH * 0.68), fill='#888888')
+        tc(draw, "SHARE YOUR PHOTOS WITH US!", sans_f(int(15 * SX)), int(FH * 0.71), fill='#888888')
+        tc(draw, couple_name, script_f(int(50 * SX)), int(FH * 0.78), fill='#1C1917')
+        if date_str:
+            tc(draw, date_str, serif_f(int(20 * SX)), int(FH * 0.87), fill='#555555')
+        add_brand(draw)
+    
+    # Save as PDF
+    pdf_buf = io.BytesIO()
+    img.save(pdf_buf, format="PDF", resolution=300.0)
+    pdf_bytes = pdf_buf.getvalue()
+    safe_name = couple_name.replace(' ', '_').replace('&', 'and')
+    
+    # Email the PDF to the couple
+    awards_url = get_awards_url(smtp)
+    email_html = build_branded_email(f"""
+<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">
+Great choice! You selected the <strong>{design_label}</strong> design.
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">
+Your personalised QR code is attached as a PDF — ready to print at any size for your big day!
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 12px 0;line-height:1.8;">
+We recommend printing at <strong>8&times;6 inches</strong> or larger for best quality.
+</p>
+<p style="font-size:14px;color:#A8A29E;margin:20px 0 0 0;font-style:italic;">
+With love, Weddings By Mark
+</p>
+""", awards_url)
+    
+    try:
+        send_smtp_email(
+            smtp, client_email,
+            f"Your QR Code — {design_label} Design",
+            email_html,
+            [{"filename": f"{safe_name}_QR_{design_label.replace(' ', '_')}.pdf", "data": pdf_bytes}]
+        )
+    except Exception as e:
+        logging.error(f"QR picker email failed: {e}")
+        return Response(
+            content=f"""<html><body style="font-family:Georgia,'Times New Roman',serif;text-align:center;padding:60px;background:#FDFCF8;">
+<h2 style="color:#1C1917;">Oops!</h2>
+<p style="color:#57534E;">We couldn't send the email right now. Please contact your photographer.</p>
+</body></html>""",
+            media_type="text/html"
+        )
+    
+    # Log it
+    await db.email_log.insert_one({
+        "type": "qr_picker_delivery",
+        "design": design_label,
+        "gallery_id": gallery_id,
+        "gallery_name": couple_name,
+        "recipient": client_email,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Return a beautiful thank-you page
+    return Response(
+        content=f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR Code Sent!</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Manrope:wght@300;400&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:60px 20px;background:#FDFCF8;font-family:'Manrope',sans-serif;text-align:center;min-height:100vh;display:flex;align-items:center;justify-content:center;">
+<div style="max-width:480px;">
+<div style="width:64px;height:64px;border-radius:50%;background:#1C1917;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+</div>
+<h1 style="font-family:'Cormorant Garamond',Georgia,serif;font-size:32px;color:#1C1917;margin:0 0 12px;font-weight:400;">
+Beautiful Choice!
+</h1>
+<p style="font-size:15px;color:#57534E;line-height:1.7;margin:0 0 8px;">
+The <strong>{design_label}</strong> QR code has been sent to
+</p>
+<p style="font-size:14px;color:#D4AF37;margin:0 0 24px;letter-spacing:0.5px;">
+{client_email}
+</p>
+<p style="font-size:13px;color:#A8A29E;line-height:1.6;">
+Check your inbox (and spam folder, just in case!) for a PDF ready to print.
+</p>
+<div style="margin-top:32px;height:1px;background:linear-gradient(to right,transparent,#D4AF37,transparent);"></div>
+<p style="margin-top:20px;font-size:12px;color:#A8A29E;letter-spacing:1.5px;text-transform:uppercase;">Weddings By Mark</p>
+</div>
+</body>
+</html>""",
+        media_type="text/html"
+    )
+
+
+@api_router.post("/admin/galleries/{gallery_id}/send-qr-picker")
+async def send_qr_picker_email(gallery_id: str, admin=Depends(get_admin)):
+    """Send the QR design picker email to the couple."""
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    client_email = gallery.get("client_email", "")
+    if not client_email:
+        raise HTTPException(status_code=400, detail="No client email set for this gallery")
+    
+    # Find guest upload share first
+    share = await db.shares.find_one(
+        {"gallery_id": gallery_id, "is_active": True, "guest_upload_mode": True}, {"_id": 0}
+    )
+    if not share:
+        share = await db.shares.find_one({"gallery_id": gallery_id, "is_active": True}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=400, detail="No active share link found. Create a Guest Upload share first.")
+    
+    smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+    if not smtp_doc or not smtp_doc.get("value", {}).get("smtp_email"):
+        raise HTTPException(status_code=400, detail="SMTP not configured. Go to Settings > Email to set up.")
+    smtp = smtp_doc["value"]
+    site_url = smtp.get("site_url", "").rstrip("/")
+    
+    if not site_url:
+        raise HTTPException(status_code=400, detail="Site URL not set in SMTP settings. Please set it so email links work.")
+    
+    import re
+    folder_name = gallery["folder_name"]
+    couple_name = re.sub(r'\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$', '', folder_name).strip() or folder_name
+    
+    # Generate a signed token for the public endpoints
+    picker_token = _make_qr_picker_token(gallery_id)
+    
+    # Build preview image URLs
+    previews = {i: f"{site_url}/api/public/qr-preview/{picker_token}/{i}" for i in range(1, 6)}
+    selects = {i: f"{site_url}/api/public/qr-select/{picker_token}/{i}" for i in range(1, 6)}
+    
+    awards_url = get_awards_url(smtp)
+    
+    design_labels = {1: "Botanical Gold", 2: "Rose Hearts", 3: "Elegant Minimal", 4: "Classic Noir", 5: "Blush Peony"}
+    
+    def _qr_cell(num):
+        return f"""<td width="33%" align="center" valign="top" style="padding:0 6px 16px;">
+<a href="{selects[num]}" target="_blank" style="text-decoration:none;display:block;">
+<img src="{previews[num]}" alt="{design_labels[num]}" style="width:100%;max-width:170px;border-radius:6px;border:2px solid #E8E4DC;" />
+<p style="font-size:12px;color:#D4AF37;margin:8px 0 2px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">{design_labels[num]}</p>
+<p style="font-size:11px;color:#A8A29E;margin:0;">Click to select</p>
+</a>
+</td>"""
+    
+    email_content = f"""
+<p style="font-size:22px;color:#1C1917;font-family:Georgia,'Times New Roman',serif;margin:0 0 8px 0;font-weight:normal;">
+Hi {couple_name},
+</p>
+<p style="font-size:15px;color:#57534E;margin:0 0 20px 0;line-height:1.8;">
+Your guest upload link is ready! Now it's time to choose your QR code design. Pick your favourite below and we'll send you a print-ready PDF straight to your inbox.
+</p>
+
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
+<tr>
+{_qr_cell(1)}
+{_qr_cell(2)}
+{_qr_cell(3)}
+</tr>
+<tr>
+<td width="33%"></td>
+{_qr_cell(4)}
+{_qr_cell(5)}
+</tr>
+</table>
+
+<div style="text-align:center;margin:16px 0 0;padding:16px 0 0;border-top:1px solid #F5F2EB;">
+<p style="font-size:13px;color:#A8A29E;line-height:1.6;margin:0;">
+Simply click on your favourite design above and the print-ready PDF will be emailed to you automatically. Easy!
+</p>
+</div>
+"""
+    
+    html_content = build_branded_email(email_content, awards_url)
+    
+    try:
+        send_smtp_email(smtp, client_email, f"Choose Your QR Code Design — {couple_name}", html_content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to send email: {str(e)}")
+    
+    # Log
+    await db.email_log.insert_one({
+        "type": "qr_picker",
+        "gallery_id": gallery_id,
+        "gallery_name": couple_name,
+        "recipient": client_email,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"success": True, "message": f"QR picker email sent to {client_email}"}
+
+
+
+# ─── Slideshow Music ───
+MUSIC_DIR = Path(__file__).parent / "assets" / "slideshow_music"
+
+@api_router.get("/slideshow/music/{filename}")
+async def serve_slideshow_music(filename: str, request: Request):
+    safe_name = require_safe_component(filename, "music filename")
+    try:
+        file_path = contained_path(MUSIC_DIR, safe_name, labels=("music filename",))
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not file_path.exists() or not safe_name.endswith('.mp3'):
+        raise HTTPException(status_code=404, detail="Track not found")
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get("range")
+    if range_header:
+        range_val = range_header.strip().split("=")[-1]
+        parts = range_val.split("-")
+        start = int(parts[0])
+        end = int(parts[1]) if parts[1] else min(start + 1024 * 1024, file_size - 1)
+        end = min(end, file_size - 1)
+        length = end - start + 1
+        def iter_range():
+            with open(file_path, "rb") as fh:
+                fh.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = fh.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+        return StreamingResponse(iter_range(), status_code=206, media_type="audio/mpeg", headers={
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes", "Content-Length": str(length),
+        })
+    return FileResponse(file_path, media_type="audio/mpeg", headers={"Accept-Ranges": "bytes"})
+
+# ─── Media Serving ───
+@api_router.get("/media/thumb/{gallery_id}/{subfolder_slug}/{filename}")
+async def serve_thumb(gallery_id: str, subfolder_slug: str, filename: str):
+    try:
+        file_path = contained_path(
+            CACHE_DIR,
+            gallery_id,
+            subfolder_slug,
+            filename,
+            labels=("gallery id", "subfolder cache key", "thumbnail filename"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    return FileResponse(file_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=2592000, immutable"})
+
+@api_router.get("/media/preview/{gallery_id}/{subfolder_slug}/{filename}")
+async def serve_preview(gallery_id: str, subfolder_slug: str, filename: str):
+    try:
+        file_path = contained_path(
+            CACHE_DIR,
+            gallery_id,
+            subfolder_slug,
+            filename,
+            labels=("gallery id", "subfolder cache key", "preview filename"),
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Preview not found")
+    return FileResponse(file_path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=2592000, immutable"})
+
+@api_router.get("/media/original/{gallery_id}/{subfolder}/{filename}")
+async def serve_original(
+    gallery_id: str,
+    subfolder: str,
+    filename: str,
+    authorization: str = Header(None),
+    t: str = Query(None),
+):
+    auth_token = t
+    if authorization:
+        auth_token = authorization.replace("Bearer ", "")
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = verify_jwt(auth_token)
+    if payload.get("role") == "share":
+        payload = await validate_live_share_session(payload)
+        if payload.get("gallery_id") != gallery_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if payload.get("subfolder") and payload.get("subfolder") != subfolder:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    file_doc = await db.files.find_one(
+        {"gallery_id": gallery_id, "subfolder": subfolder, "filename": filename},
+        {"_id": 0, "id": 1},
+    )
+    if not file_doc:
+        raise HTTPException(status_code=404, detail="File not found")
+    file_path = get_gallery_file_path(gallery["folder_name"], subfolder, filename)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
+
+# ─── Public Email Assets ───
+EMAIL_ASSETS_DIR = Path(__file__).parent / "assets"
+
+@api_router.get("/public/email-assets/{filename}")
+async def get_email_asset(filename: str):
+    """Serve email assets (like awards badges) publicly for email clients."""
+    try:
+        file_path = contained_path(EMAIL_ASSETS_DIR, filename, labels=("email asset filename",))
+    except UnsafePathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return FileResponse(file_path, media_type="image/png", headers={"Cache-Control": "public, max-age=31536000"})
+
+# ─── Public Share Access ───
+@api_router.get("/share/{token}")
+async def get_share_info(token: str):
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    if is_share_expired(share):
+        raise HTTPException(status_code=410, detail="This share link has expired")
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    # Get a cover image
+    query = {"gallery_id": share["gallery_id"], "file_type": "photo"}
+    if share.get("subfolder"):
+        query["subfolder"] = share["subfolder"]
+    first_file = await db.files.find_one(query, {"_id": 0})
+    cover_url = None
+    if first_file and first_file.get("has_preview"):
+        cover_url = f"/api/media/preview/{gallery['id']}/{slugify(first_file['subfolder'])}/{Path(first_file['filename']).stem}.preview.jpg"
+
+    file_count = await db.files.count_documents(query)
+
+    return {
+        "gallery_name": gallery["folder_name"],
+        "label": share.get("label", gallery["folder_name"]),
+        "subfolder": share.get("subfolder"),
+        "has_password": share.get("has_password", False),
+        "access_level": share.get("access_level", "download"),
+        "allow_uploads": share.get("allow_uploads", False),
+        "guest_upload_mode": share.get("guest_upload_mode", False),
+        "allow_all_file_types": share.get("allow_all_file_types", False),
+        "expires_at": share.get("expires_at"),
+        "cover_url": cover_url,
+        "file_count": file_count
+    }
+
+@api_router.post("/share/{token}/access")
+async def access_share(token: str, body: ShareAccessBody = None):
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    if is_share_expired(share):
+        raise HTTPException(status_code=410, detail="This share link has expired")
+
+    if share.get("has_password") and share.get("password_hash"):
+        if not body or not body.password:
+            raise HTTPException(status_code=401, detail="Password required")
+        if not bcrypt.checkpw(body.password.encode(), share["password_hash"].encode()):
+            raise HTTPException(status_code=401, detail="Invalid password")
+
+    # Use provided viewer_id or generate new one (for persistent favourites)
+    session_id = body.viewer_id if body and body.viewer_id else str(uuid.uuid4())
+    
+    access_level = share.get("access_level", "download")
+    jwt_token = create_jwt({
+        "sub": session_id,
+        "role": "share",
+        "share_id": share["id"],
+        "gallery_id": share["gallery_id"],
+        "subfolder": share.get("subfolder"),
+        "access_level": access_level,
+        "allow_uploads": access_level in ("upload", "full"),
+        "allow_downloads": access_level in ("download", "upload", "full"),
+        "allow_delete": access_level == "full",
+        "token": token
+    }, expires_hours=72)
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+    return {"jwt": jwt_token, "viewer_id": session_id, "gallery_name": gallery["folder_name"] if gallery else ""}
+
+@api_router.get("/share/{token}/open-access")
+async def open_access_share(token: str, viewer_id: str = Query(None)):
+    """For shares without password - get JWT directly."""
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    if is_share_expired(share):
+        raise HTTPException(status_code=410, detail="This share link has expired")
+    if share.get("has_password"):
+        raise HTTPException(status_code=401, detail="Password required")
+    
+    # Use provided viewer_id or generate new one (for persistent favourites)
+    session_id = viewer_id if viewer_id else str(uuid.uuid4())
+    
+    access_level = share.get("access_level", "download")
+    jwt_token = create_jwt({
+        "sub": session_id,
+        "role": "share",
+        "share_id": share["id"],
+        "gallery_id": share["gallery_id"],
+        "subfolder": share.get("subfolder"),
+        "access_level": access_level,
+        "allow_uploads": access_level in ("upload", "full"),
+        "allow_downloads": access_level in ("download", "upload", "full"),
+        "allow_delete": access_level == "full",
+        "token": token
+    }, expires_hours=72)
+    gallery = await db.galleries.find_one({"id": share["gallery_id"]}, {"_id": 0})
+    return {"jwt": jwt_token, "viewer_id": session_id, "gallery_name": gallery["folder_name"] if gallery else ""}
+
+@api_router.get("/share/{token}/files")
+async def get_share_files(token: str, session=Depends(get_share_session)):
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    subfolder = session.get("subfolder")
+    if subfolder:
+        files = await db.files.find({"gallery_id": gallery_id, "subfolder": subfolder}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
+        subfolders_data = [{
+            "name": subfolder,
+            "files": files
+        }]
+    else:
+        # Single query for ALL files, then group by subfolder
+        all_files = await db.files.find({"gallery_id": gallery_id}, {"_id": 0}).sort("uploaded_at", 1).to_list(50000)
+        files_by_sf = {}
+        for f in all_files:
+            files_by_sf.setdefault(f["subfolder"], []).append(f)
+        subfolders_data = [{"name": sf, "files": files_by_sf.get(sf, [])} for sf in gallery["subfolders"]]
+
+    # Album choices are gallery-owned (shared across the couple's devices).
+    # Legacy browser-session favourites remain untouched for galleries where
+    # the optional album workflow is disabled.
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    album_policy = public_album_selection(gallery, share)
+    if album_policy.get("enabled"):
+        fav_ids = set(album_policy.get("selected_file_ids", []))
+    else:
+        favs = await db.favourites.find(
+            {"session_id": session["sub"], "gallery_id": gallery_id}, {"_id": 0}
+        ).to_list(50000)
+        fav_ids = {f["file_id"] for f in favs}
+
+    for sf_data in subfolders_data:
+        for f in sf_data["files"]:
+            f["is_favourite"] = f["id"] in fav_ids
+
+    return {
+        "gallery_id": gallery_id,
+        "gallery_name": gallery["folder_name"],
+        "theme": gallery.get("theme", "classic_gold"),
+        "subfolders": subfolders_data,
+        "covers": gallery.get("covers", {}),
+        "access_level": session.get("access_level", "download"),
+        "allow_uploads": session.get("allow_uploads", False),
+        "allow_downloads": session.get("allow_downloads", True),
+        "allow_delete": session.get("allow_delete", False),
+        "allow_all_file_types": share.get("allow_all_file_types", False) if share else False,
+        "album_selection": album_policy,
+    }
+
+@api_router.post("/share/{token}/favourite")
+async def toggle_share_favourite(token: str, data: FavouriteToggle, session=Depends(get_share_session)):
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not gallery or not album_selection_available(gallery, share):
+        raise HTTPException(status_code=403, detail="Album selection is not enabled for this gallery")
+    visible_file = await db.files.find_one(
+        share_file_query(session, id=data.file_id),
+        {"_id": 0},
+    )
+    if not visible_file:
+        raise HTTPException(status_code=404, detail="File not found")
+    if visible_file.get("file_type") != "photo" or visible_file.get("subfolder") in (
+        "Album Favourites", "Guest Uploads"
+    ):
+        raise HTTPException(status_code=400, detail="Only gallery photos can be chosen for the album")
+    try:
+        state, selected_now = toggle_album_photo(gallery, data.file_id)
+    except AlbumSelectionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    await db.galleries.update_one(
+        {"id": session["gallery_id"]},
+        {"$set": {
+            "album_selection": state,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {
+        "favourited": selected_now,
+        "album_selection": public_album_selection(
+            {**gallery, "album_selection": state}, share
+        ),
+    }
+
+@api_router.post("/share/{token}/submit-favourites")
+async def submit_favourites_to_album(token: str, request: Request, session=Depends(get_share_session)):
+    """Validate, copy and lock one complete album selection."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not album_selection_available(gallery, share):
+        raise HTTPException(status_code=403, detail="Album selection is not enabled for this gallery")
+
+    try:
+        submitted_state = mark_album_submitted(gallery)
+    except AlbumSelectionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    selected_ids = submitted_state["selected_file_ids"]
+    selected_files = await db.files.find({
+        "gallery_id": gallery_id,
+        "id": {"$in": selected_ids},
+        "file_type": "photo",
+        "subfolder": {"$nin": ["Album Favourites", "Guest Uploads"]},
+    }, {"_id": 0}).to_list(100)
+    selected_by_id = {item["id"]: item for item in selected_files}
+    selected_files = [selected_by_id[file_id] for file_id in selected_ids if file_id in selected_by_id]
+    if len(selected_files) != submitted_state["limit"]:
+        raise HTTPException(
+            status_code=409,
+            detail="One or more selected photos is no longer available. Please reopen the gallery choices and review them.",
+        )
+
+    cover_source = await db.files.find_one({
+        "gallery_id": gallery_id,
+        "id": submitted_state["cover_file_id"],
+        "file_type": "photo",
+        "subfolder": {"$nin": ["Album Favourites", "Guest Uploads"]},
+    }, {"_id": 0})
+    if not cover_source:
+        raise HTTPException(status_code=409, detail="The chosen cover photo is no longer available")
+
+    sources = [*selected_files, cover_source]
+    for source in sources:
+        source_path = get_gallery_file_path(
+            gallery["folder_name"], source["subfolder"], source["filename"]
+        )
+        if not source_path.is_file():
+            raise HTTPException(
+                status_code=409,
+                detail=f"{source.get('original_filename') or source['filename']} is missing from storage",
+            )
+
+    target_subfolder = "Album Favourites"
+    if target_subfolder not in gallery["subfolders"]:
+        gallery["subfolders"] = [*gallery.get("subfolders", []), target_subfolder]
+
+    target_dir = get_gallery_subfolder_path(gallery["folder_name"], target_subfolder)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Keep the previous completed revision intact until every new file has
+    # copied successfully. If a disk error occurs, the new partial copies are
+    # removed and the last good submission remains available.
+    previous_generated = await db.files.find({
+        "gallery_id": gallery_id,
+        "subfolder": target_subfolder,
+        "album_revision": {"$exists": True},
+    }, {"_id": 0}).to_list(500)
+    created_docs = []
+    created_paths = []
+    created_cache_paths = []
+
+    async def copy_choice(source: dict, uploaded_by: str, preferred_name: str | None = None) -> dict:
+        src_path = get_gallery_file_path(
+            gallery["folder_name"], source["subfolder"], source["filename"]
+        )
+        dest_name = safe_filename(preferred_name or source["filename"], target_dir)
+        dest_path = get_gallery_file_path(
+            gallery["folder_name"], target_subfolder, dest_name
+        )
+        thumb_path = get_thumb_path(gallery_id, target_subfolder, dest_name)
+        preview_path = get_preview_path(gallery_id, target_subfolder, dest_name)
+        created_paths.append(dest_path)
+        created_cache_paths.extend([thumb_path, preview_path])
+
+        def prepare_copy():
+            shutil.copy2(src_path, dest_path)
+            has_thumb = make_thumbnail(dest_path, thumb_path)
+            has_preview = make_preview(dest_path, preview_path)
+            return dest_path.stat().st_size, has_thumb, has_preview
+
+        # Copying and rendering up to 61 full-resolution photographs is disk
+        # and CPU work. Keep it off FastAPI's event loop so other couples can
+        # continue browsing and downloading during submission.
+        file_size, has_thumb, has_preview = await asyncio.to_thread(prepare_copy)
+        new_doc = {
+            "id": str(uuid.uuid4()),
+            "gallery_id": gallery_id,
+            "subfolder": target_subfolder,
+            "filename": dest_name,
+            "original_filename": source.get("original_filename") or source["filename"],
+            "file_type": "photo",
+            "file_size": file_size,
+            "has_thumb": has_thumb,
+            "has_preview": has_preview,
+            "uploaded_by": uploaded_by,
+            "source_file_id": source["id"],
+            "album_revision": submitted_state["revision"],
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.files.insert_one(new_doc)
+        created_docs.append(new_doc)
+        return new_doc
+
+    try:
+        for source in selected_files:
+            await copy_choice(source, "client_favourite")
+        cover_copy = await copy_choice(
+            cover_source,
+            "client_album_cover",
+            f"COVER - {cover_source['filename']}",
+        )
+    except Exception:
+        if created_docs:
+            await db.files.delete_many({"id": {"$in": [doc["id"] for doc in created_docs]}})
+        for created_path in created_paths:
+            created_path.unlink(missing_ok=True)
+        for cache_path in created_cache_paths:
+            cache_path.unlink(missing_ok=True)
+        raise
+
+    # The complete new revision now exists; retire only earlier generated
+    # revisions. Admin-added or legacy files are never deleted here.
+    if previous_generated:
+        await db.files.delete_many({"id": {"$in": [doc["id"] for doc in previous_generated]}})
+        for old_doc in previous_generated:
+            old_path = get_gallery_file_path(
+                gallery["folder_name"], target_subfolder, old_doc["filename"]
+            )
+            old_path.unlink(missing_ok=True)
+            get_thumb_path(gallery_id, target_subfolder, old_doc["filename"]).unlink(missing_ok=True)
+            get_preview_path(gallery_id, target_subfolder, old_doc["filename"]).unlink(missing_ok=True)
+
+    album_cover_choice = {
+        "file_id": cover_copy["id"],
+        "source_file_id": cover_source["id"],
+        "filename": cover_copy["filename"],
+        "original_filename": cover_source.get("original_filename") or cover_source["filename"],
+        "chosen_at": submitted_state.get("cover_chosen_at"),
+        "submitted_at": submitted_state["submitted_at"],
+        "revision": submitted_state["revision"],
+    }
+    count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": target_subfolder})
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {
+            "subfolders": gallery["subfolders"],
+            "album_selection": submitted_state,
+            "album_cover_choice": album_cover_choice,
+            f"file_counts.{target_subfolder}": count,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "gallery_name": gallery.get("folder_name", "Unknown"),
+        "share_label": share.get("label", token) if share else token,
+        "action": "favourites_submitted",
+        "details": (
+            f"Album revision {submitted_state['revision']} submitted: "
+            f"{submitted_state['limit']} photos plus cover {submitted_state['cover_filename']}"
+        ),
+        "ip_address": client_ip,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+    try:
+        smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
+        if smtp_doc and smtp_doc.get("value", {}).get("smtp_email"):
+            smtp = smtp_doc["value"]
+            admin_email = smtp.get("smtp_email", "")
+            awards_url = get_awards_url(smtp)
+            couple_name = gallery["folder_name"]
+            email_html = build_branded_email(f"""
+<p style="font-size:22px;color:#1C1917;font-family:Georgia,'Times New Roman',serif;margin:0 0 8px 0;">Album Choices Submitted</p>
+<p style="font-size:15px;color:#57534E;line-height:1.8;"><strong>{couple_name}</strong> has completed and locked their album choices.</p>
+<table style="width:100%;border-collapse:collapse;margin:18px 0;">
+<tr><td style="padding:10px;border-bottom:1px solid #E8E4DC;">Album photos</td><td style="padding:10px;border-bottom:1px solid #E8E4DC;text-align:right;"><strong>{submitted_state['limit']}</strong></td></tr>
+<tr><td style="padding:10px;border-bottom:1px solid #E8E4DC;">Separate cover</td><td style="padding:10px;border-bottom:1px solid #E8E4DC;text-align:right;"><strong>{submitted_state['cover_filename']}</strong></td></tr>
+<tr><td style="padding:10px;">Revision</td><td style="padding:10px;text-align:right;"><strong>{submitted_state['revision']}</strong></td></tr>
+</table>
+<p style="font-size:14px;color:#57534E;">The completed files are ready in the <strong>Album Favourites</strong> folder. The cover copy is clearly named <strong>COVER</strong>.</p>
+""", awards_url)
+            send_smtp_email(
+                smtp,
+                admin_email,
+                f"Album Choices Submitted — {couple_name}",
+                email_html,
+            )
+    except Exception as exc:
+        logger.warning("Failed to send album submission notification email: %s", exc)
+
+    return {
+        "copied": len(created_docs),
+        "total_favourites": submitted_state["limit"],
+        "cover_filename": submitted_state["cover_filename"],
+        "album_selection": public_album_selection(
+            {
+                **gallery,
+                "album_selection": submitted_state,
+                "album_cover_choice": album_cover_choice,
+            },
+            share,
+        ),
+    }
+
+
+@api_router.post("/share/{token}/choose-album-cover")
+async def choose_album_cover(token: str, request: Request, session=Depends(get_share_session)):
+    """Save the separate cover choice before the final album submission."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    body = await request.json()
+    file_id = body.get("file_id")
+    if not file_id:
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not album_selection_available(gallery, share):
+        raise HTTPException(status_code=403, detail="Album selection is not enabled for this gallery")
+
+    file_doc = await db.files.find_one({
+        "id": file_id,
+        "gallery_id": gallery_id,
+        "file_type": "photo",
+        "subfolder": {"$nin": ["Album Favourites", "Guest Uploads"]},
+    }, {"_id": 0})
+    if not file_doc:
+        raise HTTPException(status_code=404, detail="Cover photo not found in this gallery")
+
+    filename = file_doc.get("original_filename") or file_doc["filename"]
+    try:
+        state = choose_album_cover_state(gallery, file_id, filename)
+    except AlbumSelectionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {
+            "album_selection": state,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+
+    folder_name = gallery["folder_name"]
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "gallery_name": folder_name,
+        "share_label": share.get("label", token) if share else token,
+        "action": "album_cover_chosen",
+        "details": f"Cover choice staged: {filename}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {
+        "success": True,
+        "message": "Cover choice saved!",
+        "filename": filename,
+        "album_selection": public_album_selection(
+            {**gallery, "album_selection": state}, share
+        ),
+    }
+
+
+@api_router.get("/share/{token}/album-cover-choice")
+async def get_album_cover_choice(token: str, session=Depends(get_share_session)):
+    """Get the current album cover choice for this gallery."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    policy = public_album_selection(gallery, share)
+    choice = None
+    if policy.get("enabled") and policy.get("cover_file_id"):
+        choice = {
+            "file_id": policy["cover_file_id"],
+            "filename": policy.get("cover_filename"),
+            "chosen_at": normalise_album_selection(gallery).get("cover_chosen_at"),
+        }
+    return {"choice": choice, "album_selection": policy}
+
+
+
+async def _log_download(gallery_id, gallery_name, share_label, client_ip,
+                        download_type, filenames, subfolder, downloaded_count, total_in_scope):
+    """Log a detailed download event to activity_log.
+    download_type: 'single', 'selection', 'album', 'favourites'
+    """
+    if downloaded_count >= total_in_scope and total_in_scope > 1:
+        completeness = "full"
+    elif downloaded_count == 1:
+        completeness = "single"
+    else:
+        completeness = "partial"
+
+    if download_type == "single":
+        details = f"Downloaded 1 file: {filenames[0]}"
+    elif download_type == "favourites":
+        details = f"Downloaded {downloaded_count} favourites as ZIP"
+    else:
+        scope = f" from {subfolder}" if subfolder else " (full gallery)"
+        details = f"Downloaded {downloaded_count}/{total_in_scope} files{scope}"
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    await db.activity.update_one(
+        {"gallery_id": gallery_id, "date": today},
+        {"$inc": {"downloads": 1}},
+        upsert=True
+    )
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$inc": {"total_downloads": 1}}
+    )
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "gallery_name": gallery_name,
+        "share_label": share_label,
+        "action": "download",
+        "download_type": download_type,
+        "completeness": completeness,
+        "details": details,
+        "files_downloaded": filenames[:50],  # Cap at 50 to avoid huge docs
+        "files_count": downloaded_count,
+        "total_available": total_in_scope,
+        "subfolder": subfolder,
+        "ip_address": client_ip,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@api_router.get("/share/{token}/video-token/{file_id}")
+async def get_video_playback_token(token: str, file_id: str, t: str = Query(None)):
+    """Generate a short-lived playback token with file path baked in — no DB lookups during streaming."""
+    if not t:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = verify_jwt(t)
+    payload = await validate_live_share_session(payload, expected_token=token)
+    f = await db.files.find_one(share_file_query(payload, id=file_id), {"_id": 0})
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+    gallery = await db.galleries.find_one({"id": payload["gallery_id"]}, {"_id": 0})
+    file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    # Check for web-optimised version (smaller, smoother streaming)
+    web_path = get_web_version_path(file_path)
+    stream_filename = web_path.name if web_path.exists() else f["filename"]
+    
+    # If nginx video server is configured, use it (zero Python involvement in streaming)
+    if NGINX_VIDEO_URL:
+        url = generate_nginx_video_url(gallery["folder_name"], f["subfolder"], stream_filename)
+        # Log estimated video bandwidth (file size of streamed version)
+        stream_path = web_path if web_path.exists() else file_path
+        await log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
+        return {"url": url, "mode": "nginx"}
+    
+    # Fallback: Python streaming with JWT token (zero DB calls during playback)
+    stream_path = web_path if web_path.exists() else file_path
+    await log_bandwidth_event("video_stream", stream_path.stat().st_size if stream_path.exists() else 0, f["filename"])
+    vtoken = create_jwt({"role": "video", "path": str(stream_path)}, expires_hours=2)
+    return {"url": f"/api/v/{vtoken}", "mode": "direct"}
+
+@api_router.get("/v/{vtoken}")
+async def stream_video_direct(vtoken: str, request: Request):
+    """Ultra-lightweight video streaming — JWT contains file path, zero DB calls."""
+    payload = verify_jwt(vtoken)
+    if payload.get("role") != "video":
+        raise HTTPException(status_code=403, detail="Invalid video token")
+    file_path = Path(payload["path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_size = file_path.stat().st_size
+    ext = file_path.suffix.lower()
+    content_types = {'.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+                     '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska', '.mts': 'video/mp2t'}
+    content_type = content_types.get(ext, 'video/mp4')
+    CHUNK_SIZE = 1024 * 1024  # 1MB chunks for large files
+
+    range_header = request.headers.get("range")
+    if range_header:
+        range_val = range_header.strip().split("=")[-1]
+        range_parts = range_val.split("-")
+        start = int(range_parts[0])
+        end = int(range_parts[1]) if range_parts[1] else min(start + 10 * 1024 * 1024, file_size - 1)
+        end = min(end, file_size - 1)
+        length = end - start + 1
+
+        async def async_iter_range():
+            async with aiofiles.open(file_path, "rb") as fh:
+                await fh.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = await fh.read(min(CHUNK_SIZE, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        return StreamingResponse(async_iter_range(), status_code=206, media_type=content_type, headers={
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(length),
+            "Cache-Control": "public, max-age=86400",
+        })
+    else:
+        return FileResponse(file_path, media_type=content_type, headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(file_size),
+            "Cache-Control": "public, max-age=86400",
+        })
+
+@api_router.get("/share/{token}/stream/{file_id}")
+async def stream_share_video(token: str, file_id: str, request: Request, t: str = Query(None)):
+    """Stream a video file with async range request support for smooth in-browser playback."""
+    if not t:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = verify_jwt(t)
+    payload = await validate_live_share_session(payload, expected_token=token)
+    f = await db.files.find_one(share_file_query(payload, id=file_id), {"_id": 0})
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+    gallery = await db.galleries.find_one({"id": payload["gallery_id"]}, {"_id": 0})
+    file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    # Prefer web-optimised version for smoother streaming on mobile
+    web_path = get_web_version_path(file_path)
+    stream_path = web_path if web_path.exists() else file_path
+
+    file_size = stream_path.stat().st_size
+    ext = stream_path.suffix.lower()
+    content_types = {'.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+                     '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska', '.mts': 'video/mp2t'}
+    content_type = content_types.get(ext, 'video/mp4')
+    CHUNK_SIZE = 512 * 1024  # 512KB chunks for smooth streaming
+
+    range_header = request.headers.get("range")
+    if range_header:
+        range_val = range_header.strip().split("=")[-1]
+        range_parts = range_val.split("-")
+        start = int(range_parts[0])
+        end = int(range_parts[1]) if range_parts[1] else min(start + 10 * 1024 * 1024, file_size - 1)
+        end = min(end, file_size - 1)
+        length = end - start + 1
+
+        async def async_iter_range():
+            async with aiofiles.open(stream_path, "rb") as fh:
+                await fh.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = await fh.read(min(CHUNK_SIZE, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        return StreamingResponse(async_iter_range(), status_code=206, media_type=content_type, headers={
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(length),
+            "Cache-Control": "public, max-age=86400",
+        })
+    else:
+        return FileResponse(stream_path, media_type=content_type, headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=86400",
+        })
+
+@api_router.get("/share/{token}/download/{file_id}")
+async def download_share_file(token: str, file_id: str, request: Request, session=Depends(get_share_session)):
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    # Enforce download permission
+    if not session.get("allow_downloads", False):
+        raise HTTPException(status_code=403, detail="Downloads not allowed on this share")
+    f = await db.files.find_one(share_file_query(session, id=file_id), {"_id": 0})
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+    gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
+    file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
+    if not file_path.exists():
+        # Enhanced diagnostic: show what IS on disk
+        parent = file_path.parent
+        parent_exists = parent.exists()
+        parent_contents = []
+        if parent_exists:
+            try:
+                parent_contents = [x.name for x in parent.iterdir()][:10]
+            except Exception:
+                pass
+        logger.error(f"Download single: file not on disk: {file_path} | UPLOAD_DIR={UPLOAD_DIR} | gallery='{gallery['folder_name']}' | subfolder='{f['subfolder']}' | file='{f['filename']}' | parent_exists={parent_exists} | parent_contents={parent_contents}")
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    # Log detailed download
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    await _log_download(session["gallery_id"], gallery.get("folder_name", "Unknown"),
+                        share.get("label", token) if share else token, client_ip,
+                        "single", [f["filename"]], f["subfolder"], 1, 1)
+    
+    # Track download bandwidth
+    await log_bandwidth_event("file_download", file_path.stat().st_size if file_path.exists() else f.get("file_size", 0), f["filename"])
+    
+    return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
+
+@api_router.get("/share/{token}/audio/{file_id}")
+async def play_share_audio(token: str, file_id: str, session=Depends(get_share_session)):
+    """Play one retained personal message without granting general download access."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    file_doc = await db.files.find_one(
+        share_file_query(session, id=file_id, file_type="audio"), {"_id": 0}
+    )
+    if not file_doc:
+        raise HTTPException(status_code=404, detail="Personal message not found")
+    gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    file_path = get_gallery_file_path(
+        gallery["folder_name"], file_doc["subfolder"], file_doc["filename"]
+    )
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Personal message not found on disk")
+    return FileResponse(
+        file_path,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "private, max-age=300", "Accept-Ranges": "bytes"},
+    )
+
+# ─── Guest Upload (via share) ───
+@api_router.post("/share/{token}/upload")
+async def guest_upload(
+    token: str,
+    files: List[UploadFile] = File(...),
+    session=Depends(get_share_session)
+):
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not session.get("allow_uploads"):
+        raise HTTPException(status_code=403, detail="Uploads not allowed on this share")
+
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    # Check if this share allows all file types (photographer mode)
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    is_photographer_mode = share.get("allow_all_file_types", False) if share else False
+
+    subfolder = session.get("subfolder") or "Guest Uploads"
+    target_dir = get_gallery_file_path(gallery["folder_name"], subfolder, ".upload-target").parent
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Only check compression setting for non-photographer uploads
+    compression_enabled = False if is_photographer_mode else await get_compression_setting()
+
+    uploaded = []
+    skipped_too_large = []
+    for file in files:
+        if is_photographer_mode:
+            # PHOTOGRAPHER MODE: Stream directly to disk, preserve original filename, no size limit
+            final_name = safe_filename(file.filename, target_dir)
+            file_path = get_gallery_file_path(gallery["folder_name"], subfolder, final_name)
+
+            # Stream directly to disk in chunks - no memory buffering
+            file_size = 0
+            async with aiofiles.open(file_path, 'wb') as f_out:
+                while True:
+                    chunk = await file.read(1024 * 1024)  # 1MB chunks
+                    if not chunk:
+                        break
+                    await f_out.write(chunk)
+                    file_size += len(chunk)
+
+            file_type = "photo" if is_image(final_name) else "video" if is_video(final_name) else "other"
+            
+            # Generate thumbnails in background for photos (non-blocking)
+            has_thumb = False
+            has_preview = False
+            file_doc = {
+                "id": str(uuid.uuid4()),
+                "gallery_id": gallery_id,
+                "subfolder": subfolder,
+                "filename": final_name,
+                "original_filename": file.filename,
+                "file_type": file_type,
+                "file_size": file_size,
+                "has_thumb": has_thumb,
+                "has_preview": has_preview,
+                "uploaded_by": "photographer",
+                "uploaded_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.files.insert_one(file_doc)
+            
+            # Queue thumbnail generation in background (non-blocking)
+            if file_type == "photo":
+                thumbnail_executor.submit(
+                    generate_thumbnails_background,
+                    file_path, gallery_id, subfolder, final_name, file_type, file_doc["id"]
+                )
+            
+            uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
+        else:
+            # GUEST MODE: stream to a temporary file so large uploads do not fill RAM.
+            final_name = safe_filename(file.filename, target_dir)
+            file_path = get_gallery_file_path(gallery["folder_name"], subfolder, final_name)
+            temp_path = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.partial")
+            file_size = 0
+            too_large = False
+            try:
+                async with aiofiles.open(temp_path, 'wb') as f_out:
+                    while True:
+                        chunk = await file.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        file_size += len(chunk)
+                        if file_size > MAX_GUEST_UPLOAD_SIZE:
+                            too_large = True
+                            break
+                        await f_out.write(chunk)
+                if too_large:
+                    temp_path.unlink(missing_ok=True)
+                    skipped_too_large.append(file.filename)
+                    continue
+                temp_path.replace(file_path)
+            except Exception:
+                temp_path.unlink(missing_ok=True)
+                raise
+
+            file_type = "photo" if is_image(final_name) else "video" if is_video(final_name) else "other"
+            has_thumb = False
+            has_preview = False
+            if file_type == "photo":
+                has_thumb = make_thumbnail(file_path, get_thumb_path(gallery_id, subfolder, final_name))
+                has_preview = make_preview(file_path, get_preview_path(gallery_id, subfolder, final_name))
+
+            file_doc = {
+                "id": str(uuid.uuid4()),
+                "gallery_id": gallery_id,
+                "subfolder": subfolder,
+                "filename": final_name,
+                "original_filename": file.filename,
+                "file_type": file_type,
+                "file_size": file_size,
+                "has_thumb": has_thumb,
+                "has_preview": has_preview,
+                "uploaded_by": "guest",
+                "uploaded_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.files.insert_one(file_doc)
+            uploaded.append({k: v for k, v in file_doc.items() if k != "_id"})
+            
+            # Schedule background compression for large guest videos if enabled
+            if compression_enabled and file_type == "video" and file_size > VIDEO_COMPRESSION_SIZE_THRESHOLD:
+                thumbnail_executor.submit(
+                    compress_guest_video_background,
+                    file_path,
+                    file_doc["id"],
+                    gallery_id
+                )
+
+    count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": subfolder})
+    await db.galleries.update_one(
+        {"id": gallery_id},
+        {"$set": {f"file_counts.{subfolder}": count}}
+    )
+    
+    # Ensure the subfolder is in the gallery's subfolders list (auto-add if created by upload)
+    await db.galleries.update_one(
+        {"id": gallery_id, "subfolders": {"$ne": subfolder}},
+        {"$push": {"subfolders": subfolder}}
+    )
+    
+    result = {"uploaded": uploaded, "count": len(uploaded)}
+    if skipped_too_large:
+        result["skipped"] = skipped_too_large
+        result["message"] = f"{len(skipped_too_large)} file(s) exceeded 500MB limit and were not uploaded"
+    return result
+
+@api_router.post("/share/{token}/voice-message")
+async def upload_guest_voice_message(
+    token: str,
+    request: Request,
+    guest_name: str = Form(...),
+    recording: UploadFile = File(...),
+    reported_duration: Optional[float] = Form(None),
+    session=Depends(get_share_session),
+):
+    """Convert one QR-guest recording and retain only its final MP3."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not session.get("allow_uploads"):
+        raise HTTPException(status_code=403, detail="Uploads not allowed on this share")
+
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share or not share.get("guest_upload_mode") or share.get("allow_all_file_types"):
+        raise HTTPException(status_code=403, detail="Personal messages are only available from the guest QR page")
+
+    client_ip = request.headers.get(
+        "X-Forwarded-For", request.client.host if request.client else "unknown"
+    ).split(",")[0].strip()
+    if check_voice_upload_rate_limit(token, client_ip):
+        raise HTTPException(status_code=429, detail="Please wait a few minutes before sending another message")
+
+    try:
+        clean_guest_name = normalise_guest_name(guest_name)
+    except VoiceMessageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if reported_duration is not None and reported_duration > MAX_VOICE_MESSAGE_SECONDS + 1:
+        raise HTTPException(status_code=400, detail="Personal messages can be no longer than 4 minutes")
+
+    content_type = (recording.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type not in VOICE_UPLOAD_CONTENT_TYPES:
+        raise HTTPException(status_code=415, detail="That audio format is not supported by this browser")
+
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    suffix_by_type = {
+        "audio/webm": ".webm", "video/webm": ".webm", "audio/ogg": ".ogg",
+        "audio/mp4": ".m4a", "video/mp4": ".mp4", "audio/x-m4a": ".m4a", "audio/aac": ".aac",
+        "audio/mpeg": ".mp3", "audio/wav": ".wav", "audio/x-wav": ".wav",
+    }
+    temporary_source = VOICE_UPLOAD_CACHE_DIR / f"{uuid.uuid4().hex}{suffix_by_type[content_type]}"
+    file_size = 0
+    try:
+        async with aiofiles.open(temporary_source, "wb") as target:
+            while True:
+                chunk = await recording.read(1024 * 1024)
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                if file_size > MAX_VOICE_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="That recording is too large to upload")
+                await target.write(chunk)
+    except Exception:
+        temporary_source.unlink(missing_ok=True)
+        raise
+    finally:
+        await recording.close()
+
+    voice_dir = get_gallery_subfolder_path(gallery["folder_name"], VOICE_MESSAGES_SUBFOLDER)
+    voice_dir.mkdir(parents=True, exist_ok=True)
+    final_name = safe_filename(voice_message_filename(clean_guest_name), voice_dir)
+    final_path = get_gallery_file_path(gallery["folder_name"], VOICE_MESSAGES_SUBFOLDER, final_name)
+
+    def prepare_recording():
+        with heavy_job_coordinator.acquire("voice-message"):
+            return convert_voice_message(temporary_source, final_path)
+
+    try:
+        audio_info = await asyncio.to_thread(prepare_recording)
+    except VoiceMessageError as exc:
+        final_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        final_path.unlink(missing_ok=True)
+        logger.exception("Voice message conversion failed for gallery %s", gallery_id)
+        raise HTTPException(status_code=500, detail="We could not prepare that recording. Please try again") from exc
+    finally:
+        temporary_source.unlink(missing_ok=True)
+
+    file_doc = {
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "subfolder": VOICE_MESSAGES_SUBFOLDER,
+        "filename": final_name,
+        "original_filename": final_name,
+        "file_type": "audio",
+        "file_size": final_path.stat().st_size,
+        "duration_seconds": round(audio_info["duration"], 1),
+        "guest_name": clean_guest_name,
+        "audio_format": "mp3",
+        "sample_rate": audio_info["sample_rate"],
+        "channels": audio_info["channels"],
+        "bit_rate": audio_info["bit_rate"],
+        "has_thumb": False,
+        "has_preview": False,
+        "uploaded_by": "guest_voice_message",
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        await db.files.insert_one(file_doc)
+        count = await db.files.count_documents({
+            "gallery_id": gallery_id,
+            "subfolder": VOICE_MESSAGES_SUBFOLDER,
+        })
+        await db.galleries.update_one(
+            {"id": gallery_id},
+            {
+                "$addToSet": {"subfolders": VOICE_MESSAGES_SUBFOLDER},
+                "$set": {
+                    f"file_counts.{VOICE_MESSAGES_SUBFOLDER}": count,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+        )
+        await db.activity_log.insert_one({
+            "action": "guest_voice_message",
+            "gallery_id": gallery_id,
+            "gallery_name": gallery["folder_name"],
+            "details": f"Personal voice message received from {clean_guest_name}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        final_path.unlink(missing_ok=True)
+        await db.files.delete_one({"id": file_doc["id"]})
+        raise
+
+    return {"success": True, "uploaded": {k: v for k, v in file_doc.items() if k != "_id"}}
+
+@api_router.get("/share/{token}/guest-upload-count")
+async def get_guest_upload_count(token: str):
+    """Get the count of files uploaded by guests (for live counter in Guest Upload Mode)."""
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    if is_share_expired(share):
+        raise HTTPException(status_code=410, detail="This share link has expired")
+    
+    gallery_id = share["gallery_id"]
+    subfolder = share.get("subfolder") or "Guest Uploads"
+    
+    # Count files uploaded by guests in this subfolder
+    count = await db.files.count_documents({
+        "gallery_id": gallery_id,
+        "subfolder": subfolder,
+        "uploaded_by": "guest"
+    })
+    
+    return {"count": count}
+
+# ─── Guest Delete (via share with full access) ───
+class DeleteFilesRequest(BaseModel):
+    file_ids: List[str]
+
+@api_router.post("/share/{token}/delete")
+async def guest_delete_files(token: str, data: DeleteFilesRequest, session=Depends(get_share_session)):
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not session.get("allow_delete", False):
+        raise HTTPException(status_code=403, detail="Deleting not allowed on this share")
+    
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    deleted = 0
+    affected_subfolders = set()
+    
+    for file_id in data.file_ids:
+        f = await db.files.find_one(share_file_query(session, id=file_id), {"_id": 0})
+        if not f:
+            continue
+        # Delete physical file
+        file_path = get_gallery_file_path(gallery["folder_name"], f["subfolder"], f["filename"])
+        if f.get("file_type") == "video":
+            get_web_version_path(file_path).unlink(missing_ok=True)
+            get_web_temporary_path(file_path).unlink(missing_ok=True)
+        if file_path.exists():
+            file_path.unlink()
+        # Delete thumbnails
+        for tp in [get_thumb_path(gallery_id, f["subfolder"], f["filename"]),
+                   get_preview_path(gallery_id, f["subfolder"], f["filename"])]:
+            if tp.exists():
+                tp.unlink()
+        await db.files.delete_one({"id": file_id})
+        await db.favourites.delete_many({"file_id": file_id})
+        affected_subfolders.add(f["subfolder"])
+        deleted += 1
+    
+    # Update file counts for affected subfolders
+    for sf in affected_subfolders:
+        count = await db.files.count_documents({"gallery_id": gallery_id, "subfolder": sf})
+        await db.galleries.update_one(
+            {"id": gallery_id},
+            {"$set": {f"file_counts.{sf}": count}}
+        )
+    
+    return {"deleted": deleted}
+
+# ─── Print Shop Admin Endpoints ───
+@api_router.get("/admin/print-sizes")
+async def list_print_sizes(admin=Depends(get_admin)):
+    sizes = await db.print_sizes.find({}, {"_id": 0}).sort("name", 1).to_list(100)
+    return sizes
+
+@api_router.post("/admin/print-sizes")
+async def create_print_size(data: PrintSizeCreate, admin=Depends(get_admin)):
+    # Check for duplicate
+    existing = await db.print_sizes.find_one({"name": data.name}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Print size already exists")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": data.name,
+        "prices": {
+            "gloss": data.gloss_price,
+            "luster": data.luster_price,
+            "silk": data.silk_price
+        },
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.print_sizes.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+@api_router.put("/admin/print-sizes/{size_id}")
+async def update_print_size(size_id: str, data: PrintSizeUpdate, admin=Depends(get_admin)):
+    size = await db.print_sizes.find_one({"id": size_id}, {"_id": 0})
+    if not size:
+        raise HTTPException(status_code=404, detail="Print size not found")
+    update = {}
+    if data.name is not None:
+        update["name"] = data.name
+    if data.gloss_price is not None:
+        update["prices.gloss"] = data.gloss_price
+    if data.luster_price is not None:
+        update["prices.luster"] = data.luster_price
+    if data.silk_price is not None:
+        update["prices.silk"] = data.silk_price
+    if update:
+        await db.print_sizes.update_one({"id": size_id}, {"$set": update})
+    updated = await db.print_sizes.find_one({"id": size_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/admin/print-sizes/{size_id}")
+async def delete_print_size(size_id: str, admin=Depends(get_admin)):
+    result = await db.print_sizes.delete_one({"id": size_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Print size not found")
+    return {"deleted": True}
+
+@api_router.get("/admin/print-orders")
+async def list_print_orders(admin=Depends(get_admin)):
+    orders = await db.print_orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return orders
+
+@api_router.put("/admin/print-orders/{order_id}/status")
+async def update_order_status(order_id: str, status: str = Query(...), admin=Depends(get_admin)):
+    if status not in ("pending", "processing", "printed", "shipped", "completed", "cancelled"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    result = await db.print_orders.update_one(
+        {"id": order_id},
+        {"$set": {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"status": status}
+
+# ─── Print Shop Public Endpoints (for couples via share) ───
+@api_router.get("/share/{token}/print-sizes")
+async def get_print_sizes_for_share(token: str):
+    """Get available print sizes for ordering"""
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share or is_share_expired(share):
+        raise HTTPException(status_code=404, detail="Share not found or expired")
+    sizes = await db.print_sizes.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(100)
+    return {"sizes": sizes, "shipping_cost": SHIPPING_COST}
+
+@api_router.post("/share/{token}/print-order")
+async def create_print_order(token: str, data: PrintOrderCreate, session=Depends(get_share_session)):
+    """Create a print order - returns PayPal payment URL"""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share or is_share_expired(share):
+        raise HTTPException(status_code=404, detail="Share not found or expired")
+    
+    gallery = await db.galleries.find_one({"id": data.gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    # Calculate order total
+    order_items = []
+    subtotal = 0.0
+    
+    for item in data.items:
+        file = await db.files.find_one({"id": item.file_id, "gallery_id": data.gallery_id}, {"_id": 0})
+        if not file:
+            raise HTTPException(status_code=404, detail=f"File {item.file_id} not found")
+        
+        size = await db.print_sizes.find_one({"id": item.size_id, "is_active": True}, {"_id": 0})
+        if not size:
+            raise HTTPException(status_code=404, detail=f"Print size {item.size_id} not found")
+        
+        if item.finish not in ("gloss", "luster", "silk"):
+            raise HTTPException(status_code=400, detail="Invalid finish type")
+        
+        price = size["prices"].get(item.finish, 0)
+        item_total = price * item.quantity
+        subtotal += item_total
+        
+        order_items.append({
+            "file_id": item.file_id,
+            "filename": file["filename"],
+            "subfolder": file["subfolder"],
+            "size_id": item.size_id,
+            "size_name": size["name"],
+            "finish": item.finish,
+            "quantity": item.quantity,
+            "unit_price": price,
+            "total": item_total
+        })
+    
+    total = subtotal + SHIPPING_COST
+    
+    # Create order
+    order_id = str(uuid.uuid4())
+    order_doc = {
+        "id": order_id,
+        "gallery_id": data.gallery_id,
+        "gallery_name": gallery["folder_name"],
+        "share_token": token,
+        "customer_email": data.customer_email,
+        "items": order_items,
+        "subtotal": subtotal,
+        "shipping": SHIPPING_COST,
+        "total": total,
+        "currency": "GBP",
+        "status": "pending",
+        "paypal_order_id": None,
+        "shipping_address": None,  # Will be filled by PayPal
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.print_orders.insert_one(order_doc)
+    
+    # Return order details - frontend will redirect to PayPal
+    return {
+        "order_id": order_id,
+        "subtotal": subtotal,
+        "shipping": SHIPPING_COST,
+        "total": total,
+        "currency": "GBP",
+        "items": order_items
+    }
+
+@api_router.put("/share/{token}/print-order/{order_id}/paypal")
+async def update_order_paypal(token: str, order_id: str, paypal_order_id: str = Query(...), status: str = Query("paid")):
+    """Update order with PayPal transaction details"""
+    order = await db.print_orders.find_one({"id": order_id, "share_token": token}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    await db.print_orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "paypal_order_id": paypal_order_id,
+            "status": status,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    return {"success": True}
+
+@api_router.get("/share/{token}/print-orders")
+async def get_my_print_orders(token: str, session=Depends(get_share_session)):
+    """Get orders for this share"""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    orders = await db.print_orders.find({"share_token": token}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return orders
+
+# ─── Activity Tracking ───
+@api_router.post("/share/{token}/track-view")
+async def track_gallery_view(token: str, request: Request):
+    """Track when a gallery is viewed."""
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share:
+        return {"ok": False}
+    
+    # Get client IP
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
     
