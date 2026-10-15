@@ -3,15 +3,30 @@ set -euo pipefail
 
 STACK_DIR="/mnt/apps/dockge/data/180226galleryrepo"
 COMPOSE_FILE="$STACK_DIR/compose.yaml"
+RELEASE_COMMIT="23e217556441585b566ac4b46c5ef38f1965fe05"
+RELEASE_COMPOSE="$(mktemp "$STACK_DIR/compose.release-2.2.XXXXXX")"
+
+cleanup_release_compose() {
+  rm -f "$RELEASE_COMPOSE"
+}
+trap cleanup_release_compose EXIT
 
 cd "$STACK_DIR"
+
+# Build this release from its exact, verified GitHub commit. Docker BuildKit can
+# otherwise retain a stale moving `main` ref even when --no-cache is requested.
+sed "s|180226galleryrepo.git#main:|180226galleryrepo.git#$RELEASE_COMMIT:|g" \
+  "$COMPOSE_FILE" > "$RELEASE_COMPOSE"
+
+grep -q "180226galleryrepo.git#$RELEASE_COMMIT:backend" "$RELEASE_COMPOSE"
+grep -q "180226galleryrepo.git#$RELEASE_COMMIT:frontend" "$RELEASE_COMPOSE"
 
 docker image tag "$(docker inspect wbm-backend --format '{{.Image}}')" \
   wbm-backend:rollback-before-release-2.2
 docker image tag "$(docker inspect wbm-frontend --format '{{.Image}}')" \
   wbm-frontend:rollback-before-release-2.2
 
-docker compose -f "$COMPOSE_FILE" build --no-cache backend frontend
+docker compose -f "$RELEASE_COMPOSE" build --no-cache backend frontend
 
 docker run --rm --entrypoint sh 180226galleryrepo-backend:latest -lc '
 python -m py_compile server.py voice_message_service.py album_downloads.py album_selection.py backup_service.py database_backup_service.py download_job_service.py heavy_job_queue.py maintenance_cleanup.py maintenance_scan.py security_paths.py share_security.py share_selection.py system_health.py broadcast_service.py &&
@@ -52,7 +67,7 @@ grep -R -q "voice-message" /usr/share/nginx/html/static/js &&
 echo "Release 2.2 frontend checks passed"
 '
 
-docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate backend frontend
+docker compose -f "$RELEASE_COMPOSE" up -d --no-deps --force-recreate backend frontend
 
 release_health=0
 for attempt in {1..30}; do
@@ -66,7 +81,7 @@ done
 test "$release_health" -eq 1
 echo "Release 2.2 is responding"
 
-docker compose -f "$COMPOSE_FILE" ps backend frontend
+docker compose -f "$RELEASE_COMPOSE" ps backend frontend
 docker inspect wbm-backend wbm-frontend \
   --format '{{.Name}} image={{.Image}} status={{.State.Status}} started={{.State.StartedAt}}'
 curl -fsS https://weddingsbymark.uk/api/admin/check-setup && echo
