@@ -14,14 +14,38 @@ const formatTime = (seconds) => {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 };
 
-const preferredMimeType = () => {
+const preferredMimeTypes = () => {
   const choices = [
     'audio/webm;codecs=opus',
     'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
     'audio/webm',
     'audio/ogg;codecs=opus',
+    'audio/ogg',
   ];
-  return choices.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || '';
+  if (!window.MediaRecorder?.isTypeSupported) return [];
+  return choices.filter((type) => window.MediaRecorder.isTypeSupported(type));
+};
+
+const createAudioRecorder = (stream) => {
+  const attempts = preferredMimeTypes().flatMap((mimeType) => [
+    { mimeType, audioBitsPerSecond: 192000 },
+    { mimeType },
+  ]);
+  attempts.push({ audioBitsPerSecond: 192000 }, {});
+
+  for (const options of attempts) {
+    try {
+      return {
+        recorder: new MediaRecorder(stream, options),
+        requestedMimeType: options.mimeType || '',
+      };
+    } catch (error) {
+      // Some mobile browsers report a MIME type as supported but reject it
+      // when the recorder is created. Try the next safe option.
+    }
+  }
+  throw new Error('No compatible audio recorder configuration is available');
 };
 
 const recordingName = (mimeType) => {
@@ -98,10 +122,11 @@ export default function VoiceMessageRecorder({ token, coupleName, darkMode, onBa
           autoGainControl: true,
         },
       });
+      if (!stream.getAudioTracks?.().length) {
+        throw new Error('The browser did not provide an audio track');
+      }
       streamRef.current = stream;
-      const mimeType = preferredMimeType();
-      const options = mimeType ? { mimeType, audioBitsPerSecond: 192000 } : { audioBitsPerSecond: 192000 };
-      const recorder = new MediaRecorder(stream, options);
+      const { recorder, requestedMimeType } = createAudioRecorder(stream);
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
         if (event.data?.size) chunksRef.current.push(event.data);
@@ -116,7 +141,8 @@ export default function VoiceMessageRecorder({ token, coupleName, darkMode, onBa
         clearTimer();
         stopTracks();
         const duration = Math.min(MAX_SECONDS, Math.max(1, (Date.now() - startedAtRef.current) / 1000));
-        const finalType = recorder.mimeType || mimeType || 'audio/webm';
+        const capturedType = chunksRef.current.find((chunk) => chunk.type)?.type || '';
+        const finalType = recorder.mimeType || capturedType || requestedMimeType || 'audio/webm';
         const blob = new Blob(chunksRef.current, { type: finalType });
         if (!blob.size) {
           setStage('ready');
@@ -133,7 +159,9 @@ export default function VoiceMessageRecorder({ token, coupleName, darkMode, onBa
         setStage('review');
       };
       startedAtRef.current = Date.now();
-      recorder.start(1000);
+      // A single final Blob is more reliable than concatenated timed chunks on
+      // iOS Safari, Samsung Internet and several Android Chromium variants.
+      recorder.start();
       setStage('recording');
       timerRef.current = window.setInterval(() => {
         const next = Math.min(MAX_SECONDS, (Date.now() - startedAtRef.current) / 1000);
