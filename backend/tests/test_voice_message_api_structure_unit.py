@@ -22,6 +22,7 @@ def test_voice_messages_are_nested_and_final_mp3_is_retained():
 def test_voice_upload_has_limits_and_metadata():
     assert "MAX_VOICE_UPLOAD_BYTES" in SERVER
     assert "check_voice_upload_rate_limit" in SERVER
+    assert '"video/mp4"' in SERVER
     assert '"duration_seconds": round(audio_info["duration"], 1)' in SERVER
     assert '"guest_name": clean_guest_name' in SERVER
 
