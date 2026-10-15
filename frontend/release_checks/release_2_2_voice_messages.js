@@ -15,6 +15,7 @@ const checks = [
   [guest.includes('VoiceMessageRecorder') && guest.includes('gallery_dark_mode'), 'recorder and theme wiring'],
   [recorder.includes('const MAX_SECONDS = 240') && recorder.includes('const WARNING_SECONDS = 210'), 'four-minute timer'],
   [recorder.includes('MediaRecorder') && recorder.includes('audioBitsPerSecond: 192000'), 'browser recording settings'],
+  [recorder.includes('createAudioRecorder') && recorder.includes('recorder.start();'), 'cross-mobile recorder fallback'],
   [recorder.includes('Listen before you send') && recorder.includes('Re-record'), 'review workflow'],
   [player.includes('Download MP3') && player.includes('<audio'), 'secure audio controls'],
   [share.includes("file_type === 'audio'") && admin.includes("file_type === 'audio'"), 'couple and admin audio cards'],
