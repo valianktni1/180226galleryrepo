@@ -13,12 +13,13 @@ import {
   ArrowLeft, Upload, Image as ImageIcon, Trash2, Check, CheckCircle, Printer, FileText, Play, PlayCircle, Moon, Sun, Share2, Star, Clock
 } from "lucide-react";
 import {
-  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl, chooseAlbumCover, getAlbumCoverChoice,
+  getShareFiles, toggleShareFavourite, submitFavouritesToAlbum, downloadShareFile, fetchShareAudio, guestUpload, guestDeleteFiles, previewUrl, thumbUrl, trackGalleryView, trackDownload, sendHeartbeat, getErrorMessage, videoStreamUrl, getVideoPlaybackUrl, chooseAlbumCover, getAlbumCoverChoice,
   startShareFolderDownload, startShareFavouritesDownload, getShareFolderDownloadStatus, getDownloadJobFileUrl
 } from "@/lib/api";
 import { getTheme } from "@/lib/themes";
 import InstallBanner from "@/components/InstallBanner";
 import DownloadJobProgress from "@/components/DownloadJobProgress";
+import SecureAudioPlayer from "@/components/SecureAudioPlayer";
 
 // Code-split heavy components — only loaded when actually needed
 const GuestUploadView = lazy(() => import("@/pages/GuestUploadView"));
@@ -416,7 +417,7 @@ function ShareViewFull() {
   const allFiles = subfolders.flatMap(sf => sf.files.map(f => ({ ...f, _subfolder: sf.name })));
   const currentAlbumFilesRaw = activeAlbum ? (subfolders.find(sf => sf.name === activeAlbum)?.files || []) : [];
   // Hide "other" file types from regular shares (only show in photographer shares)
-  const fileFilter = (f) => permissions.allowAllFileTypes || f.file_type === 'photo' || f.file_type === 'video';
+  const fileFilter = (f) => permissions.allowAllFileTypes || ['photo', 'video', 'audio'].includes(f.file_type);
   const currentAlbumFiles = currentAlbumFilesRaw.filter(fileFilter);
   const displayFiles = showFavourites ? allFiles.filter(f => f.is_favourite && fileFilter(f)) : currentAlbumFiles;
 
@@ -451,6 +452,9 @@ function ShareViewFull() {
     const count = currentAlbumFiles.length;
     if (activeAlbum?.toLowerCase() === 'guest uploads') {
       return count === 1 ? 'Guest Upload' : 'Guest Uploads';
+    }
+    if (count > 0 && currentAlbumFiles.every(file => file.file_type === 'audio')) {
+      return count === 1 ? 'Personal Voice Message' : 'Personal Voice Messages';
     }
     if (count > 0 && currentAlbumFiles.every(file => file.file_type === 'video')) {
       return count === 1 ? 'Video' : 'Videos';
@@ -925,7 +929,8 @@ function ShareViewFull() {
               {displayFiles.map((file, i) => (
                 <LazyFileCard key={file.id} file={file} index={i} galleryId={galleryId}
                   onFav={!albumLocked ? handleFavourite : null} onDownload={handleDownloadSingle}
-                  onClick={() => setLightboxIndex(i)} permissions={permissions} theme={t}
+                  onClick={file.file_type === 'audio' ? undefined : () => setLightboxIndex(i)} permissions={permissions} theme={t}
+                  shareToken={token}
                   downloadProgress={downloadProgress}
                   isAlbumCover={albumCoverChoice?.file_id === file.id}
                   onChooseCover={!albumLocked ? handleChooseCover : null} />
@@ -1067,7 +1072,17 @@ function ShareViewFull() {
             </p>
           </div>
         )}
-        {activeAlbum && activeAlbum.toLowerCase() !== 'video' && activeAlbum.toLowerCase() !== 'guest uploads' && activeAlbum.toLowerCase() !== 'selfiebooth' && (
+        {activeAlbum && activeAlbum.toLowerCase() === 'personal voice messages' && (
+          <div className="mb-8 p-5 rounded-sm border" style={{
+            backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)',
+            borderColor: 'rgba(212,175,55,0.25)'
+          }}>
+            <p className="text-sm leading-relaxed" style={{ fontFamily: t.bodyFont, color: t.text }}>
+              Personal messages recorded by your wedding guests are kept with your gallery. Listen here, download them individually, or use Download All to save every MP3 together.
+            </p>
+          </div>
+        )}
+        {activeAlbum && activeAlbum.toLowerCase() !== 'video' && activeAlbum.toLowerCase() !== 'guest uploads' && activeAlbum.toLowerCase() !== 'selfiebooth' && activeAlbum.toLowerCase() !== 'personal voice messages' && (
           <div className="mb-8 p-5 rounded-sm border" style={{ 
             backgroundColor: darkMode ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.06)', 
             borderColor: 'rgba(212,175,55,0.25)' 
@@ -1112,8 +1127,9 @@ function ShareViewFull() {
             {currentAlbumFiles.map((file, i) => (
               <LazyFileCard key={file.id} file={file} index={i} galleryId={galleryId}
                 onFav={albumEnabled && !albumLocked && isAlbumChoiceFile(file) ? handleFavourite : null} onDownload={handleDownloadSingle}
-                onClick={selectMode ? () => toggleSelect(file.id) : () => setLightboxIndex(i)} 
+                onClick={selectMode ? () => toggleSelect(file.id) : file.file_type === 'audio' ? undefined : () => setLightboxIndex(i)}
                 permissions={permissions}
+                shareToken={token}
                 selectMode={selectMode}
                 isSelected={selectedFiles.has(file.id)} theme={t}
                 downloadProgress={downloadProgress}
@@ -1249,7 +1265,7 @@ function BlurUpImage({ src, alt, className = '', style = {} }) {
   );
 }
 
-function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false, theme = {}, downloadProgress = null, isAlbumCover = false, onChooseCover = null }) {
+function FileCard({ file, index, galleryId, shareToken, onFav, onDownload, onClick, permissions = {}, selectMode = false, isSelected = false, theme = {}, downloadProgress = null, isAlbumCover = false, onChooseCover = null }) {
   const emptyColor = theme.textSub || '#A8A29E';
   const mutedColor = theme.textMuted || '#C4C0B8';
   const isDownloading = downloadProgress && downloadProgress.fileId === file.id;
@@ -1299,6 +1315,11 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
             <span className="text-xs truncate max-w-[80%]" style={{ color: emptyColor }}>{file.filename}</span>
           </div>
         )
+      ) : file.file_type === 'audio' ? (
+        <div className="aspect-square">
+          <SecureAudioPlayer file={file} fetchAudio={() => fetchShareAudio(shareToken, file.id)}
+            onDownload={permissions.allowDownloads ? onDownload : null} theme={theme} />
+        </div>
       ) : (
         <div className="aspect-square flex flex-col items-center justify-center file-card-empty">
           <FileText className="w-8 h-8 mb-1" style={{ color: emptyColor }} />
@@ -1325,7 +1346,7 @@ function FileCard({ file, index, galleryId, onFav, onDownload, onClick, permissi
         </button>
       )}
       {/* Hover overlay for download button */}
-      {!selectMode && permissions.allowDownloads && (
+      {!selectMode && permissions.allowDownloads && file.file_type !== 'audio' && (
         <>
           <div className="photo-overlay pointer-events-none" />
           <div className="photo-actions flex items-center justify-end">

@@ -73,6 +73,14 @@ from broadcast_service import (
     recipient_counts,
     unique_recipients,
 )
+from voice_message_service import (
+    MAX_VOICE_MESSAGE_SECONDS,
+    MAX_VOICE_UPLOAD_BYTES,
+    VoiceMessageError,
+    convert_voice_message,
+    normalise_guest_name,
+    voice_message_filename,
+)
 from security_paths import (
     UnsafePathError,
     contained_path,
@@ -100,6 +108,8 @@ download_job_manager = DownloadJobManager(
 )
 BROADCAST_CACHE_DIR = UPLOAD_DIR / ".cache" / "broadcasts"
 BROADCAST_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+VOICE_UPLOAD_CACHE_DIR = UPLOAD_DIR / ".cache" / "voice_uploads"
+VOICE_UPLOAD_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 BROADCAST_BATCH_SIZE = 10
 BROADCAST_BATCH_DELAY_SECONDS = 120
 MAX_BROADCAST_ATTACHMENT_BYTES = 15 * 1024 * 1024
@@ -126,6 +136,7 @@ def generate_nginx_video_url(gallery_folder: str, subfolder: str, filename: str,
 
 # Rate limiting for login attempts
 login_attempts = defaultdict(list)  # IP -> list of timestamps
+voice_upload_attempts = defaultdict(list)  # token/IP -> recent upload attempts
 MAX_LOGIN_ATTEMPTS = 3
 LOGIN_WINDOW_SECONDS = 1800  # 30 minutes
 
@@ -136,6 +147,14 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 48
 MAX_UPLOAD_SIZE = 40 * 1024 * 1024 * 1024  # 40GB for admin
 MAX_GUEST_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB per file for guests
+VOICE_UPLOAD_WINDOW_SECONDS = 15 * 60
+VOICE_UPLOAD_MAX_ATTEMPTS = 6
+VOICE_MESSAGES_SUBFOLDER = "Personal Voice Messages"
+VOICE_MESSAGES_PARENT_SUBFOLDER = "Guest Uploads"
+VOICE_UPLOAD_CONTENT_TYPES = {
+    "audio/webm", "video/webm", "audio/ogg", "audio/mp4", "audio/mpeg",
+    "audio/wav", "audio/x-wav", "audio/x-m4a", "audio/aac",
+}
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -260,6 +279,20 @@ def record_login_attempt(ip: str):
 def clear_login_attempts(ip: str):
     """Clear login attempts on successful login."""
     login_attempts.pop(ip, None)
+
+def check_voice_upload_rate_limit(token: str, client_ip: str) -> bool:
+    """Allow a small burst of messages while limiting automated upload abuse."""
+    key = f"{token}:{client_ip}"
+    now = time.time()
+    recent = [
+        attempted_at for attempted_at in voice_upload_attempts[key]
+        if now - attempted_at < VOICE_UPLOAD_WINDOW_SECONDS
+    ]
+    voice_upload_attempts[key] = recent
+    if len(recent) >= VOICE_UPLOAD_MAX_ATTEMPTS:
+        return True
+    recent.append(now)
+    return False
 
 # ─── Auth Helpers ───
 def create_jwt(data: dict, expires_hours: int = ADMIN_SESSION_HOURS) -> str:
@@ -420,23 +453,34 @@ def get_gallery_path(folder_name: str) -> Path:
 
 def get_gallery_subfolder_path(folder_name: str, subfolder: str) -> Path:
     try:
+        components = [folder_name]
+        labels = ["gallery folder name"]
+        if subfolder == VOICE_MESSAGES_SUBFOLDER:
+            components.append(VOICE_MESSAGES_PARENT_SUBFOLDER)
+            labels.append("voice message parent folder")
+        components.append(subfolder)
+        labels.append("subfolder")
         return contained_path(
             UPLOAD_DIR,
-            folder_name,
-            subfolder,
-            labels=("gallery folder name", "subfolder"),
+            *components,
+            labels=tuple(labels),
         )
     except UnsafePathError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 def get_gallery_file_path(folder_name: str, subfolder: str, filename: str) -> Path:
     try:
+        components = [folder_name]
+        labels = ["gallery folder name"]
+        if subfolder == VOICE_MESSAGES_SUBFOLDER:
+            components.append(VOICE_MESSAGES_PARENT_SUBFOLDER)
+            labels.append("voice message parent folder")
+        components.extend([subfolder, filename])
+        labels.extend(["subfolder", "filename"])
         return contained_path(
             UPLOAD_DIR,
-            folder_name,
-            subfolder,
-            filename,
-            labels=("gallery folder name", "subfolder", "filename"),
+            *components,
+            labels=tuple(labels),
         )
     except UnsafePathError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -492,12 +536,17 @@ def get_backup_gallery_path(folder_name: str) -> Path:
 
 def get_backup_file_path(folder_name: str, subfolder: str, filename: str) -> Path:
     try:
+        components = [folder_name]
+        labels = ["backup gallery folder name"]
+        if subfolder == VOICE_MESSAGES_SUBFOLDER:
+            components.append(VOICE_MESSAGES_PARENT_SUBFOLDER)
+            labels.append("voice message parent folder")
+        components.extend([subfolder, filename])
+        labels.extend(["backup subfolder", "backup filename"])
         return contained_path(
             BACKUP_DIR,
-            folder_name,
-            subfolder,
-            filename,
-            labels=("backup gallery folder name", "backup subfolder", "backup filename"),
+            *components,
+            labels=tuple(labels),
         )
     except UnsafePathError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -3864,6 +3913,30 @@ async def download_share_file(token: str, file_id: str, request: Request, sessio
     
     return FileResponse(file_path, filename=f["filename"], media_type="application/octet-stream")
 
+@api_router.get("/share/{token}/audio/{file_id}")
+async def play_share_audio(token: str, file_id: str, session=Depends(get_share_session)):
+    """Play one retained personal message without granting general download access."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    file_doc = await db.files.find_one(
+        share_file_query(session, id=file_id, file_type="audio"), {"_id": 0}
+    )
+    if not file_doc:
+        raise HTTPException(status_code=404, detail="Personal message not found")
+    gallery = await db.galleries.find_one({"id": session["gallery_id"]}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    file_path = get_gallery_file_path(
+        gallery["folder_name"], file_doc["subfolder"], file_doc["filename"]
+    )
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Personal message not found on disk")
+    return FileResponse(
+        file_path,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "private, max-age=300", "Accept-Ranges": "bytes"},
+    )
+
 # ─── Guest Upload (via share) ───
 @api_router.post("/share/{token}/upload")
 async def guest_upload(
@@ -4014,6 +4087,141 @@ async def guest_upload(
         result["skipped"] = skipped_too_large
         result["message"] = f"{len(skipped_too_large)} file(s) exceeded 500MB limit and were not uploaded"
     return result
+
+@api_router.post("/share/{token}/voice-message")
+async def upload_guest_voice_message(
+    token: str,
+    request: Request,
+    guest_name: str = Form(...),
+    recording: UploadFile = File(...),
+    reported_duration: Optional[float] = Form(None),
+    session=Depends(get_share_session),
+):
+    """Convert one QR-guest recording and retain only its final MP3."""
+    if session.get("token") != token:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not session.get("allow_uploads"):
+        raise HTTPException(status_code=403, detail="Uploads not allowed on this share")
+
+    share = await db.shares.find_one({"token": token}, {"_id": 0})
+    if not share or not share.get("guest_upload_mode") or share.get("allow_all_file_types"):
+        raise HTTPException(status_code=403, detail="Personal messages are only available from the guest QR page")
+
+    client_ip = request.headers.get(
+        "X-Forwarded-For", request.client.host if request.client else "unknown"
+    ).split(",")[0].strip()
+    if check_voice_upload_rate_limit(token, client_ip):
+        raise HTTPException(status_code=429, detail="Please wait a few minutes before sending another message")
+
+    try:
+        clean_guest_name = normalise_guest_name(guest_name)
+    except VoiceMessageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if reported_duration is not None and reported_duration > MAX_VOICE_MESSAGE_SECONDS + 1:
+        raise HTTPException(status_code=400, detail="Personal messages can be no longer than 4 minutes")
+
+    content_type = (recording.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type not in VOICE_UPLOAD_CONTENT_TYPES:
+        raise HTTPException(status_code=415, detail="That audio format is not supported by this browser")
+
+    gallery_id = session["gallery_id"]
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    suffix_by_type = {
+        "audio/webm": ".webm", "video/webm": ".webm", "audio/ogg": ".ogg",
+        "audio/mp4": ".m4a", "audio/x-m4a": ".m4a", "audio/aac": ".aac",
+        "audio/mpeg": ".mp3", "audio/wav": ".wav", "audio/x-wav": ".wav",
+    }
+    temporary_source = VOICE_UPLOAD_CACHE_DIR / f"{uuid.uuid4().hex}{suffix_by_type[content_type]}"
+    file_size = 0
+    try:
+        async with aiofiles.open(temporary_source, "wb") as target:
+            while True:
+                chunk = await recording.read(1024 * 1024)
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                if file_size > MAX_VOICE_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="That recording is too large to upload")
+                await target.write(chunk)
+    except Exception:
+        temporary_source.unlink(missing_ok=True)
+        raise
+    finally:
+        await recording.close()
+
+    voice_dir = get_gallery_subfolder_path(gallery["folder_name"], VOICE_MESSAGES_SUBFOLDER)
+    voice_dir.mkdir(parents=True, exist_ok=True)
+    final_name = safe_filename(voice_message_filename(clean_guest_name), voice_dir)
+    final_path = get_gallery_file_path(gallery["folder_name"], VOICE_MESSAGES_SUBFOLDER, final_name)
+
+    def prepare_recording():
+        with heavy_job_coordinator.acquire("voice-message"):
+            return convert_voice_message(temporary_source, final_path)
+
+    try:
+        audio_info = await asyncio.to_thread(prepare_recording)
+    except VoiceMessageError as exc:
+        final_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        final_path.unlink(missing_ok=True)
+        logger.exception("Voice message conversion failed for gallery %s", gallery_id)
+        raise HTTPException(status_code=500, detail="We could not prepare that recording. Please try again") from exc
+    finally:
+        temporary_source.unlink(missing_ok=True)
+
+    file_doc = {
+        "id": str(uuid.uuid4()),
+        "gallery_id": gallery_id,
+        "subfolder": VOICE_MESSAGES_SUBFOLDER,
+        "filename": final_name,
+        "original_filename": final_name,
+        "file_type": "audio",
+        "file_size": final_path.stat().st_size,
+        "duration_seconds": round(audio_info["duration"], 1),
+        "guest_name": clean_guest_name,
+        "audio_format": "mp3",
+        "sample_rate": audio_info["sample_rate"],
+        "channels": audio_info["channels"],
+        "bit_rate": audio_info["bit_rate"],
+        "has_thumb": False,
+        "has_preview": False,
+        "uploaded_by": "guest_voice_message",
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        await db.files.insert_one(file_doc)
+        count = await db.files.count_documents({
+            "gallery_id": gallery_id,
+            "subfolder": VOICE_MESSAGES_SUBFOLDER,
+        })
+        await db.galleries.update_one(
+            {"id": gallery_id},
+            {
+                "$addToSet": {"subfolders": VOICE_MESSAGES_SUBFOLDER},
+                "$set": {
+                    f"file_counts.{VOICE_MESSAGES_SUBFOLDER}": count,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+        )
+        await db.activity_log.insert_one({
+            "action": "guest_voice_message",
+            "gallery_id": gallery_id,
+            "gallery_name": gallery["folder_name"],
+            "details": f"Personal voice message received from {clean_guest_name}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        final_path.unlink(missing_ok=True)
+        await db.files.delete_one({"id": file_doc["id"]})
+        raise
+
+    return {"success": True, "uploaded": {k: v for k, v in file_doc.items() if k != "_id"}}
 
 @api_router.get("/share/{token}/guest-upload-count")
 async def get_guest_upload_count(token: str):

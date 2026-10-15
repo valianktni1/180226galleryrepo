@@ -235,10 +235,27 @@ export const downloadShareFile = (token, fileId) => {
     headers: { Authorization: `Bearer ${jwt}` }
   });
 };
+export const fetchShareAudio = (token, fileId) => {
+  const shareToken = localStorage.getItem('share_token');
+  return fetch(`${BACKEND_URL}/api/share/${token}/audio/${fileId}`, {
+    headers: { Authorization: `Bearer ${shareToken}` }
+  });
+};
 export const guestUpload = (token, files, onProgress) => {
   const formData = new FormData();
   files.forEach(f => formData.append('files', f));
   return apiClient.post(`/share/${token}/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: onProgress,
+    timeout: 600000,
+  });
+};
+export const uploadVoiceMessage = (token, recording, guestName, durationSeconds, onProgress) => {
+  const formData = new FormData();
+  formData.append('guest_name', guestName);
+  formData.append('reported_duration', String(durationSeconds));
+  formData.append('recording', recording, recording.name || 'personal-message.webm');
+  return apiClient.post(`/share/${token}/voice-message`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: onProgress,
     timeout: 600000,

@@ -35,6 +35,7 @@ import {
 import { THEME_LIST } from "@/lib/themes";
 import DownloadJobProgress from "@/components/DownloadJobProgress";
 import AdminThemeToggle from "@/components/AdminThemeToggle";
+import SecureAudioPlayer from "@/components/SecureAudioPlayer";
 
 const STANDARD_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourites", "Guest Uploads"];
 
@@ -1173,6 +1174,10 @@ export default function AdminGalleryDetail() {
                             <span className="text-xs text-[#A8A29E] truncate max-w-[80%]">{file.filename}</span>
                           </div>
                         )
+                      ) : file.file_type === 'audio' ? (
+                        <SecureAudioPlayer file={file}
+                          fetchAudio={() => adminDownloadFile(gallery.id, file.id)}
+                          onDownload={handleDownloadSingleFile} compact />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
                           <FileText className="w-8 h-8 text-[#A8A29E] mb-1" />
@@ -1234,7 +1239,7 @@ export default function AdminGalleryDetail() {
                         </div>
                       )}
                       {/* Hover overlay (non-select mode) */}
-                      {!selectMode && (
+                      {!selectMode && file.file_type !== 'audio' && (
                         <>
                           <div className="photo-overlay" />
                           <div className="photo-actions flex items-center justify-between">
