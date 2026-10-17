@@ -1091,32 +1091,76 @@ async def list_galleries(admin=Depends(get_admin), sort_by: str = Query("date_de
         sort_dir = -1
     
     galleries = await db.galleries.find({}, {"_id": 0}).sort(sort_field, sort_dir).to_list(1000)
-    # Enrich with share count + cover image for card
-    for g in galleries:
-        share_count = await db.shares.count_documents({"gallery_id": g["id"]})
-        g["share_count"] = share_count
-        g["cover_thumb"] = None
-        
-        # Prefer the chosen cover image (check Wedding Images first, then any subfolder)
-        covers = g.get("covers", {})
-        cover_file = None
-        if covers:
-            # Try Wedding Images cover first, then any other
+    gallery_ids = [gallery["id"] for gallery in galleries]
+
+    # Build dashboard card metadata in batches. The previous implementation
+    # issued a share-count query and a file query for every gallery, which made
+    # the dashboard progressively slower as the business grew.
+    share_counts = {}
+    first_photos = {}
+    chosen_cover_ids = {}
+    chosen_covers = {}
+    if gallery_ids:
+        share_rows = await db.shares.aggregate([
+            {"$match": {"gallery_id": {"$in": gallery_ids}}},
+            {"$group": {"_id": "$gallery_id", "count": {"$sum": 1}}},
+        ]).to_list(1000)
+        share_counts = {row["_id"]: row["count"] for row in share_rows}
+
+        for gallery in galleries:
+            covers = gallery.get("covers") or {}
             cover_id = covers.get("Wedding Images") or next(iter(covers.values()), None)
             if cover_id:
-                cover_file = await db.files.find_one({"id": cover_id, "gallery_id": g["id"]}, {"_id": 0})
-        
-        # Fall back to first photo if no cover set
-        if not cover_file:
-            cover_file = await db.files.find_one(
-                {"gallery_id": g["id"], "file_type": "photo"},
-                {"_id": 0}
-            )
-        
+                chosen_cover_ids[gallery["id"]] = cover_id
+
+        if chosen_cover_ids:
+            chosen_rows = await db.files.find(
+                {
+                    "gallery_id": {"$in": gallery_ids},
+                    "id": {"$in": list(set(chosen_cover_ids.values()))},
+                },
+                {"_id": 0, "id": 1, "gallery_id": 1, "subfolder": 1, "filename": 1},
+            ).to_list(1000)
+            chosen_by_pair = {
+                (row["gallery_id"], row["id"]): row for row in chosen_rows
+            }
+            chosen_covers = {
+                gallery_id: chosen_by_pair.get((gallery_id, cover_id))
+                for gallery_id, cover_id in chosen_cover_ids.items()
+            }
+
+        first_photo_rows = await db.files.aggregate([
+            {"$match": {"gallery_id": {"$in": gallery_ids}, "file_type": "photo"}},
+            {"$sort": {"uploaded_at": 1, "_id": 1}},
+            {"$group": {
+                "_id": "$gallery_id",
+                "file": {"$first": {
+                    "id": "$id",
+                    "gallery_id": "$gallery_id",
+                    "subfolder": "$subfolder",
+                    "filename": "$filename",
+                }},
+            }},
+        ]).to_list(1000)
+        first_photos = {row["_id"]: row["file"] for row in first_photo_rows}
+
+    # Enrich the already-loaded gallery records without any database calls in
+    # this loop. Disk checks remain local and only verify the selected thumb.
+    for gallery in galleries:
+        gallery_id = gallery["id"]
+        gallery["share_count"] = share_counts.get(gallery_id, 0)
+        gallery["cover_thumb"] = None
+        cover_file = chosen_covers.get(gallery_id) or first_photos.get(gallery_id)
         if cover_file:
-            tp = get_thumb_path(g["id"], cover_file["subfolder"], cover_file["filename"])
-            if tp.exists():
-                g["cover_thumb"] = f"/api/media/thumb/{g['id']}/{slugify(cover_file['subfolder'])}/{Path(cover_file['filename']).stem}.thumb.jpg"
+            thumb_path = get_thumb_path(
+                gallery_id, cover_file["subfolder"], cover_file["filename"]
+            )
+            if thumb_path.exists():
+                gallery["cover_thumb"] = (
+                    f"/api/media/thumb/{gallery_id}/"
+                    f"{slugify(cover_file['subfolder'])}/"
+                    f"{Path(cover_file['filename']).stem}.thumb.jpg"
+                )
     return galleries
 
 @api_router.get("/admin/galleries/{gallery_id}")
@@ -4897,25 +4941,42 @@ async def get_network_stats(admin=Depends(get_admin)):
 @api_router.get("/admin/galleries-stats")
 async def get_all_galleries_stats(admin=Depends(get_admin)):
     """Get summary stats for all galleries (for dashboard cards)."""
-    galleries = await db.galleries.find({}, {"_id": 0, "id": 1, "album_selection": 1}).to_list(1000)
-    
+    galleries = await db.galleries.find({}, {
+        "_id": 0,
+        "id": 1,
+        "album_selection": 1,
+        "total_views": 1,
+        "total_downloads": 1,
+    }).to_list(1000)
+    gallery_ids = [gallery["id"] for gallery in galleries]
+
+    unique_visitors = {}
+    if gallery_ids:
+        visitor_rows = await db.activity_log.aggregate([
+            {"$match": {
+                "gallery_id": {"$in": gallery_ids},
+                "ip_address": {"$ne": None},
+            }},
+            {"$group": {
+                "_id": {"gallery_id": "$gallery_id", "ip_address": "$ip_address"},
+            }},
+            {"$group": {
+                "_id": "$_id.gallery_id",
+                "count": {"$sum": 1},
+            }},
+        ]).to_list(1000)
+        unique_visitors = {row["_id"]: row["count"] for row in visitor_rows}
+
     stats = {}
     for gallery in galleries:
         gid = gallery["id"]
-        
-        # Get gallery doc for view/download counts
-        gallery_doc = await db.galleries.find_one({"id": gid}, {"_id": 0, "total_views": 1, "total_downloads": 1})
-        
-        # Count unique visitors
-        unique_ips = await db.activity_log.distinct("ip_address", {"gallery_id": gid, "ip_address": {"$ne": None}})
-        
         album_state = normalise_album_selection(gallery)
         album_submitted = album_state["mode"] != "off" and album_state["locked"]
-        
+
         stats[gid] = {
-            "total_views": gallery_doc.get("total_views", 0) if gallery_doc else 0,
-            "total_downloads": gallery_doc.get("total_downloads", 0) if gallery_doc else 0,
-            "unique_visitors": len(unique_ips),
+            "total_views": gallery.get("total_views", 0),
+            "total_downloads": gallery.get("total_downloads", 0),
+            "unique_visitors": unique_visitors.get(gid, 0),
             "album_submitted": album_submitted
         }
     

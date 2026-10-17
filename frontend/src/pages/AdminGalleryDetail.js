@@ -38,6 +38,8 @@ import AdminThemeToggle from "@/components/AdminThemeToggle";
 import SecureAudioPlayer from "@/components/SecureAudioPlayer";
 
 const STANDARD_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourites", "Guest Uploads"];
+const THUMBNAIL_FILE_TYPES = new Set(["photo", "video"]);
+const THUMBNAIL_POLL_MAX_ATTEMPTS = 60;
 
 export default function AdminGalleryDetail() {
   const { id } = useParams();
@@ -72,6 +74,7 @@ export default function AdminGalleryDetail() {
   const [clientEmail, setClientEmail] = useState("");
   const [galleryTheme, setGalleryTheme] = useState("classic_gold");
   const thumbPollingRef = useRef(null);
+  const thumbPollAttemptsRef = useRef(0);
 
   // Send Template Email
   const [showSendEmail, setShowSendEmail] = useState(false);
@@ -120,8 +123,8 @@ export default function AdminGalleryDetail() {
       setShares(res.data.shares || []);
       setClientEmail(res.data.client_email || "");
       setGalleryTheme(res.data.theme || "classic_gold");
-      if (!activeTab && res.data.subfolders?.length) {
-        setActiveTab(res.data.subfolders[0]);
+      if (res.data.subfolders?.length) {
+        setActiveTab(currentTab => currentTab || res.data.subfolders[0]);
       }
     } catch {
       toast.error("Gallery not found");
@@ -129,7 +132,7 @@ export default function AdminGalleryDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, navigate, activeTab]);
+  }, [id, navigate]);
 
   useEffect(() => {
     if (!localStorage.getItem("admin_token")) { navigate("/admin"); return; }
@@ -178,6 +181,7 @@ export default function AdminGalleryDetail() {
         clearInterval(thumbPollingRef.current);
         thumbPollingRef.current = null;
       }
+      thumbPollAttemptsRef.current = 0;
       if (downloadPollRef.current) {
         clearTimeout(downloadPollRef.current);
         downloadPollRef.current = null;
@@ -187,14 +191,25 @@ export default function AdminGalleryDetail() {
 
   // Auto-refresh when files are missing thumbnails (e.g. after bulk upload)
   useEffect(() => {
-    const missingThumbs = files.some(f => !f.has_thumb);
+    // Audio and document records never receive thumbnails. Restrict polling to
+    // media that actually enters the thumbnail worker, and cap the retries so
+    // one failed image/video can never refresh a large gallery forever.
+    const missingThumbs = files.some(f => THUMBNAIL_FILE_TYPES.has(f.file_type) && !f.has_thumb);
     if (missingThumbs && !thumbPollingRef.current) {
+      thumbPollAttemptsRef.current = 0;
       thumbPollingRef.current = setInterval(() => {
+        thumbPollAttemptsRef.current += 1;
+        if (thumbPollAttemptsRef.current > THUMBNAIL_POLL_MAX_ATTEMPTS) {
+          clearInterval(thumbPollingRef.current);
+          thumbPollingRef.current = null;
+          return;
+        }
         loadGallery();
       }, 5000);
     } else if (!missingThumbs && thumbPollingRef.current) {
       clearInterval(thumbPollingRef.current);
       thumbPollingRef.current = null;
+      thumbPollAttemptsRef.current = 0;
     }
   }, [files, loadGallery]);
 
