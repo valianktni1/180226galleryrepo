@@ -608,6 +608,7 @@ export default function AdminDashboard() {
                     <div className="aspect-[4/3] relative overflow-hidden" style={{ backgroundColor: 'var(--admin-surface-raised)' }}>
                       {g.cover_thumb ? (
                         <img src={`${process.env.REACT_APP_BACKEND_URL}${g.cover_thumb}`} alt={g.folder_name}
+                          loading="lazy" decoding="async"
                           className="w-full h-full object-cover" style={{ transition: 'transform 0.7s cubic-bezier(0.33,1,0.68,1)' }}
                           onMouseOver={e => e.target.style.transform = 'scale(1.03)'} onMouseOut={e => e.target.style.transform = 'scale(1)'}
                         />
