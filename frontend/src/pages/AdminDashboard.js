@@ -290,13 +290,14 @@ export default function AdminDashboard() {
   const nextBatchLabel = `${Math.floor(nextBatchSeconds / 60)}:${String(nextBatchSeconds % 60).padStart(2, "0")}`;
 
   return (
-    <div className="min-h-screen" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
+    <div className="min-h-screen w-full min-w-0 overflow-x-hidden" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
       <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'var(--admin-header-bg)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
-        <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-screen-xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col items-stretch gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Weddings By Mark" className="h-8" style={{ filter: 'invert(1)' }} />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="w-full min-w-0 overflow-x-auto lg:w-auto" data-testid="admin-mobile-toolbar">
+          <div className="flex min-w-max items-center gap-2 pb-1 lg:pb-0">
             <Button
               data-testid="backup-btn"
               variant="ghost"
@@ -337,10 +338,11 @@ export default function AdminDashboard() {
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-6 py-10">
+      <main className="w-full min-w-0 max-w-screen-xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
         {/* Dashboard Stats */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" data-testid="dashboard-stats">
           {[
@@ -349,7 +351,7 @@ export default function AdminDashboard() {
             { label: "Downloads This Week", value: dashStats.downloads_this_week, icon: Download, color: '#22C55E', bg: 'rgba(34,197,94,0.08)' },
             { label: "Pending Albums", value: dashStats.pending_albums, icon: FolderHeart, color: dashStats.pending_albums > 0 ? '#EC4899' : '#A8A29E', bg: dashStats.pending_albums > 0 ? 'rgba(236,72,153,0.08)' : 'rgba(168,162,158,0.06)' },
           ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="p-5 border rounded-sm" style={{ borderColor: 'var(--admin-border)', backgroundColor: bg }} data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+            <div key={label} className="p-3 sm:p-5 border rounded-sm min-w-0" style={{ borderColor: 'var(--admin-border)', backgroundColor: bg }} data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
               <div className="flex items-center gap-2 mb-2">
                 <Icon className="w-4 h-4" style={{ color }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>{label}</span>
@@ -364,7 +366,7 @@ export default function AdminDashboard() {
           className="mb-8 rounded-sm overflow-hidden shadow-sm border"
           style={{ borderColor: 'var(--admin-border)' }}
           data-testid="network-storage-panel">
-          <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: 'var(--admin-surface-soft)' }}>
+          <div className="px-3 sm:px-6 py-4 flex items-center justify-between gap-3" style={{ backgroundColor: 'var(--admin-surface-soft)' }}>
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(99,102,241,0.1)' }}>
                 <Activity className="w-4 h-4" style={{ color: '#6366F1' }} />
@@ -380,7 +382,7 @@ export default function AdminDashboard() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5" style={{ borderTop: '1px solid var(--admin-border)' }}>
             {/* Total Storage */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(99,102,241,0.06)' }} data-testid="storage-total">
+            <div className="p-3 sm:p-5 border-b md:border-b-0 md:border-r min-w-0" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(99,102,241,0.06)' }} data-testid="storage-total">
               <div className="flex items-center gap-2 mb-2">
                 <HardDrive className="w-3.5 h-3.5" style={{ color: '#6366F1' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Total Storage</span>
@@ -393,7 +395,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Daily Total */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(245,158,11,0.06)' }} data-testid="daily-total">
+            <div className="p-3 sm:p-5 border-b md:border-b-0 md:border-r min-w-0" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(245,158,11,0.06)' }} data-testid="daily-total">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-3.5 h-3.5" style={{ color: '#F59E0B' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Today (Total)</span>
@@ -406,7 +408,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Weekly Total */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(236,72,153,0.06)' }} data-testid="weekly-total">
+            <div className="p-3 sm:p-5 border-b md:border-b-0 md:border-r min-w-0" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(236,72,153,0.06)' }} data-testid="weekly-total">
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-3.5 h-3.5" style={{ color: '#EC4899' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>This Week (Total)</span>
@@ -419,7 +421,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* Video Streaming */}
-            <div className="p-5 border-b md:border-b-0 md:border-r" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(139,92,246,0.06)' }} data-testid="video-bandwidth">
+            <div className="p-3 sm:p-5 border-b md:border-b-0 md:border-r min-w-0" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(139,92,246,0.06)' }} data-testid="video-bandwidth">
               <div className="flex items-center gap-2 mb-2">
                 <Film className="w-3.5 h-3.5" style={{ color: '#8B5CF6' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Video Streams</span>
@@ -432,7 +434,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             {/* File Downloads */}
-            <div className="p-5" style={{ backgroundColor: 'rgba(34,197,94,0.06)' }} data-testid="download-bandwidth">
+            <div className="p-3 sm:p-5 min-w-0" style={{ backgroundColor: 'rgba(34,197,94,0.06)' }} data-testid="download-bandwidth">
               <div className="flex items-center gap-2 mb-2">
                 <ArrowDownToLine className="w-3.5 h-3.5" style={{ color: '#22C55E' }} />
                 <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Downloads</span>
@@ -509,7 +511,7 @@ export default function AdminDashboard() {
                   : v.device === 'Tablet' ? <Tablet className="w-3.5 h-3.5" /> 
                   : <Monitor className="w-3.5 h-3.5" />;
                 return (
-                  <div key={v.session_id} className="px-6 py-3.5 flex items-center gap-4 bg-white hover:bg-[#FDFCF8] transition-colors" data-testid={`visitor-${v.session_id}`}>
+                  <div key={v.session_id} className="px-3 sm:px-6 py-3.5 flex flex-wrap sm:flex-nowrap items-center gap-3 sm:gap-4 bg-white hover:bg-[#FDFCF8] transition-colors" data-testid={`visitor-${v.session_id}`}>
                     <div className="relative shrink-0">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -532,7 +534,7 @@ export default function AdminDashboard() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-4 shrink-0">
+                    <div className="w-full sm:w-auto flex flex-wrap items-center gap-3 sm:gap-4 sm:shrink-0 pl-5 sm:pl-0">
                       {v.ip && (
                         <span className="text-[10px] tabular-nums px-2 py-0.5 rounded-sm" style={{ backgroundColor: 'var(--admin-surface-raised)', color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
                           {v.ip}
@@ -554,10 +556,10 @@ export default function AdminDashboard() {
         </motion.div>
 
         {/* Search and Sort */}
-        <div className="flex items-center gap-4 mb-8">
-          <h2 className="text-3xl md:text-4xl font-medium flex-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Couple Folders</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-8">
+          <h2 className="text-3xl md:text-4xl font-medium w-full sm:flex-1" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Couple Folders</h2>
           <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-40 border-[#F5F2EB] rounded-sm text-xs" data-testid="sort-galleries">
+            <SelectTrigger className="w-full sm:w-40 border-[#F5F2EB] rounded-sm text-xs" data-testid="sort-galleries">
               <ArrowUpDown className="w-3.5 h-3.5 mr-2" />
               <SelectValue />
             </SelectTrigger>
@@ -568,7 +570,7 @@ export default function AdminDashboard() {
               <SelectItem value="name_desc">Name Z-A</SelectItem>
             </SelectContent>
           </Select>
-          <div className="relative w-64">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#A8A29E]" />
             <Input data-testid="gallery-search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search..." className="pl-10 border-[#F5F2EB] bg-white/50 rounded-sm text-sm focus-visible:ring-1 focus-visible:ring-[#D4AF37]" />
           </div>
@@ -659,7 +661,7 @@ export default function AdminDashboard() {
 
       {/* Create Gallery Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>New Couple Folder</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
@@ -732,7 +734,7 @@ export default function AdminDashboard() {
 
       {/* Templates Dialog */}
       <Dialog open={showTemplates} onOpenChange={setShowTemplates}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-xl" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-xl" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Folder Templates</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
@@ -774,7 +776,7 @@ export default function AdminDashboard() {
       </Dialog>
       {/* Delete Gallery Confirmation Dialog */}
       <Dialog open={deleteConfirm.open} onOpenChange={(open) => !open && setDeleteConfirm({ open: false, id: null, name: "", deleteBackup: false })}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Delete Gallery</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
@@ -809,7 +811,7 @@ export default function AdminDashboard() {
 
       {/* Broadcast Email Dialog */}
       <Dialog open={showBroadcast} onOpenChange={setShowBroadcast}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Broadcast Email</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>

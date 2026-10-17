@@ -708,17 +708,17 @@ export default function AdminGalleryDetail() {
   const albumEnabled = albumSelection.mode === '40' || albumSelection.mode === '60';
 
   return (
-    <div className="min-h-screen" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
+    <div className="min-h-screen w-full min-w-0 overflow-x-hidden" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
       {/* Header */}
       <header className="sticky top-0 z-40 border-b" style={{ backgroundColor: 'var(--admin-header-bg)', backdropFilter: 'blur(16px)', borderColor: 'rgba(212,175,55,0.15)' }}>
-        <div className="max-w-screen-xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="max-w-screen-xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col items-stretch gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3 sm:gap-4 min-w-0">
             <button data-testid="back-to-dashboard" onClick={() => navigate("/admin/dashboard")} className="text-[#57534E] hover:text-[#1C1917]" style={{ transition: 'color 0.2s ease' }}>
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="text-xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>{gallery.folder_name}</h1>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-medium truncate" style={{ fontFamily: 'Cormorant Garamond, serif' }}>{gallery.folder_name}</h1>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <p className="text-xs" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>{gallery.subfolders.length} subfolders &middot; {files.length} files</p>
                 {editingEmail ? (
                   <div className="flex items-center gap-1.5 ml-2">
@@ -740,7 +740,8 @@ export default function AdminGalleryDetail() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="w-full min-w-0 overflow-x-auto lg:w-auto" data-testid="admin-gallery-mobile-toolbar">
+          <div className="flex min-w-max items-center gap-2 pb-1 lg:pb-0">
             <AdminThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -783,15 +784,16 @@ export default function AdminGalleryDetail() {
               <Share2 className="w-3.5 h-3.5" /> Create Share
             </Button>
           </div>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-6 py-6">
+      <main className="w-full min-w-0 max-w-screen-xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {/* Album package and couple-selection controls */}
-        <section data-testid="album-selection-admin-card" className="mb-6 border p-5" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface)' }}>
+        <section data-testid="album-selection-admin-card" className="mb-6 border p-3 sm:p-5" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface)' }}>
           <div className="flex flex-col lg:flex-row lg:items-start gap-5">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
                 <BookOpen className="w-4 h-4 text-[#D4AF37]" />
                 <h2 className="text-sm tracking-wider uppercase font-bold" style={{ fontFamily: 'Manrope, sans-serif', color: 'var(--admin-text)' }}>Wedding Album Choices</h2>
                 <span className={`text-[10px] px-2 py-0.5 font-bold uppercase ${albumSelection.locked ? 'bg-green-100 text-green-700' : albumEnabled ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-500'}`}>
@@ -887,8 +889,8 @@ export default function AdminGalleryDetail() {
             </div>
             <div className="space-y-2">
               {shares.map(s => (
-                <div key={s.id} className={`flex items-center gap-3 p-2 text-sm ${isShareExpired(s) ? 'opacity-50' : ''}`} style={{ backgroundColor: s.is_active && !isShareExpired(s) ? 'var(--admin-surface-raised)' : 'var(--admin-surface-soft)' }}>
-                  <div className="flex-1 flex items-center gap-2 flex-wrap" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                <div key={s.id} className={`flex flex-wrap items-center gap-2 sm:gap-3 p-2 text-sm ${isShareExpired(s) ? 'opacity-50' : ''}`} style={{ backgroundColor: s.is_active && !isShareExpired(s) ? 'var(--admin-surface-raised)' : 'var(--admin-surface-soft)' }}>
+                  <div className="w-full sm:flex-1 flex items-center gap-2 flex-wrap min-w-0" style={{ fontFamily: 'Manrope, sans-serif' }}>
                     {s.has_password ? <Lock className="w-3.5 h-3.5 text-[#57534E]" /> : <Globe className="w-3.5 h-3.5 text-[#3F6212]" />}
                     <span className="text-xs font-medium">{s.label}</span>
                     <span className="text-xs px-1.5 py-0.5 bg-[#D4AF37]/10 text-[#D4AF37] font-bold uppercase">
@@ -956,8 +958,8 @@ export default function AdminGalleryDetail() {
 
         {/* Subfolder Tabs */}
         <Tabs value={activeTab} onValueChange={v => { setActiveTab(v); setSelectedFiles(new Set()); }}>
-          <div className="flex items-center gap-1 border-b mb-6" style={{ borderColor: 'var(--admin-border)' }}>
-            <TabsList className="bg-transparent flex-1 justify-start rounded-none h-auto p-0 overflow-x-auto">
+          <div className="flex items-center gap-1 border-b mb-6 min-w-0" style={{ borderColor: 'var(--admin-border)' }}>
+            <TabsList className="bg-transparent flex-1 min-w-0 justify-start rounded-none h-auto p-0 overflow-x-auto">
               {gallery.subfolders.map(sf => {
                 const count = (gallery.file_counts || {})[sf] || 0;
                 return (
@@ -987,7 +989,7 @@ export default function AdminGalleryDetail() {
                 className="ml-auto shrink-0 text-[#9F1239]/60 hover:text-[#9F1239] hover:bg-[#9F1239]/5 rounded-sm px-3 py-2 text-xs gap-1.5"
                 style={{ fontFamily: 'Manrope, sans-serif' }}
               >
-                <Trash2 className="w-3.5 h-3.5" /> Remove Folder
+                <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Remove Folder</span>
               </Button>
             )}
           </div>
@@ -1063,7 +1065,7 @@ export default function AdminGalleryDetail() {
                     </>
                   )}
 
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2">
                     {/* Video health summary */}
                     {videoFiles.length > 0 && folderHealth.total > 0 && !reprocessProgress && !Object.keys(transcodeStatus).length && (
                       <div data-testid="video-health-summary" className="flex items-center gap-2 px-3 py-1.5 rounded-sm border"
@@ -1090,7 +1092,7 @@ export default function AdminGalleryDetail() {
                       </Button>
                     )}
                     {reprocessProgress && reprocessProgress.total > 0 && (
-                      <div className="flex items-center gap-3 px-3 py-1.5 rounded-sm border" style={{ borderColor: '#D4AF37', backgroundColor: '#FEFCE8', minWidth: '240px' }}>
+                      <div className="w-full sm:w-auto sm:min-w-[240px] flex items-center gap-3 px-3 py-1.5 rounded-sm border" style={{ borderColor: '#D4AF37', backgroundColor: '#FEFCE8' }}>
                         <Film className="w-3.5 h-3.5 shrink-0" style={{ color: '#D4AF37' }} />
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-1">
@@ -1283,7 +1285,7 @@ export default function AdminGalleryDetail() {
 
       {/* Create Share Dialog */}
       <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-lg" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-3xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Create Share Link</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
@@ -1293,7 +1295,7 @@ export default function AdminGalleryDetail() {
           <div className="space-y-5 mt-2">
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>What to share</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button data-testid="share-whole-gallery" onClick={() => setShareForm(f => ({...f, subfolder: null}))}
                   className={`p-3 border text-left text-xs ${!shareForm.subfolder ? 'border-[#D4AF37] bg-[#D4AF37]/5' : 'border-[#F5F2EB]'}`}
                   style={{ fontFamily: 'Manrope, sans-serif' }}>
@@ -1319,8 +1321,8 @@ export default function AdminGalleryDetail() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Custom URL (optional)</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#A8A29E] whitespace-nowrap">{window.location.origin}/</span>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="text-xs text-[#A8A29E] break-all">{window.location.origin}/</span>
                 <Input data-testid="share-custom-slug-input" value={shareForm.custom_slug} 
                   onChange={e => setShareForm(f => ({...f, custom_slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')}))}
                   placeholder="ginamark301122" className="border-[#D4D4D8] rounded-sm flex-1" />
@@ -1329,7 +1331,7 @@ export default function AdminGalleryDetail() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Password (leave empty for no password)</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Input data-testid="share-password-input" name="new-share-password" autoComplete="new-password" data-lpignore="true"
                   value={shareForm.password} onChange={e => setShareForm(f => ({...f, password: e.target.value}))}
                   placeholder="Optional - leave blank for open access" className="border-[#D4D4D8] rounded-sm flex-1" />
@@ -1347,7 +1349,7 @@ export default function AdminGalleryDetail() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs tracking-[0.1em] uppercase font-semibold" style={{ color: 'var(--admin-muted)' }}>Access Level</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   { value: 'view', label: 'View Only', desc: 'Can only view photos' },
                   { value: 'download', label: 'View & Download', desc: 'Can view and download' },
@@ -1453,7 +1455,7 @@ export default function AdminGalleryDetail() {
 
       {/* QR Code Dialog */}
       <Dialog open={!!showQR} onOpenChange={() => setShowQR(null)}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader className="text-center">
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>QR Code</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>{showQR?.label}</DialogDescription>
@@ -1511,7 +1513,7 @@ export default function AdminGalleryDetail() {
 
       {/* Edit Share Dialog */}
       <Dialog open={!!editingShare} onOpenChange={(open) => { if (!open) setEditingShare(null); }}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Edit Share</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
@@ -1572,7 +1574,7 @@ export default function AdminGalleryDetail() {
         setShowAddFolderDialog(open);
         if (!open) setNewFolderName("");
       }}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Add Folder</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
@@ -1610,7 +1612,7 @@ export default function AdminGalleryDetail() {
 
       {/* Delete Subfolder Confirmation */}
       <AlertDialog open={!!deleteSubfolderTarget} onOpenChange={(open) => { if (!open) setDeleteSubfolderTarget(null); }}>
-        <AlertDialogContent className="border-none shadow-2xl rounded-none" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <AlertDialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               Remove &ldquo;{deleteSubfolderTarget}&rdquo;?
@@ -1637,7 +1639,7 @@ export default function AdminGalleryDetail() {
 
       {/* Image-first Gallery Ready check */}
       <Dialog open={showReadiness} onOpenChange={(open) => { if (!sendingNotification) setShowReadiness(open); }}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-xl max-h-[90vh] overflow-y-auto" style={{ backgroundColor: 'var(--admin-bg)' }} data-testid="gallery-readiness-dialog">
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-xl max-h-[90vh] overflow-y-auto" style={{ backgroundColor: 'var(--admin-bg)' }} data-testid="gallery-readiness-dialog">
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium flex items-center gap-2" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               <ShieldCheck className="w-6 h-6 text-[#D4AF37]" /> Gallery Ready Check
@@ -1712,7 +1714,7 @@ export default function AdminGalleryDetail() {
 
       {/* File Delete Confirmation Dialog */}
       <Dialog open={fileDeleteConfirm.open} onOpenChange={(open) => !open && setFileDeleteConfirm({ open: false, fileId: null, filename: "", deleteBackup: false, isBulk: false })}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
               Delete {fileDeleteConfirm.isBulk ? "Files" : "File"}
@@ -1749,7 +1751,7 @@ export default function AdminGalleryDetail() {
 
       {/* Send Template Email Dialog */}
       <Dialog open={showSendEmail} onOpenChange={setShowSendEmail}>
-        <DialogContent className="border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <DialogContent className="admin-mobile-dialog border-none shadow-2xl rounded-none max-w-md" style={{ backgroundColor: 'var(--admin-bg)' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif' }}>Send Email</DialogTitle>
             <DialogDescription style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>
