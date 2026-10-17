@@ -69,6 +69,8 @@ export const listGalleries = getGalleries;  // Alias
 export const getGallery = (id) => apiClient.get(`/admin/galleries/${id}`);
 export const createGallery = (data) => apiClient.post('/admin/galleries', data);
 export const updateGallery = (id, data) => apiClient.put(`/admin/galleries/${id}`, data);
+export const updateGalleryWorkflowStatus = (id, status) =>
+  apiClient.put(`/admin/galleries/${id}/workflow-status`, { status });
 export const updateAlbumSelection = (id, mode) =>
   apiClient.put(`/admin/galleries/${id}/album-selection`, { mode });
 export const reopenAlbumSelection = (id) =>
@@ -113,6 +115,18 @@ export const getArchivedActivity = (limit = 200, galleryId = null, action = null
 export const clearActivityLogs = () => apiClient.delete('/admin/activity/clear');
 export const archiveLogsNow = () => apiClient.post('/admin/activity/archive-now');
 export const getActivityStats = () => apiClient.get('/admin/activity/stats');
+
+// Admin notification centre
+export const getAdminNotifications = (filter = 'all', limit = 100) =>
+  apiClient.get(`/admin/notifications?filter=${encodeURIComponent(filter)}&limit=${limit}`);
+export const getAdminNotificationCount = () =>
+  apiClient.get('/admin/notifications/unread-count');
+export const markAdminNotificationRead = (id) =>
+  apiClient.post(`/admin/notifications/${id}/read`);
+export const markAllAdminNotificationsRead = () =>
+  apiClient.post('/admin/notifications/read-all');
+export const dismissAdminNotification = (id) =>
+  apiClient.delete(`/admin/notifications/${id}`);
 
 // File Upload
 export const uploadFiles = (galleryId, subfolder, files, onProgress) => {

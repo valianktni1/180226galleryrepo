@@ -30,7 +30,7 @@ import {
   createShare, deleteShare, toggleShare, updateShareExpiry, updateShare, getShareQR, getShareQRFrame, getQRDesignPreview, thumbUrl, setSubfolderCover,
   updateGallery, getGalleryReadiness, sendGalleryNotification, getEmailTemplates, sendTemplateEmail, sendGalleryEmail, sendQrPickerEmail, getVideoHealth,
   startAdminFolderDownload, getAdminFolderDownloadStatus, getDownloadJobFileUrl, getErrorMessage,
-  updateAlbumSelection, reopenAlbumSelection, sendAlbumSelectionInvitation
+  updateAlbumSelection, reopenAlbumSelection, sendAlbumSelectionInvitation, updateGalleryWorkflowStatus
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 import DownloadJobProgress from "@/components/DownloadJobProgress";
@@ -85,6 +85,7 @@ export default function AdminGalleryDetail() {
   const [sendingQrPicker, setSendingQrPicker] = useState(false);
   const [updatingAlbumPlan, setUpdatingAlbumPlan] = useState(false);
   const [sendingAlbumInvitation, setSendingAlbumInvitation] = useState(false);
+  const [updatingWorkflow, setUpdatingWorkflow] = useState(false);
 
   // Video health check
   const [videoHealth, setVideoHealth] = useState(null); // { videos: [], summary: {} }
@@ -578,6 +579,7 @@ export default function AdminGalleryDetail() {
       toast.success(mode === 'off'
         ? 'Album choices hidden from the couple'
         : `${mode} photos plus a separate cover enabled`);
+      loadGallery();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to update album plan'));
     } finally {
@@ -591,6 +593,7 @@ export default function AdminGalleryDetail() {
       const res = await reopenAlbumSelection(id);
       setGallery(prev => ({ ...prev, album_selection: res.data.album_selection }));
       toast.success('Album choices reopened without removing the couple’s selections');
+      loadGallery();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to reopen album choices'));
     } finally {
@@ -608,6 +611,21 @@ export default function AdminGalleryDetail() {
       toast.error(getErrorMessage(err, 'Failed to send album instructions'));
     } finally {
       setSendingAlbumInvitation(false);
+    }
+  };
+
+  const handleWorkflowChange = async (status) => {
+    if (gallery.workflow_status === status || updatingWorkflow) return;
+    setUpdatingWorkflow(true);
+    try {
+      const res = await updateGalleryWorkflowStatus(id, status);
+      setGallery(prev => ({ ...prev, workflow_status: res.data.workflow_status }));
+      const label = status.replace(/_/g, ' ');
+      toast.success(`Gallery marked ${label}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to update gallery status'));
+    } finally {
+      setUpdatingWorkflow(false);
     }
   };
 
@@ -721,6 +739,14 @@ export default function AdminGalleryDetail() {
   };
   const albumSelectedCount = (albumSelection.selected_file_ids || []).length;
   const albumEnabled = albumSelection.mode === '40' || albumSelection.mode === '60';
+  const workflowSteps = [
+    { status: 'uploading', label: 'Uploading', note: 'Adding photographs' },
+    { status: 'ready', label: 'Ready', note: 'Checked by you' },
+    { status: 'delivered', label: 'Delivered', note: 'Couple notified' },
+    ...(albumEnabled ? [{ status: 'album_choices_received', label: 'Album Received', note: 'Choices submitted' }] : []),
+    { status: 'archived', label: 'Archived', note: 'Work complete' },
+  ];
+  const workflowIndex = Math.max(0, workflowSteps.findIndex(step => step.status === gallery.workflow_status));
 
   return (
     <div className="min-h-screen w-full min-w-0 overflow-x-hidden" data-admin-page style={{ backgroundColor: 'var(--admin-bg)' }}>
@@ -804,6 +830,38 @@ export default function AdminGalleryDetail() {
       </header>
 
       <main className="w-full min-w-0 max-w-screen-xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+        <section data-testid="gallery-status-journey" className="mb-6 border p-3 sm:p-5" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface)' }}>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider" style={{ fontFamily: 'Manrope, sans-serif' }}>Gallery Journey</h2>
+              <p className="mt-1 text-xs" style={{ color: 'var(--admin-muted)' }}>Tap a stage to keep every gallery&apos;s progress clear. Delivered and album stages also update automatically.</p>
+            </div>
+            <span className="rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: 'rgba(212,175,55,0.14)', color: '#B48C1A' }}>
+              {workflowSteps[workflowIndex]?.label || 'Uploading'}
+            </span>
+          </div>
+          <div className={`grid gap-2 ${albumEnabled ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'}`}>
+            {workflowSteps.map((step, index) => {
+              const active = index === workflowIndex;
+              const complete = index < workflowIndex;
+              return (
+                <button key={step.status} type="button" disabled={updatingWorkflow}
+                  onClick={() => handleWorkflowChange(step.status)}
+                  data-testid={`workflow-${step.status}`}
+                  className="min-w-0 border p-3 text-left transition-colors disabled:opacity-60"
+                  style={{ borderColor: active ? '#D4AF37' : 'var(--admin-border)', backgroundColor: active ? 'rgba(212,175,55,0.12)' : 'var(--admin-surface-soft)' }}>
+                  <span className="mb-2 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold"
+                    style={{ backgroundColor: active ? '#D4AF37' : complete ? '#16A34A' : 'var(--admin-surface-raised)', color: active || complete ? '#fff' : 'var(--admin-faint)' }}>
+                    {complete ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                  </span>
+                  <strong className="block truncate text-xs">{step.label}</strong>
+                  <span className="mt-1 block text-[10px] leading-snug" style={{ color: 'var(--admin-faint)' }}>{step.note}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
         {/* Album package and couple-selection controls */}
         <section data-testid="album-selection-admin-card" className="mb-6 border p-3 sm:p-5" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-surface)' }}>
           <div className="flex flex-col lg:flex-row lg:items-start gap-5">

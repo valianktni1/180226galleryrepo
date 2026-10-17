@@ -12,10 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText, Paperclip, HeartPulse, Pause, Play, Ban
+  Camera, Plus, LogOut, FolderOpen, Share2, Trash2, Search, Copy, Layout, X, Settings, ArrowUpDown, Eye, HardDrive, Download, Users, CheckCircle, Monitor, Smartphone, Tablet, Film, Heart, Image as ImageIcon, Mail, Send, Clock, AlertCircle, FolderHeart, ArrowUpFromLine, ArrowDownToLine, Activity, FileText, Paperclip, HeartPulse, Pause, Play, Ban, Bell
 } from "lucide-react";
 import {
-  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getBackupStatus, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getCurrentBroadcastCampaign, pauseBroadcastCampaign, resumeBroadcastCampaign, cancelBroadcastCampaign, getDashboardStats, getNetworkStats, getEmailTemplates
+  listGalleries, createGallery, deleteGallery, getTemplates, createTemplate, deleteTemplate, thumbUrl, runBackup, getBackupStatus, getAllGalleriesStats, getLiveVisitors, getBroadcastPreview, sendBroadcastEmail, getCurrentBroadcastCampaign, pauseBroadcastCampaign, resumeBroadcastCampaign, cancelBroadcastCampaign, getDashboardStats, getNetworkStats, getEmailTemplates, getAdminNotificationCount
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 import AdminThemeToggle from "@/components/AdminThemeToggle";
@@ -48,6 +48,7 @@ export default function AdminDashboard() {
   const [broadcastClock, setBroadcastClock] = useState(Date.now());
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null, name: "", deleteBackup: false });
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +85,16 @@ export default function AdminDashboard() {
     fetchVisitors();
     const interval = setInterval(fetchVisitors, 10000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = () => getAdminNotificationCount()
+      .then((res) => { if (mounted) setNotificationCount(res.data.total || 0); })
+      .catch(() => {});
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => { mounted = false; clearInterval(interval); };
   }, []);
 
   // Campaign progress is stored by the backend, so this remains accurate if
@@ -320,6 +331,10 @@ export default function AdminDashboard() {
             </Button>
             <Button data-testid="manage-templates-btn" variant="ghost" onClick={() => setShowTemplates(true)} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Layout className="w-4 h-4" /> Templates
+            </Button>
+            <Button data-testid="notifications-btn" variant="ghost" onClick={() => navigate("/admin/notifications")} className="relative text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
+              <Bell className="w-4 h-4" /> Updates
+              {notificationCount > 0 && <span className="min-w-[18px] rounded-full bg-[#9F1239] px-1 text-[9px] font-bold leading-[18px] text-white">{notificationCount > 99 ? '99+' : notificationCount}</span>}
             </Button>
             <Button data-testid="activity-btn" variant="ghost" onClick={() => navigate("/admin/activity")} className="text-[#57534E] rounded-sm gap-2 text-xs tracking-wider">
               <Eye className="w-4 h-4" /> Activity
@@ -600,6 +615,10 @@ export default function AdminDashboard() {
                 const fileCounts = g.file_counts || {};
                 const total = Object.values(fileCounts).reduce((a, b) => a + b, 0);
                 const stats = galleriesStats[g.id] || {};
+                const workflowLabels = {
+                  uploading: 'Uploading', ready: 'Ready', delivered: 'Delivered',
+                  album_choices_received: 'Album Received', archived: 'Archived',
+                };
                 return (
                   <motion.div key={g.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
                     className="group border overflow-hidden cursor-pointer" style={{ borderColor: 'var(--admin-border)' }}
@@ -625,6 +644,10 @@ export default function AdminDashboard() {
                           <span className="text-xs font-medium text-white">Album Submitted</span>
                         </div>
                       )}
+                      <div className="absolute bottom-3 left-3 rounded-sm px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white"
+                        style={{ backgroundColor: 'rgba(28,25,23,0.82)' }}>
+                        {workflowLabels[g.workflow_status] || 'Uploading'}
+                      </div>
                       <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100" style={{ transition: 'opacity 0.3s ease' }}>
                         <button data-testid={`delete-gallery-${g.id}`}
                           onClick={e => { e.stopPropagation(); handleDelete(g.id, g.folder_name); }}

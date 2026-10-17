@@ -81,6 +81,17 @@ from voice_message_service import (
     normalise_guest_name,
     voice_message_filename,
 )
+from admin_notifications import (
+    UPLOAD_NOTIFICATION_TYPES,
+    daily_group_key,
+    record_admin_notification,
+    sync_expiring_share_notifications,
+)
+from gallery_workflow import (
+    WORKFLOW_STATUSES,
+    normalise_gallery_workflow_status,
+    workflow_change,
+)
 from security_paths import (
     UnsafePathError,
     contained_path,
@@ -202,6 +213,9 @@ class GalleryUpdate(BaseModel):
     folder_name: Optional[str] = None
     client_email: Optional[str] = None
     theme: Optional[str] = None
+
+class GalleryWorkflowStatusUpdate(BaseModel):
+    status: str
 
 class AlbumSelectionSettings(BaseModel):
     mode: str
@@ -335,6 +349,50 @@ def is_video(filename: str) -> bool:
 def is_share_expired(share: dict) -> bool:
     """Check if a share has expired based on expires_at date."""
     return share_is_expired(share)
+
+
+async def _record_admin_notification_safe(**kwargs):
+    """Keep a customer action successful even if its admin alert cannot save."""
+    try:
+        return await record_admin_notification(db, **kwargs)
+    except Exception as exc:
+        logger.warning("Could not record admin notification: %s", exc)
+        return None
+
+
+async def _set_gallery_workflow_status(gallery_id: str, status: str, source: str):
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        return None
+    change = workflow_change(gallery, status, source=source)
+    if change["changed"]:
+        await db.galleries.update_one(
+            {"id": gallery_id},
+            {
+                "$set": {
+                    "workflow_status": change["status"],
+                    "workflow_status_updated_at": change["changed_at"],
+                    "updated_at": change["changed_at"],
+                },
+                "$push": {
+                    "workflow_history": {
+                        "$each": [change["history"]],
+                        "$slice": -50,
+                    }
+                },
+            },
+        )
+    return change
+
+
+async def _set_gallery_workflow_status_safe(gallery_id: str, status: str, source: str):
+    try:
+        return await _set_gallery_workflow_status(gallery_id, status, source)
+    except Exception as exc:
+        logger.warning(
+            "Could not advance gallery %s to %s: %s", gallery_id, status, exc
+        )
+        return None
 
 async def validate_live_share_session(payload: dict, expected_token: str = None) -> dict:
     """Revalidate a share JWT against MongoDB so revocation is immediate."""
@@ -1059,6 +1117,7 @@ async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
     for sf in subfolders:
         (folder_path / sf).mkdir(parents=True, exist_ok=True)
 
+    created_at = datetime.now(timezone.utc).isoformat()
     doc = {
         "id": gallery_id,
         "folder_name": folder_name,
@@ -1070,8 +1129,16 @@ async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
         # package. Enabling a plan defaults to 40 photos plus one cover.
         "album_selection": default_album_selection(),
         "file_counts": {sf: 0 for sf in subfolders},
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat()
+        "workflow_status": "uploading",
+        "workflow_status_updated_at": created_at,
+        "workflow_history": [{
+            "from": None,
+            "to": "uploading",
+            "source": "gallery_created",
+            "changed_at": created_at,
+        }],
+        "created_at": created_at,
+        "updated_at": created_at,
     }
     await db.galleries.insert_one(doc)
     return {k: v for k, v in doc.items() if k != "_id"}
@@ -1148,6 +1215,7 @@ async def list_galleries(admin=Depends(get_admin), sort_by: str = Query("date_de
     # this loop. Disk checks remain local and only verify the selected thumb.
     for gallery in galleries:
         gallery_id = gallery["id"]
+        gallery["workflow_status"] = normalise_gallery_workflow_status(gallery)
         gallery["share_count"] = share_counts.get(gallery_id, 0)
         gallery["cover_thumb"] = None
         cover_file = chosen_covers.get(gallery_id) or first_photos.get(gallery_id)
@@ -1181,6 +1249,7 @@ async def get_gallery_detail(gallery_id: str, admin=Depends(get_admin)):
         await db.galleries.update_one({"id": gallery_id}, {"$set": {"subfolders": gallery["subfolders"]}})
     
     gallery["album_selection"] = normalise_album_selection(gallery)
+    gallery["workflow_status"] = normalise_gallery_workflow_status(gallery)
     gallery["files"] = files
     gallery["shares"] = shares
     return gallery
@@ -1204,7 +1273,33 @@ async def update_gallery(gallery_id: str, data: GalleryUpdate, admin=Depends(get
         update["theme"] = data.theme
     await db.galleries.update_one({"id": gallery_id}, {"$set": update})
     updated = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    updated["workflow_status"] = normalise_gallery_workflow_status(updated)
     return updated
+
+
+@api_router.put("/admin/galleries/{gallery_id}/workflow-status")
+async def update_gallery_workflow_status(
+    gallery_id: str,
+    data: GalleryWorkflowStatusUpdate,
+    admin=Depends(get_admin),
+):
+    """Move a gallery through its concise admin delivery journey."""
+    if data.status not in WORKFLOW_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid gallery status")
+    gallery = await db.galleries.find_one({"id": gallery_id}, {"_id": 0})
+    if not gallery:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    try:
+        change = await _set_gallery_workflow_status(
+            gallery_id, data.status, "admin"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "success": True,
+        "workflow_status": change["status"],
+        "changed_at": change["changed_at"],
+    }
 
 @api_router.put("/admin/galleries/{gallery_id}/album-selection")
 async def update_album_selection_settings(
@@ -1227,6 +1322,10 @@ async def update_album_selection_settings(
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
+    if data.mode == "off" and normalise_gallery_workflow_status(gallery) == "album_choices_received":
+        await _set_gallery_workflow_status_safe(
+            gallery_id, "delivered", "album_disabled"
+        )
     return {"success": True, "album_selection": state}
 
 
@@ -1247,6 +1346,10 @@ async def reopen_gallery_album_selection(gallery_id: str, admin=Depends(get_admi
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
+    if normalise_gallery_workflow_status(gallery) == "album_choices_received":
+        await _set_gallery_workflow_status_safe(
+            gallery_id, "delivered", "album_reopened"
+        )
     return {"success": True, "album_selection": state}
 
 
@@ -1425,6 +1528,7 @@ async def delete_gallery(gallery_id: str, delete_backup: bool = Query(False), ad
     await db.files.delete_many({"gallery_id": gallery_id})
     await db.shares.delete_many({"gallery_id": gallery_id})
     await db.favourites.delete_many({"gallery_id": gallery_id})
+    await db.admin_notifications.delete_many({"gallery_id": gallery_id})
     await db.galleries.delete_one({"id": gallery_id})
     return {"success": True, "backup_deleted": delete_backup}
 
@@ -2021,13 +2125,33 @@ async def get_share_download_job(
 ):
     session = await validate_live_share_session(session, expected_token=token)
     try:
-        return download_job_manager.status(
+        state = download_job_manager.status(
             job_id,
             owner_kind="share",
             owner_id=f"{token}:{session['sub']}",
         )
     except DownloadJobError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if state.get("status") == "complete":
+        gallery = await db.galleries.find_one(
+            {"id": session["gallery_id"]}, {"_id": 0, "folder_name": 1}
+        )
+        share = await db.shares.find_one(
+            {"token": token}, {"_id": 0, "label": 1}
+        )
+        if gallery:
+            await _record_admin_notification_safe(
+                event_type="download_complete",
+                gallery_id=session["gallery_id"],
+                gallery_name=gallery.get("folder_name", "Gallery"),
+                title="Gallery download completed",
+                message=f"{(share or {}).get('label') or gallery.get('folder_name', 'Gallery')} finished preparing and downloading.",
+                target_url=f"/admin/gallery/{session['gallery_id']}",
+                group_key=f"download_complete:{job_id}",
+                metadata={"job_id": job_id},
+                coalesce=False,
+            )
+    return state
 
 
 @api_router.get("/download-jobs/{job_id}/file")
@@ -3602,6 +3726,24 @@ async def submit_favourites_to_album(token: str, request: Request, session=Depen
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
+    await _set_gallery_workflow_status_safe(
+        gallery_id, "album_choices_received", "album_submission"
+    )
+    await _record_admin_notification_safe(
+        event_type="album_submission",
+        gallery_id=gallery_id,
+        gallery_name=gallery.get("folder_name", "Gallery"),
+        title="Album choices received",
+        message=(
+            f"{submitted_state['limit']} album photos and a separate cover "
+            f"were submitted (revision {submitted_state['revision']})."
+        ),
+        target_url=f"/admin/gallery/{gallery_id}",
+        group_key=f"album_submission:{gallery_id}:{submitted_state['revision']}",
+        metadata={"revision": submitted_state["revision"]},
+        coalesce=False,
+    )
+
     try:
         smtp_doc = await db.settings.find_one({"key": "smtp"}, {"_id": 0})
         if smtp_doc and smtp_doc.get("value", {}).get("smtp_email"):
@@ -4125,6 +4267,20 @@ async def guest_upload(
         {"id": gallery_id, "subfolders": {"$ne": subfolder}},
         {"$push": {"subfolders": subfolder}}
     )
+
+    if uploaded and not is_photographer_mode:
+        await _record_admin_notification_safe(
+            event_type="guest_upload",
+            gallery_id=gallery_id,
+            gallery_name=gallery.get("folder_name", "Gallery"),
+            title="New guest uploads",
+            message=f"{len(uploaded)} new photo/video item{'s' if len(uploaded) != 1 else ''} received.",
+            target_url=f"/admin/gallery/{gallery_id}",
+            group_key=daily_group_key("guest_upload", gallery_id),
+            count=len(uploaded),
+            metadata={"subfolder": subfolder},
+            coalesce=True,
+        )
     
     result = {"uploaded": uploaded, "count": len(uploaded)}
     if skipped_too_large:
@@ -4264,6 +4420,18 @@ async def upload_guest_voice_message(
         final_path.unlink(missing_ok=True)
         await db.files.delete_one({"id": file_doc["id"]})
         raise
+
+    await _record_admin_notification_safe(
+        event_type="voice_message",
+        gallery_id=gallery_id,
+        gallery_name=gallery.get("folder_name", "Gallery"),
+        title="New personal voice message",
+        message=f"A personal message from {clean_guest_name} is ready to hear.",
+        target_url=f"/admin/gallery/{gallery_id}",
+        group_key=daily_group_key("voice_message", gallery_id),
+        metadata={"guest_name": clean_guest_name, "file_id": file_doc["id"]},
+        coalesce=True,
+    )
 
     return {"success": True, "uploaded": {k: v for k, v in file_doc.items() if k != "_id"}}
 
@@ -4648,6 +4816,90 @@ async def get_live_visitors(admin=Depends(get_admin)):
             "duration_seconds": int(now - v["first_seen"]),
         })
     return {"count": len(visitors), "visitors": visitors}
+
+ADMIN_NOTIFICATION_FILTERS = {
+    "all": None,
+    "uploads": list(UPLOAD_NOTIFICATION_TYPES),
+    "voice": ["voice_message"],
+    "albums": ["album_submission"],
+    "expiring": ["share_expiring"],
+    "downloads": ["download_complete"],
+}
+
+
+async def _sync_expiring_share_notifications_safe():
+    try:
+        await sync_expiring_share_notifications(db)
+    except Exception as exc:
+        logger.warning("Could not refresh expiring-link notifications: %s", exc)
+
+
+@api_router.get("/admin/notifications")
+async def list_admin_notifications(
+    filter: str = Query("all"),
+    limit: int = Query(100, ge=1, le=250),
+    admin=Depends(get_admin),
+):
+    """Return the admin's live, grouped action centre."""
+    if filter not in ADMIN_NOTIFICATION_FILTERS:
+        raise HTTPException(status_code=400, detail="Invalid notification filter")
+    await _sync_expiring_share_notifications_safe()
+    query = {"dismissed_at": None}
+    selected_types = ADMIN_NOTIFICATION_FILTERS[filter]
+    if selected_types:
+        query["type"] = {"$in": selected_types}
+    notifications = await db.admin_notifications.find(
+        query, {"_id": 0}
+    ).sort("updated_at", -1).limit(limit).to_list(limit)
+    unread = sum(1 for notification in notifications if not notification.get("read_at"))
+    return {"notifications": notifications, "unread": unread}
+
+
+@api_router.get("/admin/notifications/unread-count")
+async def get_admin_notification_count(admin=Depends(get_admin)):
+    base = {"dismissed_at": None, "read_at": None}
+    total = await db.admin_notifications.count_documents(base)
+    uploads = await db.admin_notifications.count_documents({
+        **base,
+        "type": {"$in": list(UPLOAD_NOTIFICATION_TYPES)},
+    })
+    return {"total": total, "uploads": uploads}
+
+
+@api_router.post("/admin/notifications/read-all")
+async def mark_all_admin_notifications_read(admin=Depends(get_admin)):
+    read_at = datetime.now(timezone.utc).isoformat()
+    result = await db.admin_notifications.update_many(
+        {"dismissed_at": None, "read_at": None},
+        {"$set": {"read_at": read_at}},
+    )
+    return {"success": True, "updated": result.modified_count}
+
+
+@api_router.post("/admin/notifications/{notification_id}/read")
+async def mark_admin_notification_read(notification_id: str, admin=Depends(get_admin)):
+    result = await db.admin_notifications.update_one(
+        {"id": notification_id, "dismissed_at": None},
+        {"$set": {"read_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"success": True}
+
+
+@api_router.delete("/admin/notifications/{notification_id}")
+async def dismiss_admin_notification(notification_id: str, admin=Depends(get_admin)):
+    result = await db.admin_notifications.update_one(
+        {"id": notification_id, "dismissed_at": None},
+        {"$set": {
+            "dismissed_at": datetime.now(timezone.utc).isoformat(),
+            "read_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"success": True}
+
 
 @api_router.get("/admin/activity")
 async def get_admin_activity(limit: int = Query(50, le=200), gallery_id: str = Query(None), action: str = Query(None), search: str = Query(None), admin=Depends(get_admin)):
@@ -5772,6 +6024,9 @@ WEDDINGS BY MARK &bull; CAPTURING YOUR STORY
             "notification_sent_at": datetime.now(timezone.utc).isoformat(),
             "notification_sent_to": client_email
         }})
+        await _set_gallery_workflow_status_safe(
+            gallery_id, "delivered", "gallery_notification"
+        )
 
         # Log to email_log
         await db.email_log.insert_one({
@@ -6860,6 +7115,7 @@ async def startup_auto_archive():
         await check_expiry_reminders()
     except Exception as e:
         logger.warning(f"Startup expiry reminder check failed: {e}")
+    await _sync_expiring_share_notifications_safe()
     # Start daily background loop
     asyncio.create_task(expiry_reminder_loop())
     # Start network monitoring snapshots (every 15 minutes)
@@ -6891,6 +7147,9 @@ async def startup_auto_archive():
         await db.favourites.create_index([("session_id", 1), ("gallery_id", 1)])
         await db.favourites.create_index([("session_id", 1), ("file_id", 1)])
         await db.email_log.create_index("timestamp")
+        await db.admin_notifications.create_index([("dismissed_at", 1), ("updated_at", -1)])
+        await db.admin_notifications.create_index([("read_at", 1), ("type", 1)])
+        await db.admin_notifications.create_index("group_key")
         await db.broadcast_campaigns.create_index([("status", 1), ("next_batch_at", 1)])
         await db.broadcast_campaigns.create_index("created_at")
         await db.broadcast_campaigns.create_index(
