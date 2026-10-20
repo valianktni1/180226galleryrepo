@@ -40,6 +40,7 @@ import SecureAudioPlayer from "@/components/SecureAudioPlayer";
 const STANDARD_SUBFOLDERS = ["Wedding Images", "Video", "SelfieBooth", "Album Favourites", "Guest Uploads"];
 const THUMBNAIL_FILE_TYPES = new Set(["photo", "video"]);
 const THUMBNAIL_POLL_MAX_ATTEMPTS = 60;
+const ADMIN_UPLOAD_ACCEPT = ".jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.heic,.heif,.mp4,.mov,.avi,.mkv,.webm,.mts";
 
 export default function AdminGalleryDetail() {
   const { id } = useParams();
@@ -1079,8 +1080,19 @@ export default function AdminGalleryDetail() {
                 onDrop={handleDrop}
                 data-testid={`upload-zone-${sf.replace(/\s/g, '-')}`}
               >
-                <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" className="hidden"
-                  onChange={e => handleUpload(e.target.files)} data-testid="file-input" />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ADMIN_UPLOAD_ACCEPT}
+                  className="hidden"
+                  onChange={e => {
+                    const pickedFiles = e.target.files;
+                    handleUpload(pickedFiles);
+                    e.target.value = "";
+                  }}
+                  data-testid="file-input"
+                />
                 {uploading ? (
                   <div className="w-full max-w-xs">
                     <p className="text-sm mb-2" style={{ color: 'var(--admin-muted)', fontFamily: 'Manrope, sans-serif' }}>Uploading to {sf}... {uploadProgress}%</p>
