@@ -6125,7 +6125,7 @@ def get_awards_url(smtp: dict) -> str:
     if site_url:
         # Keep the public filename stable while ensuring email-image proxies fetch
         # the current artwork instead of a previously cached awards badge.
-        return f"{site_url}/api/public/email-assets/awards-badges.png?v=20260916"
+        return f"{site_url}/api/public/email-assets/awards-badges.png?v=20261023"
     return ""
 
 def build_branded_email(content_html: str, awards_url: str = "") -> str:

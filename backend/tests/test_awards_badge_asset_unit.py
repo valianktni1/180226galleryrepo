@@ -22,5 +22,5 @@ def test_awards_badge_is_optimised_real_png():
 def test_awards_badge_email_url_is_cache_busted():
     source = SERVER_PATH.read_text(encoding="utf-8")
 
-    assert "awards-badges.png?v=20260916" in source
+    assert "awards-badges.png?v=20261023" in source
     assert '<img src="{get_awards_url(smtp)}"' in source
