@@ -19,6 +19,7 @@ import {
 } from "@/lib/api";
 import { THEME_LIST } from "@/lib/themes";
 import AdminThemeToggle from "@/components/AdminThemeToggle";
+import GpuEncodingMonitor from "@/components/GpuEncodingMonitor";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -409,19 +410,7 @@ export default function AdminDashboard() {
                 {(dashStats.storage_used_bytes / (1024*1024)).toFixed(0)} MB total
               </p>
             </div>
-            {/* Daily Total */}
-            <div className="p-3 sm:p-5 border-b md:border-b-0 md:border-r min-w-0" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(245,158,11,0.06)' }} data-testid="daily-total">
-              <div className="flex items-center gap-2 mb-2">
-                <Activity className="w-3.5 h-3.5" style={{ color: '#F59E0B' }} />
-                <span className="text-[10px] tracking-[0.15em] uppercase font-semibold" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>Today (Total)</span>
-              </div>
-              <span className="text-2xl font-medium" style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--admin-text)' }}>
-                {networkStats ? (networkStats.daily.total_bytes >= 1073741824 ? `${(networkStats.daily.total_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.total_bytes / (1024*1024)).toFixed(1)} MB`) : '...'}
-              </span>
-              <p className="text-[10px] mt-1" style={{ color: 'var(--admin-faint)', fontFamily: 'Manrope, sans-serif' }}>
-                {networkStats ? (networkStats.daily.sent_bytes >= 1073741824 ? `${(networkStats.daily.sent_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.sent_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} sent / {networkStats ? (networkStats.daily.recv_bytes >= 1073741824 ? `${(networkStats.daily.recv_bytes / 1073741824).toFixed(2)} GB` : `${(networkStats.daily.recv_bytes / (1024*1024)).toFixed(1)} MB`) : '...'} recv
-              </p>
-            </div>
+            <GpuEncodingMonitor onOpen={() => navigate("/admin/health")} />
             {/* Weekly Total */}
             <div className="p-3 sm:p-5 border-b md:border-b-0 md:border-r min-w-0" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'rgba(236,72,153,0.06)' }} data-testid="weekly-total">
               <div className="flex items-center gap-2 mb-2">

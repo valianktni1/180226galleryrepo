@@ -82,7 +82,7 @@ export const getGalleryStats = (id) => apiClient.get(`/admin/galleries/${id}/sta
 export const getAllGalleriesStats = () => apiClient.get('/admin/galleries-stats');
 export const getDashboardStats = () => apiClient.get('/admin/dashboard-stats');
 export const getNetworkStats = () => apiClient.get('/admin/network-stats');
-export const getSystemHealth = () => apiClient.get('/admin/system-health');
+export const getSystemHealth = (config) => apiClient.get('/admin/system-health', config);
 export const runMaintenanceScan = () => apiClient.get('/admin/maintenance-scan', { timeout: 300000 });
 export const runMaintenanceCleanup = () => apiClient.post(
   '/admin/maintenance-cleanup',
