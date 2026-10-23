@@ -10,7 +10,8 @@ test -f "$COMPOSE_FILE"
 
 RELEASE_COMPOSE="$(mktemp "$STACK_DIR/compose.release-2.3.4.XXXXXX")"
 LIVE_JS="$(mktemp /tmp/wbm-release-2.3.4-js.XXXXXX)"
-trap 'rm -f "$RELEASE_COMPOSE" "$LIVE_JS"' EXIT
+AUTH_COMPOSE="$(mktemp "$STACK_DIR/compose.release-2.3.4-auth.XXXXXX")"
+trap 'rm -f "$RELEASE_COMPOSE" "$LIVE_JS" "$AUTH_COMPOSE"; unset WBM_GITHUB_TOKEN' EXIT
 
 # Pin this frontend build without changing Dockge's normal compose file.
 sed "s|180226galleryrepo.git#main:|180226galleryrepo.git#$RELEASE_COMMIT:|g" \
@@ -21,8 +22,33 @@ BACKEND_BEFORE="$(docker inspect wbm-backend --format '{{.Id}}')"
 CURRENT_IMAGE="$(docker inspect wbm-frontend --format '{{.Image}}')"
 docker image tag "$CURRENT_IMAGE" wbm-frontend:rollback-before-release-2.3.4
 
+BUILD_FILES=(-f "$RELEASE_COMPOSE")
+if ! curl -fsS --max-time 15 \
+  "https://raw.githubusercontent.com/valianktni1/180226galleryrepo/$RELEASE_COMMIT/frontend/package.json" >/dev/null 2>&1; then
+  if [ -z "${WBM_GITHUB_TOKEN:-}" ]; then
+    printf 'GitHub repository is private. Paste a token with repository read access: ' >/dev/tty
+    IFS= read -rs WBM_GITHUB_TOKEN </dev/tty
+    printf '\n' >/dev/tty
+  fi
+  test -n "$WBM_GITHUB_TOKEN"
+  export WBM_GITHUB_TOKEN
+  cat > "$AUTH_COMPOSE" <<'AUTH_YAML'
+services:
+  frontend:
+    build:
+      secrets:
+        - source: wbm_github_auth
+          target: GIT_AUTH_TOKEN
+secrets:
+  wbm_github_auth:
+    environment: WBM_GITHUB_TOKEN
+AUTH_YAML
+  BUILD_FILES+=(-f "$AUTH_COMPOSE")
+fi
+
 echo "Building the GPU/video monitor. The live gallery remains running during the build..."
-docker compose -f "$RELEASE_COMPOSE" build --no-cache frontend
+docker compose "${BUILD_FILES[@]}" build --no-cache frontend
+unset WBM_GITHUB_TOKEN
 
 echo "Checking the new frontend..."
 docker run --rm --entrypoint sh 180226galleryrepo-frontend:latest -lc '
