@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI, APIRouter, Header, HTTPException
 from fastapi.testclient import TestClient
 from mongomock_motor import AsyncMongoMockClient
+from pymongo.errors import DuplicateKeyError
 
 import booking_connection as bridge
 from share_security import share_is_expired
@@ -33,6 +34,54 @@ def connection(tmp_path):
 
 
 def post(c,auth,data):return c.post('/api/integrations/wbm/galleries',headers=auth,json=data)
+
+
+def test_existing_startup_index_and_share_survive_creation_and_replay(connection):
+    c,db,root,auth,_=connection
+    legacy={'id':'legacy-share','token':'legacy-token','gallery_id':'legacy-gallery'}
+    async def seed():
+        await db.shares.create_index('id')
+        await db.shares.insert_one(dict(legacy))
+    asyncio.run(seed())
+    data=payload()
+    first=post(c,auth,data)
+    assert first.status_code==200,first.text
+    assert post(c,auth,data).json()==first.json()
+    async def check():
+        # Re-running the established startup index declaration still succeeds.
+        await db.shares.create_index('id')
+        indexes=await db.shares.index_information()
+        assert not indexes['id_1'].get('unique')
+        assert indexes['wbm_booking_share_id_unique']['unique']
+        assert await db.shares.find_one({'id':'legacy-share'},{'_id':0})==legacy
+        assert await db.shares.count_documents({})==2
+        assert await db.galleries.count_documents({})==1
+        with pytest.raises(DuplicateKeyError):
+            await db.shares.insert_one({'id':'legacy-share','token':'different-token'})
+    asyncio.run(check())
+
+
+def test_existing_unique_share_index_is_reused(connection):
+    c,db,root,auth,_=connection
+    asyncio.run(db.shares.create_index('id',unique=True))
+    assert post(c,auth,payload()).status_code==200
+    indexes=asyncio.run(db.shares.index_information())
+    assert indexes['id_1']['unique']
+    assert 'wbm_booking_share_id_unique' not in indexes
+
+
+def test_duplicate_legacy_share_ids_stop_before_gallery_creation(connection):
+    c,db,root,auth,_=connection
+    async def seed():
+        await db.shares.create_index('id')
+        await db.shares.insert_many([
+            {'id':'duplicate','token':'one'}, {'id':'duplicate','token':'two'}])
+    asyncio.run(seed())
+    with pytest.raises(DuplicateKeyError):
+        post(c,auth,payload())
+    assert asyncio.run(db.galleries.count_documents({}))==0
+    assert asyncio.run(db.shares.count_documents({}))==2
+    assert not list(root.iterdir())
 
 
 def test_exact_creation_expiry_no_email_and_replay(connection):
@@ -115,3 +164,4 @@ def test_auth_pause_rotation_validation(connection):
     c.post('/api/admin/booking-connection/key',headers=admin)
     c.put('/api/admin/booking-connection',headers=admin,json={'enabled':True})
     assert post(c,auth,payload()).status_code==401
+
