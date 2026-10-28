@@ -16,6 +16,9 @@ export const getErrorMessage = (err, fallback = "An error occurred") => {
 };
 
 const apiClient = axios.create({ baseURL: API });
+export const getBookingConnection = () => apiClient.get('/admin/booking-connection');
+export const createBookingConnectionKey = () => apiClient.post('/admin/booking-connection/key');
+export const saveBookingConnection = data => apiClient.put('/admin/booking-connection', data);
 
 apiClient.interceptors.request.use((config) => {
   // Use share_token for share routes, admin_token for admin routes
@@ -374,3 +377,4 @@ export const getVideoPlaybackUrl = async (token, fileId) => {
 export const slideshowMusicUrl = (filename) => `${API}/slideshow/music/${filename}`;
 
 export default apiClient;
+
