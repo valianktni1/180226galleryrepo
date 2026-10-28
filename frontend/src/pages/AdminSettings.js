@@ -22,6 +22,7 @@ import {
   getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate
 } from "@/lib/api";
 import AdminThemeToggle from "@/components/AdminThemeToggle";
+import BookingConnection from "@/components/BookingConnection";
 
 export default function AdminSettings() {
   const navigate = useNavigate();
@@ -396,6 +397,7 @@ export default function AdminSettings() {
         <div className="flex gap-2 mb-8 border-b flex-wrap" style={{ borderColor: 'rgba(212,175,55,0.15)' }}>
           {[
             { id: "password", label: "Change Password", icon: Key },
+            { id: "booking", label: "Booking connection", icon: Package },
             { id: "2fa", label: "Two-Factor Auth", icon: Shield },
             { id: "email", label: "Email Settings", icon: Mail },
             { id: "templates", label: "Email Templates", icon: FileText },
@@ -417,6 +419,7 @@ export default function AdminSettings() {
           ))}
         </div>
 
+        {activeTab === "booking" && <BookingConnection />}
         {/* Password Change Tab */}
         {activeTab === "password" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-md">
@@ -1224,3 +1227,4 @@ export default function AdminSettings() {
     </div>
   );
 }
+

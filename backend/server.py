@@ -1102,6 +1102,8 @@ async def delete_template(template_id: str, admin=Depends(get_admin)):
 @api_router.post("/admin/galleries")
 async def create_gallery(data: GalleryCreate, admin=Depends(get_admin)):
     folder_name = require_safe_component(data.folder_name, "gallery folder name")
+    if await db.booking_gallery_folders.find_one({'_id':folder_name.casefold()}):
+        raise HTTPException(409, 'This folder is reserved for a linked booking. Open its existing gallery instead.')
     # Get template subfolders
     subfolders = list(DEFAULT_SUBFOLDERS)
     if data.template_id:
@@ -7173,6 +7175,8 @@ async def startup_auto_archive():
     asyncio.create_task(broadcast_campaign_loop())
 
 
+from booking_connection import register_booking_connection
+register_booking_connection(api_router, db, get_admin, get_gallery_path)
 app.include_router(api_router)
 
 app.add_middleware(
@@ -7194,3 +7198,4 @@ async def add_noindex_header(request, call_next):
 async def shutdown_db_client():
     download_job_manager.shutdown()
     client.close()
+
