@@ -227,5 +227,16 @@ def register_booking_connection(router, db, get_admin, get_path):
         # Indexes are required here as well as startup: never provision without uniqueness.
         await db.galleries.create_index('id', unique=True)
         await db.shares.create_index('token', unique=True)
-        await db.shares.create_index('id', unique=True)
+        # Startup retains the legacy non-unique id_1 lookup index. A unique
+        # index may coexist on MongoDB 7, but must use a different name.
+        # Reuse any existing full unique id index; never drop an index or
+        # rewrite shares to resolve a conflict. Duplicate data must fail closed.
+        share_indexes = await db.shares.index_information()
+        if not any(
+            index.get('key') == [('id', 1)] and index.get('unique')
+            and not index.get('sparse') and not index.get('partialFilterExpression')
+            for index in share_indexes.values()
+        ):
+            await db.shares.create_index('id', unique=True, name='wbm_booking_share_id_unique')
         return await provision(db, get_path, payload)
+
